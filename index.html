@@ -98,6 +98,14 @@
           <button class="chip" data-prompt="Check the attached text for logical gaps, unsupported claims, and inconsistencies between the abstract, results and conclusions. Quote each problematic sentence.">Check logic</button>
           <button class="ghost small" id="newChatBtn" style="margin-left:auto">New chat</button>
         </div>
+        <div class="row" style="margin-bottom:8px;font-size:13px;color:var(--muted)">
+          <label for="preset" style="margin:0">Model</label>
+          <select id="preset" style="width:auto;padding:5px 8px;font-size:13px">
+            <option value="opus-low">Opus 5.5, light reasoning (default)</option>
+            <option value="opus-medium">Opus 5.5, deeper reasoning (slower, may return no text on very long tasks)</option>
+            <option value="sonnet-fast">Sonnet 5.5, no reasoning (fastest, cheapest)</option>
+          </select>
+        </div>
         <div class="attach">
           <label for="file" style="margin:0"><input type="file" id="file" accept=".tex,.txt,.md,.bib,.docx,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document" class="hidden"><button class="chip" type="button" id="attachBtn">Attach file</button></label>
           <span id="attachInfo"></span>
@@ -261,6 +269,8 @@ function renderChat() {
       b.appendChild(renderMarkdown(m.content));
       const meta = el('div', 'meta');
       if (m.cost != null) meta.appendChild(el('span', null, '$' + m.cost.toFixed(3)));
+      if (m.model) meta.appendChild(el('span', null, m.model.replace('claude-', '').replace(/-(\d)-(\d)/, ' $1.$2')));
+      if (m.note) meta.appendChild(el('span', null, m.note));
       if (m.truncated) meta.appendChild(el('span', null, 'Reply hit the length limit; ask to continue.'));
       const dl = el('a', null, 'Download .md'); dl.onclick = () => download('reply_' + (i + 1) + '.md', m.content); meta.appendChild(dl);
       const cp = el('a', null, 'Copy'); cp.onclick = () => navigator.clipboard && navigator.clipboard.writeText(m.content); meta.appendChild(cp);
@@ -294,6 +304,8 @@ $('file').onchange = async () => {
 document.querySelectorAll('button.chip[data-prompt]').forEach((b) => {
   b.onclick = () => { const t = $('prompt'); t.value = b.dataset.prompt; t.focus(); };
 });
+$('preset').onchange = () => store('mp_preset', $('preset').value);
+try { const p = load('mp_preset'); if (p) $('preset').value = p; } catch (e) {}
 $('newChatBtn').onclick = () => { chat = { convId: null, messages: [] }; pendingDoc = null; $('file').value = ''; saveChat(); renderAttach(); renderChat(); };
 
 // Builds the API-facing message list; the attached document is embedded in the user turn.
@@ -322,7 +334,7 @@ async function sendMessage() {
   const typing = el('div', 'typing', 'Thinking...'); $('messages').appendChild(typing); $('messages').scrollTop = $('messages').scrollHeight;
   const timer = setInterval(() => { typing.textContent = 'Thinking... ' + Math.round((Date.now() - t0) / 1000) + ' s'; }, 1000);
   try {
-    const { jobId } = await api({ action: 'chat_start', token, convId: chat.convId, messages: apiMessages() });
+    const { jobId } = await api({ action: 'chat_start', token, convId: chat.convId, preset: $('preset').value, messages: apiMessages() });
     let d;
     try {
       d = await api({ action: 'chat_run', token, jobId });
@@ -331,7 +343,7 @@ async function sendMessage() {
       if (/log in again|quota|Job not found|Claude API error|exhausted/i.test(e.message)) throw e;
       d = await waitForJob(jobId);
     }
-    if (d.reply && d.reply.trim()) chat.messages.push({ role: 'assistant', content: d.reply, cost: d.cost, truncated: d.truncated });
+    if (d.reply && d.reply.trim()) chat.messages.push({ role: 'assistant', content: d.reply, cost: d.cost, truncated: d.truncated, model: d.model, note: d.note });
     else setStatus(st, 'The model returned an empty reply (cost $' + (d.cost || 0).toFixed(3) + '). Try again or rephrase.', true);
     showUsage(d); saveChat(); setStatus(st, '');
   } catch (e) {
