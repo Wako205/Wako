@@ -68,7 +68,7 @@
     <div class="status" id="runStatus"></div>
     <div class="notice">
       Uploaded text and results are stored in the administrator's Google Drive and are sent to the
-      Anthropic API for processing. Processing takes 1 to 4 minutes. Keep this page open.
+      Anthropic API for processing. Processing takes 1 to 5 minutes. Keep this page open.
     </div>
   </section>
 
@@ -94,6 +94,7 @@ let token = null, username = null, lastResult = null, lastName = 'manuscript.tex
 function store(k, v) { try { v === null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v); } catch (e) {} }
 function load(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 function setStatus(el, msg, isErr) { el.textContent = msg || ''; el.classList.toggle('err', !!isErr); }
 
 // text/plain body keeps this a "simple" request, which Apps Script requires (no CORS preflight).
@@ -150,7 +151,13 @@ $('runBtn').onclick = async () => {
     } else {
       text = await f.text();
     }
-    const d = await api({ action: 'process', token, mode, filename: f.name, text });
+    const { jobId } = await api({ action: 'start', token, mode, filename: f.name, text });
+    let d;
+    for (;;) {
+      await sleep(6000);
+      d = await api({ action: 'status', token, jobId });
+      if (d.state === 'done') break;
+    }
     if (lastDocx && d.mode === 'polish') d.docxBlob = await writeDocx(lastDocx, d.edits);
     lastResult = d;
     clearInterval(timer);
