@@ -5,42 +5,72 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Manuscript Portal</title>
 <style>
-  :root { --ink:#1c1c28; --muted:#666a7a; --line:#dcdde6; --accent:#4b2e83; --bg:#ffffff; --soft:#f6f6fa; --del:#fdecec; --ins:#e9f7ec; }
+  :root { --ink:#1c1c28; --muted:#666a7a; --line:#dcdde6; --accent:#4b2e83; --bg:#ffffff; --soft:#f6f6fa; --del:#fdecec; --ins:#e9f7ec; --user:#eef0fb; }
   * { box-sizing: border-box; }
+  html, body { height: 100%; }
   body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.55 "Helvetica Neue", Arial, "Hiragino Sans", "PingFang SC", sans-serif; }
-  main { max-width: 860px; margin: 0 auto; padding: 40px 16px 80px; }
-  h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: -0.01em; }
-  h2 { font-size: 18px; margin: 32px 0 12px; }
-  p.sub { color: var(--muted); margin: 0 0 28px; }
+  main { max-width: 900px; margin: 0 auto; padding: 24px 16px 40px; min-height: 100%; display: flex; flex-direction: column; }
+  h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
+  .top { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom: 14px; }
+  .who { font-size:13px; color:var(--muted); display:flex; gap:10px; align-items:center; }
   .card { border:1px solid var(--line); border-radius:10px; padding:20px; background:var(--bg); }
   label { display:block; font-size:14px; color:var(--muted); margin:14px 0 6px; }
-  input[type=text], input[type=password], select { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font:inherit; background:#fff; color:var(--ink); }
-  input[type=file] { font: inherit; }
-  button { margin-top:18px; padding:10px 18px; border:0; border-radius:8px; background:var(--accent); color:#fff; font:inherit; cursor:pointer; }
+  input[type=text], input[type=password], select, textarea { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font:inherit; background:#fff; color:var(--ink); }
+  textarea { resize: vertical; min-height: 64px; max-height: 40vh; }
+  button { padding:9px 16px; border:0; border-radius:8px; background:var(--accent); color:#fff; font:inherit; cursor:pointer; }
   button.ghost { background:transparent; color:var(--accent); border:1px solid var(--accent); }
+  button.small { padding:5px 10px; font-size:13px; }
+  button.chip { background:var(--soft); color:var(--ink); border:1px solid var(--line); font-size:13px; padding:5px 10px; }
   button:disabled { opacity:.5; cursor:default; }
-  .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
-  .status { margin-top:14px; font-size:14px; color:var(--muted); min-height: 1.4em; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .status { font-size:14px; color:var(--muted); min-height: 1.4em; }
   .status.err { color:#b3261e; }
-  .notice { font-size:13px; color:var(--muted); background:var(--soft); border-radius:8px; padding:10px 12px; margin-top:18px; }
+  .notice { font-size:13px; color:var(--muted); background:var(--soft); border-radius:8px; padding:10px 12px; }
+  .hidden { display:none !important; }
+  .tabs { display:flex; gap:4px; border-bottom:1px solid var(--line); margin-bottom:16px; }
+  .tabs button { background:transparent; color:var(--muted); border-radius:8px 8px 0 0; border-bottom:2px solid transparent; }
+  .tabs button.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+
+  /* chat */
+  #chatView { display:flex; flex-direction:column; flex:1; min-height: 60vh; }
+  #messages { flex:1; overflow-y:auto; padding: 4px 2px; }
+  .msg { margin: 10px 0; display:flex; }
+  .msg.user { justify-content:flex-end; }
+  .bubble { max-width: 85%; padding: 10px 14px; border-radius: 12px; border:1px solid var(--line); background:#fff; overflow-wrap:anywhere; }
+  .msg.user .bubble { background:var(--user); border-color:transparent; white-space:pre-wrap; }
+  .bubble .doc { font-size:12px; color:var(--muted); background:var(--soft); border-radius:6px; padding:3px 8px; display:inline-block; margin-bottom:6px; }
+  .bubble .meta { font-size:12px; color:var(--muted); margin-top:6px; display:flex; gap:10px; align-items:center; }
+  .bubble .meta a { color:var(--accent); cursor:pointer; text-decoration:none; }
+  .md p { margin: 0 0 10px; } .md p:last-child { margin-bottom:0; }
+  .md h1,.md h2,.md h3 { font-size:16px; margin:14px 0 6px; } .md h1 { font-size:18px; }
+  .md ul,.md ol { padding-left: 22px; margin: 6px 0; }
+  .md pre { background:var(--soft); padding:10px 12px; border-radius:8px; overflow-x:auto; font-size:13px; }
+  .md code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size:13px; background:var(--soft); padding:1px 4px; border-radius:4px; }
+  .md pre code { background:none; padding:0; }
+  .md table { border-collapse:collapse; margin:8px 0; font-size:14px; } .md th,.md td { border:1px solid var(--line); padding:4px 8px; }
+  .md blockquote { border-left:3px solid var(--line); margin:8px 0; padding-left:10px; color:var(--muted); }
+  .composer { border-top:1px solid var(--line); padding-top:12px; margin-top:8px; }
+  .attach { display:flex; gap:8px; align-items:center; flex-wrap:wrap; font-size:13px; color:var(--muted); margin-bottom:8px; }
+  .attach .chipfile { background:var(--soft); border:1px solid var(--line); border-radius:999px; padding:3px 10px; display:inline-flex; gap:8px; align-items:center; }
+  .attach .chipfile b { font-weight:600; color:var(--ink); }
+  .attach .x { cursor:pointer; color:var(--muted); }
+  .typing { color:var(--muted); font-size:14px; }
+
+  /* structured tab */
   .edit { border:1px solid var(--line); border-radius:8px; margin:10px 0; overflow:hidden; font-size:14px; }
   .edit div { padding:8px 12px; white-space:pre-wrap; word-break:break-word; font-family: ui-monospace, Menlo, Consolas, monospace; font-size:13px; }
-  .edit .old { background:var(--del); }
-  .edit .new { background:var(--ins); }
+  .edit .old { background:var(--del); } .edit .new { background:var(--ins); }
   .edit .why { font-family: inherit; color:var(--muted); background:var(--soft); }
   pre.review { white-space:pre-wrap; word-break:break-word; font:inherit; margin:0; }
-  .hidden { display:none; }
-  .top { display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap; }
-  .who { font-size:14px; color:var(--muted); }
+  h2 { font-size: 18px; margin: 24px 0 12px; }
 </style>
 </head>
 <body>
 <main>
   <div class="top">
     <h1>Manuscript Portal</h1>
-    <div class="who hidden" id="who"></div>
+    <div class="who hidden" id="who"><span id="whoName"></span><span id="whoUsage"></span><button class="ghost small" id="logoutBtn">Log out</button></div>
   </div>
-  <p class="sub">Language polishing and referee-style review for LaTeX manuscripts.</p>
 
   <!-- Login -->
   <section class="card" id="loginView">
@@ -48,54 +78,80 @@
     <input type="text" id="user" autocomplete="username">
     <label for="pass">Password</label>
     <input type="password" id="pass" autocomplete="current-password">
-    <button id="loginBtn">Log in</button>
-    <div class="status" id="loginStatus"></div>
+    <div class="row" style="margin-top:16px"><button id="loginBtn">Log in</button><span class="status" id="loginStatus"></span></div>
   </section>
 
-  <!-- Upload -->
-  <section class="card hidden" id="appView">
-    <label for="file">Manuscript (.tex, .txt or .docx)</label>
-    <input type="file" id="file" accept=".tex,.txt,.docx,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
-    <label for="mode">Task</label>
-    <select id="mode">
-      <option value="polish">Polish language (returns revised file and a change list)</option>
-      <option value="review">Review (returns a referee-style report)</option>
-    </select>
-    <div class="row">
-      <button id="runBtn">Submit</button>
-      <button class="ghost" id="logoutBtn">Log out</button>
+  <div id="appView" class="hidden" style="display:flex;flex-direction:column;flex:1">
+    <div class="tabs">
+      <button id="tabChat" class="active">Chat</button>
+      <button id="tabTools">Polish / Review (Word &amp; LaTeX)</button>
     </div>
-    <div class="status" id="runStatus"></div>
-    <div class="notice">
-      Uploaded text and results are stored in the administrator's Google Drive and are sent to the
-      Anthropic API for processing. Processing takes 1 to 5 minutes. Keep this page open.
-    </div>
-  </section>
 
-  <!-- Results -->
-  <section class="hidden" id="resultView">
-    <h2 id="resultTitle"></h2>
-    <div class="row">
-      <button id="dlBtn" class="hidden">Download revised file</button>
-      <button id="dlReviewBtn" class="hidden">Download report</button>
-    </div>
-    <div id="resultBody" style="margin-top:16px"></div>
-  </section>
+    <!-- Chat -->
+    <section id="chatView">
+      <div id="messages"></div>
+      <div class="composer">
+        <div class="row" style="margin-bottom:8px">
+          <button class="chip" data-prompt="Please polish the English of the attached manuscript. Keep the scientific content, LaTeX commands and citations unchanged. Return the revised text, then a short list of the substantive changes.">Polish language</button>
+          <button class="chip" data-prompt="Act as a rigorous referee for a physics journal. Write a referee report on the attached manuscript: summary, major concerns, minor concerns, presentation, and suggested additional analysis. Tie each point to a specific section, equation or figure.">Referee review</button>
+          <button class="chip" data-prompt="Summarize the attached manuscript in 200 words for a non-specialist physicist, then list its three main claims and the evidence given for each.">Summarize</button>
+          <button class="chip" data-prompt="Check the attached text for logical gaps, unsupported claims, and inconsistencies between the abstract, results and conclusions. Quote each problematic sentence.">Check logic</button>
+          <button class="ghost small" id="newChatBtn" style="margin-left:auto">New chat</button>
+        </div>
+        <div class="attach">
+          <label for="file" style="margin:0"><input type="file" id="file" accept=".tex,.txt,.md,.bib,.docx,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document" class="hidden"><button class="chip" type="button" id="attachBtn">Attach file</button></label>
+          <span id="attachInfo"></span>
+        </div>
+        <textarea id="prompt" placeholder="Ask anything about your manuscript, or attach a file and choose a task above. Enter to send, Shift+Enter for a new line."></textarea>
+        <div class="row" style="margin-top:8px">
+          <button id="sendBtn">Send</button>
+          <span class="status" id="chatStatus"></span>
+        </div>
+        <div class="notice" style="margin-top:10px">Attached text and the conversation are stored in the administrator's Google Drive and sent to the Anthropic API. Replies take 20 s to 3 min. Keep this page open.</div>
+      </div>
+    </section>
+
+    <!-- Structured polish / review -->
+    <section id="toolsView" class="hidden">
+      <div class="card">
+        <label for="sfile">Manuscript (.tex, .txt or .docx)</label>
+        <input type="file" id="sfile" accept=".tex,.txt,.docx,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
+        <label for="mode">Task</label>
+        <select id="mode">
+          <option value="polish">Polish language (returns revised file with changes written into the .docx, plus a change list)</option>
+          <option value="review">Review (returns a referee-style report)</option>
+        </select>
+        <div class="row" style="margin-top:16px"><button id="runBtn">Submit</button><span class="status" id="runStatus"></span></div>
+        <div class="notice" style="margin-top:14px">Sentence-level edits are applied automatically. For Word files the edits are written back into the original document with formatting preserved. Processing takes 1 to 5 minutes.</div>
+      </div>
+      <section class="hidden" id="resultView">
+        <h2 id="resultTitle"></h2>
+        <div class="row">
+          <button id="dlBtn" class="hidden">Download revised file</button>
+          <button id="dlReviewBtn" class="hidden">Download report</button>
+        </div>
+        <div id="resultBody" style="margin-top:16px"></div>
+      </section>
+    </section>
+  </div>
 </main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
 <script>
 // Paste the Apps Script web app URL here (it ends with /exec).
 const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbyMPCW8XBoolVwUI_SpiViT3k5KojULj4TwmyOAR4ElwjXdMODygcsof8hxQUJyo9ew/exec';
+const MAX_DOC_CHARS = 400000;
 
 const $ = (id) => document.getElementById(id);
-let token = null, username = null, lastResult = null, lastName = 'manuscript.tex', lastDocx = null;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+let token = null, username = null;
 
 function store(k, v) { try { v === null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v); } catch (e) {} }
 function load(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } }
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 function setStatus(el, msg, isErr) { el.textContent = msg || ''; el.classList.toggle('err', !!isErr); }
+function el(tag, cls, text) { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
 
 // text/plain body keeps this a "simple" request, which Apps Script requires (no CORS preflight).
 async function api(payload) {
@@ -106,26 +162,38 @@ async function api(payload) {
   return data;
 }
 
-function showApp() {
-  $('loginView').classList.add('hidden');
-  $('appView').classList.remove('hidden');
-  $('who').classList.remove('hidden');
-  $('who').textContent = 'Signed in as ' + username;
+// Polls a job until done; tolerates a few transient server errors.
+async function waitForJob(jobId, onTick) {
+  let failures = 0;
+  for (;;) {
+    await sleep(6000);
+    let d;
+    try { d = await api({ action: 'status', token, jobId }); failures = 0; }
+    catch (e) { if (/Server error/.test(e.message) && ++failures < 6) continue; throw e; }
+    if (onTick) onTick(d.state);
+    if (d.state === 'done') return d;
+  }
 }
 
+function showUsage(d) { if (d && d.used != null) $('whoUsage').textContent = 'Used this month: $' + d.used.toFixed(2) + ' of $' + d.limit; }
+
+// ---------------------------------------------------------------------------
+// Session
+// ---------------------------------------------------------------------------
+function showApp() {
+  $('loginView').classList.add('hidden'); $('appView').classList.remove('hidden');
+  $('who').classList.remove('hidden'); $('whoName').textContent = username;
+  renderChat();
+}
 function logout() {
   token = username = null; store('mp_token', null); store('mp_user', null);
-  $('appView').classList.add('hidden'); $('resultView').classList.add('hidden');
-  $('who').classList.add('hidden'); $('loginView').classList.remove('hidden');
+  $('appView').classList.add('hidden'); $('who').classList.add('hidden'); $('loginView').classList.remove('hidden');
 }
-
 $('loginBtn').onclick = async () => {
-  const st = $('loginStatus');
-  $('loginBtn').disabled = true; setStatus(st, 'Checking...');
+  const st = $('loginStatus'); $('loginBtn').disabled = true; setStatus(st, 'Checking...');
   try {
     const d = await api({ action: 'login', username: $('user').value.trim(), password: $('pass').value });
-    token = d.token; username = d.username;
-    store('mp_token', token); store('mp_user', username);
+    token = d.token; username = d.username; store('mp_token', token); store('mp_user', username);
     $('pass').value = ''; setStatus(st, ''); showApp();
   } catch (e) { setStatus(st, e.message, true); }
   $('loginBtn').disabled = false;
@@ -133,71 +201,179 @@ $('loginBtn').onclick = async () => {
 $('pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('loginBtn').click(); });
 $('logoutBtn').onclick = logout;
 
+// Tabs
+$('tabChat').onclick = () => switchTab('chat');
+$('tabTools').onclick = () => switchTab('tools');
+function switchTab(t) {
+  $('tabChat').classList.toggle('active', t === 'chat'); $('tabTools').classList.toggle('active', t === 'tools');
+  $('chatView').classList.toggle('hidden', t !== 'chat'); $('toolsView').classList.toggle('hidden', t !== 'tools');
+}
+
+// ---------------------------------------------------------------------------
+// File reading (shared): .docx text is extracted in the browser
+// ---------------------------------------------------------------------------
+const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+async function readDocx(file) {
+  if (!window.JSZip) throw new Error('Word support failed to load. Reload the page and try again.');
+  const zip = await JSZip.loadAsync(await file.arrayBuffer());
+  const entry = zip.file('word/document.xml');
+  if (!entry) throw new Error('Not a valid .docx file');
+  const doc = new DOMParser().parseFromString(await entry.async('string'), 'application/xml');
+  if (doc.getElementsByTagName('parsererror').length) throw new Error('Could not parse the Word document');
+  const paras = Array.from(doc.getElementsByTagNameNS(W_NS, 'p'));
+  const text = paras.map((p) => Array.from(p.getElementsByTagNameNS(W_NS, 't')).map((t) => t.textContent).join('')).join('\n\n');
+  return { zip, doc, paras, text };
+}
+async function readAnyFile(f) {
+  if (/\.docx$/i.test(f.name)) return (await readDocx(f)).text;
+  return await f.text();
+}
+
+// ---------------------------------------------------------------------------
+// Chat
+// ---------------------------------------------------------------------------
+let chat = { convId: null, messages: [] };   // messages: {role, content, doc?, cost?}
+let pendingDoc = null;                          // {name, text}
+
+function loadChat() { try { const c = JSON.parse(load('mp_chat') || 'null'); if (c && Array.isArray(c.messages)) chat = c; } catch (e) {} }
+function saveChat() { store('mp_chat', JSON.stringify(chat)); }
+function newConvId() { return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+
+function renderMarkdown(text) {
+  if (!window.marked || !window.DOMPurify) { const p = el('div', 'md'); p.textContent = text; return p; }
+  const div = el('div', 'md');
+  div.innerHTML = DOMPurify.sanitize(marked.parse(text, { breaks: false, gfm: true }));
+  return div;
+}
+
+function renderChat() {
+  const box = $('messages'); box.textContent = '';
+  if (!chat.messages.length) {
+    box.appendChild(el('div', 'notice', 'Start by attaching a manuscript (.tex, .txt, .md or .docx) and choosing a task, or just ask a question. The file stays in the conversation, so follow-up questions do not need re-uploading.'));
+  }
+  chat.messages.forEach((m, i) => {
+    const row = el('div', 'msg ' + m.role);
+    const b = el('div', 'bubble');
+    if (m.role === 'user') {
+      if (m.doc) b.appendChild(el('div', 'doc', 'Attached: ' + m.doc.name + ' (' + m.doc.chars.toLocaleString() + ' characters)'));
+      b.appendChild(document.createTextNode(m.text));
+    } else {
+      b.appendChild(renderMarkdown(m.content));
+      const meta = el('div', 'meta');
+      if (m.cost != null) meta.appendChild(el('span', null, '$' + m.cost.toFixed(3)));
+      if (m.truncated) meta.appendChild(el('span', null, 'Reply hit the length limit; ask to continue.'));
+      const dl = el('a', null, 'Download .md'); dl.onclick = () => download('reply_' + (i + 1) + '.md', m.content); meta.appendChild(dl);
+      const cp = el('a', null, 'Copy'); cp.onclick = () => navigator.clipboard && navigator.clipboard.writeText(m.content); meta.appendChild(cp);
+      b.appendChild(meta);
+    }
+    row.appendChild(b); box.appendChild(row);
+  });
+  box.scrollTop = box.scrollHeight;
+}
+
+function renderAttach() {
+  const info = $('attachInfo'); info.textContent = '';
+  if (!pendingDoc) return;
+  const chip = el('span', 'chipfile');
+  chip.appendChild(el('b', null, pendingDoc.name));
+  chip.appendChild(el('span', null, pendingDoc.text.length.toLocaleString() + ' characters'));
+  const x = el('span', 'x', '✕'); x.title = 'Remove'; x.onclick = () => { pendingDoc = null; $('file').value = ''; renderAttach(); };
+  chip.appendChild(x); info.appendChild(chip);
+}
+$('attachBtn').onclick = () => $('file').click();
+$('file').onchange = async () => {
+  const f = $('file').files[0]; if (!f) return;
+  try {
+    const text = await readAnyFile(f);
+    if (text.length > MAX_DOC_CHARS) throw new Error('File too large (limit ' + MAX_DOC_CHARS.toLocaleString() + ' characters)');
+    pendingDoc = { name: f.name, text };
+    setStatus($('chatStatus'), '');
+  } catch (e) { pendingDoc = null; setStatus($('chatStatus'), e.message, true); }
+  renderAttach();
+};
+document.querySelectorAll('button.chip[data-prompt]').forEach((b) => {
+  b.onclick = () => { const t = $('prompt'); t.value = b.dataset.prompt; t.focus(); };
+});
+$('newChatBtn').onclick = () => { chat = { convId: null, messages: [] }; pendingDoc = null; $('file').value = ''; saveChat(); renderAttach(); renderChat(); };
+
+// Builds the API-facing message list; the attached document is embedded in the user turn.
+function apiMessages() {
+  return chat.messages.map((m) => ({ role: m.role, content: m.content }));
+}
+
+$('sendBtn').onclick = sendMessage;
+$('prompt').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
+
+async function sendMessage() {
+  const text = $('prompt').value.trim();
+  if (!text && !pendingDoc) return;
+  const st = $('chatStatus');
+  let content = text || 'Please read the attached document.';
+  const msg = { role: 'user', text: text || '(attached file)', content };
+  if (pendingDoc) {
+    msg.doc = { name: pendingDoc.name, chars: pendingDoc.text.length };
+    msg.content = '<document name="' + pendingDoc.name.replace(/"/g, '') + '">\n' + pendingDoc.text + '\n</document>\n\n' + content;
+  }
+  if (!chat.convId) chat.convId = newConvId();
+  chat.messages.push(msg); saveChat(); renderChat();
+  $('prompt').value = ''; pendingDoc = null; $('file').value = ''; renderAttach();
+  $('sendBtn').disabled = true;
+  const t0 = Date.now();
+  const typing = el('div', 'typing', 'Thinking...'); $('messages').appendChild(typing); $('messages').scrollTop = $('messages').scrollHeight;
+  const timer = setInterval(() => { typing.textContent = 'Thinking... ' + Math.round((Date.now() - t0) / 1000) + ' s'; }, 1000);
+  try {
+    const { jobId } = await api({ action: 'chat_start', token, convId: chat.convId, messages: apiMessages() });
+    let d;
+    try {
+      d = await api({ action: 'chat_run', token, jobId });
+    } catch (e) {
+      // Safari drops long requests (~60 s); the job keeps running, so fetch the result by polling.
+      if (/log in again|quota|Job not found|Claude API error|exhausted/i.test(e.message)) throw e;
+      d = await waitForJob(jobId);
+    }
+    chat.messages.push({ role: 'assistant', content: d.reply, cost: d.cost, truncated: d.truncated });
+    showUsage(d); saveChat(); setStatus(st, '');
+  } catch (e) {
+    chat.messages.pop(); saveChat();   // keep the failed prompt out of history
+    $('prompt').value = text; setStatus(st, e.message, true);
+    if (/log in again/i.test(e.message)) logout();
+  }
+  clearInterval(timer); typing.remove(); renderChat();
+  $('sendBtn').disabled = false;
+}
+
+// ---------------------------------------------------------------------------
+// Structured polish / review (edits written back into .docx)
+// ---------------------------------------------------------------------------
+let lastResult = null, lastName = 'manuscript.tex', lastDocx = null;
+
 $('runBtn').onclick = async () => {
   const st = $('runStatus');
-  const f = $('file').files[0];
+  const f = $('sfile').files[0];
   if (!f) { setStatus(st, 'Choose a file first.', true); return; }
   const mode = $('mode').value;
   $('runBtn').disabled = true; $('resultView').classList.add('hidden');
   const t0 = Date.now();
   const timer = setInterval(() => setStatus(st, 'Processing... ' + Math.round((Date.now() - t0) / 1000) + ' s'), 1000);
   try {
-    lastName = f.name;
-    lastDocx = null;
+    lastName = f.name; lastDocx = null;
     let text;
-    if (/\.docx$/i.test(f.name)) {
-      lastDocx = await readDocx(f);
-      text = lastDocx.text;
-    } else {
-      text = await f.text();
-    }
+    if (/\.docx$/i.test(f.name)) { lastDocx = await readDocx(f); text = lastDocx.text; } else { text = await f.text(); }
     const { jobId } = await api({ action: 'start', token, mode, filename: f.name, text });
-    let d, failures = 0;
-    for (;;) {
-      await sleep(6000);
-      try {
-        d = await api({ action: 'status', token, jobId });
-        failures = 0;
-      } catch (e) {
-        // Transient server errors happen; give up only after several in a row.
-        if (/Server error/.test(e.message) && ++failures < 6) continue;
-        throw e;
-      }
-      if (d.state === 'done') break;
-    }
+    const d = await waitForJob(jobId);
     if (lastDocx && d.mode === 'polish') d.docxBlob = await writeDocx(lastDocx, d.edits);
-    lastResult = d;
-    clearInterval(timer);
-    setStatus(st, 'Done. Cost $' + d.cost.toFixed(3) + '. Used this month: $' + d.used.toFixed(2) + ' of $' + d.limit + '.');
-    render(d);
+    lastResult = d; clearInterval(timer);
+    setStatus(st, 'Done. Cost $' + d.cost.toFixed(3) + '.'); showUsage(d);
+    renderResult(d);
   } catch (e) {
-    clearInterval(timer);
-    setStatus(st, e.message, true);
+    clearInterval(timer); setStatus(st, e.message, true);
     if (/log in again/i.test(e.message)) logout();
   }
   $('runBtn').disabled = false;
 };
 
-
-// ---- Word (.docx) support: text is extracted in the browser, edits are written back into the original XML ----
-const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
-
-async function readDocx(file) {
-  if (!window.JSZip) throw new Error('Word support failed to load. Reload the page and try again.');
-  const zip = await JSZip.loadAsync(await file.arrayBuffer());
-  const entry = zip.file('word/document.xml');
-  if (!entry) throw new Error('Not a valid .docx file');
-  const xml = await entry.async('string');
-  const doc = new DOMParser().parseFromString(xml, 'application/xml');
-  if (doc.getElementsByTagName('parsererror').length) throw new Error('Could not parse the Word document');
-  const paras = Array.from(doc.getElementsByTagNameNS(W_NS, 'p'));
-  const text = paras.map((p) => Array.from(p.getElementsByTagNameNS(W_NS, 't')).map((t) => t.textContent).join('')).join('\n\n');
-  return { zip, doc, paras, text };
-}
-
 // Applies each edit inside the paragraph that contains it. If the old text sits in one run, only that
-// run changes; if it spans several runs, the paragraph's text is merged into its first run (formatting
-// inside that paragraph is lost, but the rest of the document is untouched).
+// run changes; if it spans several runs, the paragraph's text is merged into its first run.
 async function writeDocx(d, edits) {
   let applied = 0, manual = [];
   edits.forEach((ed) => {
@@ -207,36 +383,25 @@ async function writeDocx(d, edits) {
       const single = ts.find((t) => t.textContent.includes(ed.old));
       if (single) { setT(single, single.textContent.replace(ed.old, ed.new)); done = true; break; }
       const full = ts.map((t) => t.textContent).join('');
-      if (ts.length && full.includes(ed.old)) {
-        setT(ts[0], full.replace(ed.old, ed.new));
-        ts.slice(1).forEach((t) => setT(t, ''));
-        done = true; break;
-      }
+      if (ts.length && full.includes(ed.old)) { setT(ts[0], full.replace(ed.old, ed.new)); ts.slice(1).forEach((t) => setT(t, '')); done = true; break; }
     }
     if (done) applied++; else manual.push(ed);
   });
-  const xml = new XMLSerializer().serializeToString(d.doc);
-  d.zip.file('word/document.xml', xml);
+  d.zip.file('word/document.xml', new XMLSerializer().serializeToString(d.doc));
   const blob = await d.zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
   blob.applied = applied; blob.manual = manual;
   return blob;
 }
+function setT(t, value) { t.textContent = value; t.setAttributeNS('http://www.w3.org/XML/1998/namespace', 'xml:space', 'preserve'); }
 
-function setT(t, value) {
-  t.textContent = value;
-  t.setAttributeNS('http://www.w3.org/XML/1998/namespace', 'xml:space', 'preserve');
-}
-
-function el(tag, cls, text) { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
-
-function render(d) {
+function renderResult(d) {
   const body = $('resultBody'); body.textContent = '';
   $('resultView').classList.remove('hidden');
   $('dlBtn').classList.toggle('hidden', d.mode !== 'polish');
   $('dlReviewBtn').classList.toggle('hidden', d.mode !== 'review');
   if (d.mode === 'review') {
     $('resultTitle').textContent = 'Review report';
-    const card = el('div', 'card'); card.appendChild(el('pre', 'review', d.review)); body.appendChild(card);
+    const card = el('div', 'card'); card.appendChild(renderMarkdown(d.review)); body.appendChild(card);
     return;
   }
   let title = d.edits.length + ' changes applied';
@@ -252,19 +417,15 @@ function render(d) {
   }
   d.edits.forEach((ed) => {
     const box = el('div', 'edit');
-    box.appendChild(el('div', 'old', ed.old));
-    box.appendChild(el('div', 'new', ed.new));
-    box.appendChild(el('div', 'why', ed.reason));
+    box.appendChild(el('div', 'old', ed.old)); box.appendChild(el('div', 'new', ed.new)); box.appendChild(el('div', 'why', ed.reason));
     body.appendChild(box);
   });
 }
 
 function download(name, text) { downloadBlob(name, new Blob([text], { type: 'text/plain;charset=utf-8' })); }
 function downloadBlob(name, blob) {
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = name; document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 $('dlBtn').onclick = () => {
   if (!lastResult) return;
@@ -274,7 +435,7 @@ $('dlBtn').onclick = () => {
 $('dlReviewBtn').onclick = () => lastResult && download(lastName.replace(/(\.[^.]+)?$/, '_review.md'), lastResult.review);
 
 // Restore session
-token = load('mp_token'); username = load('mp_user');
+token = load('mp_token'); username = load('mp_user'); loadChat();
 if (token && username) showApp();
 </script>
 </body>
