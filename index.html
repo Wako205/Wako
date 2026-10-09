@@ -54,11 +54,11 @@
 
   <!-- Upload -->
   <section class="card hidden" id="appView">
-    <label for="file">Manuscript (.tex or .txt)</label>
-    <input type="file" id="file" accept=".tex,.txt,text/plain">
+    <label for="file">Manuscript (.tex, .txt or .docx)</label>
+    <input type="file" id="file" accept=".tex,.txt,.docx,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
     <label for="mode">Task</label>
     <select id="mode">
-      <option value="polish">Polish language (returns revised .tex and a change list)</option>
+      <option value="polish">Polish language (returns revised file and a change list)</option>
       <option value="review">Review (returns a referee-style report)</option>
     </select>
     <div class="row">
@@ -67,7 +67,7 @@
     </div>
     <div class="status" id="runStatus"></div>
     <div class="notice">
-      Uploaded files and results are stored in the administrator's Google Drive and are sent to the
+      Uploaded text and results are stored in the administrator's Google Drive and are sent to the
       Anthropic API for processing. Processing takes 1 to 4 minutes. Keep this page open.
     </div>
   </section>
@@ -76,19 +76,20 @@
   <section class="hidden" id="resultView">
     <h2 id="resultTitle"></h2>
     <div class="row">
-      <button id="dlBtn" class="hidden">Download revised .tex</button>
+      <button id="dlBtn" class="hidden">Download revised file</button>
       <button id="dlReviewBtn" class="hidden">Download report</button>
     </div>
     <div id="resultBody" style="margin-top:16px"></div>
   </section>
 </main>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
 // Paste the Apps Script web app URL here (it ends with /exec).
 const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbyMPCW8XBoolVwUI_SpiViT3k5KojULj4TwmyOAR4ElwjXdMODygcsof8hxQUJyo9ew/exec';
 
 const $ = (id) => document.getElementById(id);
-let token = null, username = null, lastResult = null, lastName = 'manuscript.tex';
+let token = null, username = null, lastResult = null, lastName = 'manuscript.tex', lastDocx = null;
 
 function store(k, v) { try { v === null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v); } catch (e) {} }
 function load(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } }
@@ -140,9 +141,17 @@ $('runBtn').onclick = async () => {
   const t0 = Date.now();
   const timer = setInterval(() => setStatus(st, 'Processing... ' + Math.round((Date.now() - t0) / 1000) + ' s'), 1000);
   try {
-    const text = await f.text();
     lastName = f.name;
+    lastDocx = null;
+    let text;
+    if (/\.docx$/i.test(f.name)) {
+      lastDocx = await readDocx(f);
+      text = lastDocx.text;
+    } else {
+      text = await f.text();
+    }
     const d = await api({ action: 'process', token, mode, filename: f.name, text });
+    if (lastDocx && d.mode === 'polish') d.docxBlob = await writeDocx(lastDocx, d.edits);
     lastResult = d;
     clearInterval(timer);
     setStatus(st, 'Done. Cost $' + d.cost.toFixed(3) + '. Used this month: $' + d.used.toFixed(2) + ' of $' + d.limit + '.');
@@ -154,6 +163,55 @@ $('runBtn').onclick = async () => {
   }
   $('runBtn').disabled = false;
 };
+
+
+// ---- Word (.docx) support: text is extracted in the browser, edits are written back into the original XML ----
+const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+async function readDocx(file) {
+  if (!window.JSZip) throw new Error('Word support failed to load. Reload the page and try again.');
+  const zip = await JSZip.loadAsync(await file.arrayBuffer());
+  const entry = zip.file('word/document.xml');
+  if (!entry) throw new Error('Not a valid .docx file');
+  const xml = await entry.async('string');
+  const doc = new DOMParser().parseFromString(xml, 'application/xml');
+  if (doc.getElementsByTagName('parsererror').length) throw new Error('Could not parse the Word document');
+  const paras = Array.from(doc.getElementsByTagNameNS(W_NS, 'p'));
+  const text = paras.map((p) => Array.from(p.getElementsByTagNameNS(W_NS, 't')).map((t) => t.textContent).join('')).join('\n\n');
+  return { zip, doc, paras, text };
+}
+
+// Applies each edit inside the paragraph that contains it. If the old text sits in one run, only that
+// run changes; if it spans several runs, the paragraph's text is merged into its first run (formatting
+// inside that paragraph is lost, but the rest of the document is untouched).
+async function writeDocx(d, edits) {
+  let applied = 0, manual = [];
+  edits.forEach((ed) => {
+    let done = false;
+    for (const p of d.paras) {
+      const ts = Array.from(p.getElementsByTagNameNS(W_NS, 't'));
+      const single = ts.find((t) => t.textContent.includes(ed.old));
+      if (single) { setT(single, single.textContent.replace(ed.old, ed.new)); done = true; break; }
+      const full = ts.map((t) => t.textContent).join('');
+      if (ts.length && full.includes(ed.old)) {
+        setT(ts[0], full.replace(ed.old, ed.new));
+        ts.slice(1).forEach((t) => setT(t, ''));
+        done = true; break;
+      }
+    }
+    if (done) applied++; else manual.push(ed);
+  });
+  const xml = new XMLSerializer().serializeToString(d.doc);
+  d.zip.file('word/document.xml', xml);
+  const blob = await d.zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+  blob.applied = applied; blob.manual = manual;
+  return blob;
+}
+
+function setT(t, value) {
+  t.textContent = value;
+  t.setAttributeNS('http://www.w3.org/XML/1998/namespace', 'xml:space', 'preserve');
+}
 
 function el(tag, cls, text) { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
 
@@ -171,6 +229,13 @@ function render(d) {
   if (d.skipped) title += ', ' + d.skipped + ' could not be located and were skipped';
   $('resultTitle').textContent = title;
   if (d.truncated) body.appendChild(el('div', 'notice', 'Time limit reached: the last part of the manuscript was left unchanged. Split the file and submit the remainder separately.'));
+  if (d.docxBlob) {
+    let msg = d.docxBlob.applied + ' of ' + d.edits.length + ' changes were written into the Word file with formatting preserved.';
+    if (d.docxBlob.manual.length) msg += ' ' + d.docxBlob.manual.length + ' could not be placed automatically and are listed first below for manual editing.';
+    body.appendChild(el('div', 'notice', msg));
+    const manualSet = new Set(d.docxBlob.manual);
+    d.edits = d.docxBlob.manual.concat(d.edits.filter((e) => !manualSet.has(e)));
+  }
   d.edits.forEach((ed) => {
     const box = el('div', 'edit');
     box.appendChild(el('div', 'old', ed.old));
@@ -180,13 +245,18 @@ function render(d) {
   });
 }
 
-function download(name, text) {
+function download(name, text) { downloadBlob(name, new Blob([text], { type: 'text/plain;charset=utf-8' })); }
+function downloadBlob(name, blob) {
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+  a.href = URL.createObjectURL(blob);
   a.download = name; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
-$('dlBtn').onclick = () => lastResult && download(lastName.replace(/(\.[^.]+)?$/, '_polished$1'), lastResult.revised);
+$('dlBtn').onclick = () => {
+  if (!lastResult) return;
+  const name = lastName.replace(/(\.[^.]+)?$/, '_polished$1');
+  if (lastResult.docxBlob) downloadBlob(name, lastResult.docxBlob); else download(name, lastResult.revised);
+};
 $('dlReviewBtn').onclick = () => lastResult && download(lastName.replace(/(\.[^.]+)?$/, '_review.md'), lastResult.review);
 
 // Restore session
