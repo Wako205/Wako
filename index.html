@@ -152,10 +152,17 @@ $('runBtn').onclick = async () => {
       text = await f.text();
     }
     const { jobId } = await api({ action: 'start', token, mode, filename: f.name, text });
-    let d;
+    let d, failures = 0;
     for (;;) {
       await sleep(6000);
-      d = await api({ action: 'status', token, jobId });
+      try {
+        d = await api({ action: 'status', token, jobId });
+        failures = 0;
+      } catch (e) {
+        // Transient server errors happen; give up only after several in a row.
+        if (/Server error/.test(e.message) && ++failures < 6) continue;
+        throw e;
+      }
       if (d.state === 'done') break;
     }
     if (lastDocx && d.mode === 'polish') d.docxBlob = await writeDocx(lastDocx, d.edits);
