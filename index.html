@@ -298,7 +298,7 @@ $('newChatBtn').onclick = () => { chat = { convId: null, messages: [] }; pending
 
 // Builds the API-facing message list; the attached document is embedded in the user turn.
 function apiMessages() {
-  return chat.messages.map((m) => ({ role: m.role, content: m.content }));
+  return chat.messages.filter((m) => m.content && m.content.trim()).map((m) => ({ role: m.role, content: m.content }));
 }
 
 $('sendBtn').onclick = sendMessage;
@@ -331,7 +331,8 @@ async function sendMessage() {
       if (/log in again|quota|Job not found|Claude API error|exhausted/i.test(e.message)) throw e;
       d = await waitForJob(jobId);
     }
-    chat.messages.push({ role: 'assistant', content: d.reply, cost: d.cost, truncated: d.truncated });
+    if (d.reply && d.reply.trim()) chat.messages.push({ role: 'assistant', content: d.reply, cost: d.cost, truncated: d.truncated });
+    else setStatus(st, 'The model returned an empty reply (cost $' + (d.cost || 0).toFixed(3) + '). Try again or rephrase.', true);
     showUsage(d); saveChat(); setStatus(st, '');
   } catch (e) {
     chat.messages.pop(); saveChat();   // keep the failed prompt out of history
