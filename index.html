@@ -92,7 +92,7 @@
       <div id="messages"></div>
       <div class="composer">
         <div class="row" style="margin-bottom:8px">
-          <button class="chip" data-prompt="Please polish the English of the attached manuscript. Keep the scientific content, LaTeX commands and citations unchanged. Return the revised text, then a short list of the substantive changes.">Polish language</button>
+          <button class="chip" data-prompt="Polish the English of the attached manuscript and return the revised file. Keep the scientific content, equations, citations and LaTeX commands unchanged.">Polish language</button>
           <button class="chip" data-prompt="Act as a rigorous referee for a physics journal. Write a referee report on the attached manuscript: summary, major concerns, minor concerns, presentation, and suggested additional analysis. Tie each point to a specific section, equation or figure.">Referee review</button>
           <button class="chip" data-prompt="Summarize the attached manuscript in 200 words for a non-specialist physicist, then list its three main claims and the evidence given for each.">Summarize</button>
           <button class="chip" data-prompt="Check the attached text for logical gaps, unsupported claims, and inconsistencies between the abstract, results and conclusions. Quote each problematic sentence.">Check logic</button>
@@ -136,6 +136,7 @@
         <h2 id="resultTitle"></h2>
         <div class="row">
           <button id="dlBtn" class="hidden">Download revised file</button>
+          <button id="dlCleanBtn" class="ghost hidden">Download Word (clean)</button>
           <button id="dlReviewBtn" class="hidden">Download report</button>
         </div>
         <div id="resultBody" style="margin-top:16px"></div>
@@ -230,18 +231,23 @@ async function readDocx(file) {
   if (doc.getElementsByTagName('parsererror').length) throw new Error('Could not parse the Word document');
   const paras = Array.from(doc.getElementsByTagNameNS(W_NS, 'p'));
   const text = paras.map((p) => Array.from(p.getElementsByTagNameNS(W_NS, 't')).map((t) => t.textContent).join('')).join('\n\n');
-  return { zip, doc, paras, text };
+  const xml = new XMLSerializer().serializeToString(doc);
+  return { zip, xml, text };
 }
 async function readAnyFile(f) {
-  if (/\.docx$/i.test(f.name)) return (await readDocx(f)).text;
-  return await f.text();
+  if (/\.docx$/i.test(f.name)) { const d = await readDocx(f); return { name: f.name, kind: 'docx', text: d.text, docx: d }; }
+  const text = await f.text();
+  return { name: f.name, kind: /\.tex$/i.test(f.name) ? 'tex' : 'text', text };
 }
 
 // ---------------------------------------------------------------------------
 // Chat
 // ---------------------------------------------------------------------------
 let chat = { convId: null, messages: [] };   // messages: {role, content, doc?, cost?}
-let pendingDoc = null;                          // {name, text}
+let pendingDoc = null;                          // {name, kind, text, docx?} waiting to be sent
+let currentFile = null;                         // last file sent in this conversation (kept in memory only)
+const fileOutputs = {};                         // message index -> {tracked, clean, name, kind}
+const POLISH_RE = /polish|polsih|plish|proof-?read|copy-?edit|润色|校对|修改英文|改英文|英文修改/i;
 
 function loadChat() { try { const c = JSON.parse(load('mp_chat') || 'null'); if (c && Array.isArray(c.messages)) chat = c; } catch (e) {} }
 function saveChat() { store('mp_chat', JSON.stringify(chat)); }
@@ -272,6 +278,19 @@ function renderChat() {
       if (m.model) meta.appendChild(el('span', null, m.model.replace('claude-', '').replace(/-(\d)-(\d)/, ' $1.$2')));
       if (m.note) meta.appendChild(el('span', null, m.note));
       if (m.truncated) meta.appendChild(el('span', null, 'Reply hit the length limit; ask to continue.'));
+      const out = fileOutputs[i];
+      if (m.file && out) {
+        const row2 = el('div', 'row'); row2.style.marginTop = '8px';
+        if (out.kind === 'docx') {
+          const b1 = el('button', 'small', 'Download Word (tracked changes)'); b1.onclick = () => downloadBlob(out.name.replace(/\.docx$/i, '_polished_tracked.docx'), out.tracked); row2.appendChild(b1);
+          const b2 = el('button', 'ghost small', 'Download Word (clean)'); b2.onclick = () => downloadBlob(out.name.replace(/\.docx$/i, '_polished.docx'), out.clean); row2.appendChild(b2);
+        } else {
+          const b1 = el('button', 'small', 'Download ' + (out.kind === 'tex' ? '.tex' : 'file')); b1.onclick = () => download(out.name.replace(/(\.[^.]+)?$/, '_polished$1'), out.revised); row2.appendChild(b1);
+        }
+        b.appendChild(row2);
+      } else if (m.file) {
+        b.appendChild(el('div', 'notice', 'The polished file was produced earlier in this browser session and is no longer in memory. Attach the file again and ask to polish it.'));
+      }
       const dl = el('a', null, 'Download .md'); dl.onclick = () => download('reply_' + (i + 1) + '.md', m.content); meta.appendChild(dl);
       const cp = el('a', null, 'Copy'); cp.onclick = () => navigator.clipboard && navigator.clipboard.writeText(m.content); meta.appendChild(cp);
       b.appendChild(meta);
@@ -294,9 +313,11 @@ $('attachBtn').onclick = () => $('file').click();
 $('file').onchange = async () => {
   const f = $('file').files[0]; if (!f) return;
   try {
-    const text = await readAnyFile(f);
-    if (text.length > MAX_DOC_CHARS) throw new Error('File too large (limit ' + MAX_DOC_CHARS.toLocaleString() + ' characters)');
-    pendingDoc = { name: f.name, text };
+    if (f.size > 50e6) throw new Error('File too large');
+    pendingDoc = null;
+    const probe = await readAnyFile(f);
+    if (probe.text.length > MAX_DOC_CHARS) throw new Error('File too large (limit ' + MAX_DOC_CHARS.toLocaleString() + ' characters)');
+    pendingDoc = probe;
     setStatus($('chatStatus'), '');
   } catch (e) { pendingDoc = null; setStatus($('chatStatus'), e.message, true); }
   renderAttach();
@@ -306,7 +327,7 @@ document.querySelectorAll('button.chip[data-prompt]').forEach((b) => {
 });
 $('preset').onchange = () => store('mp_preset', $('preset').value);
 try { const p = load('mp_preset'); if (p) $('preset').value = p; } catch (e) {}
-$('newChatBtn').onclick = () => { chat = { convId: null, messages: [] }; pendingDoc = null; $('file').value = ''; saveChat(); renderAttach(); renderChat(); };
+$('newChatBtn').onclick = () => { chat = { convId: null, messages: [] }; pendingDoc = null; currentFile = null; $('file').value = ''; saveChat(); renderAttach(); renderChat(); };
 
 // Builds the API-facing message list; the attached document is embedded in the user turn.
 function apiMessages() {
@@ -326,9 +347,12 @@ async function sendMessage() {
     msg.doc = { name: pendingDoc.name, chars: pendingDoc.text.length };
     msg.content = '<document name="' + pendingDoc.name.replace(/"/g, '') + '">\n' + pendingDoc.text + '\n</document>\n\n' + content;
   }
+  if (pendingDoc) currentFile = pendingDoc;
+  const fileMode = !!(currentFile && (currentFile.kind === 'docx' || currentFile.kind === 'tex') && POLISH_RE.test(text));
   if (!chat.convId) chat.convId = newConvId();
   chat.messages.push(msg); saveChat(); renderChat();
   $('prompt').value = ''; pendingDoc = null; $('file').value = ''; renderAttach();
+  if (fileMode) return polishFileInChat(text, msg);
   $('sendBtn').disabled = true;
   const t0 = Date.now();
   const typing = el('div', 'typing', 'Thinking...'); $('messages').appendChild(typing); $('messages').scrollTop = $('messages').scrollHeight;
@@ -355,6 +379,144 @@ async function sendMessage() {
   $('sendBtn').disabled = false;
 }
 
+// Polishes the current file sentence by sentence and returns a downloadable file in the chat.
+async function polishFileInChat(text, msg) {
+  const st = $('chatStatus'), f = currentFile;
+  $('sendBtn').disabled = true;
+  const t0 = Date.now();
+  const typing = el('div', 'typing', 'Polishing ' + f.name + '...'); $('messages').appendChild(typing); $('messages').scrollTop = $('messages').scrollHeight;
+  let stage = 'queued';
+  const timer = setInterval(() => { typing.textContent = 'Polishing ' + f.name + ' (' + stage + ')... ' + Math.round((Date.now() - t0) / 1000) + ' s'; }, 1000);
+  try {
+    const { jobId } = await api({ action: 'start', token, mode: 'polish', filename: f.name, text: f.text, instructions: text });
+    const d = await waitForJob(jobId, (s) => { stage = s === 'pending' ? 'queued' : 'editing'; });
+    const out = { name: f.name, kind: f.kind, revised: d.revised };
+    let placed = d.edits.length, manual = [];
+    if (f.kind === 'docx') {
+      const tr = await writeDocxTracked(f.docx, d.edits);
+      out.tracked = tr.blob; out.clean = (await writeDocxClean(f.docx, d.edits)).blob;
+      placed = tr.applied; manual = tr.manual;
+    }
+    const lines = ['**' + f.name + '**: ' + d.edits.length + ' edits.'];
+    if (f.kind === 'docx') lines.push(placed + ' are in the Word file as tracked changes (accept or reject them in Word under Review).' + (manual.length ? ' ' + manual.length + ' could not be placed and are marked ⚠ below; apply them by hand.' : ''));
+    if (d.skipped) lines.push(d.skipped + ' suggested edits did not match the text and were dropped.');
+    if (d.truncated) lines.push('⚠ Time limit reached: the end of the document was not edited. Split the file and polish the rest separately.');
+    lines.push('', '| Original | Revised | Reason |', '|---|---|---|');
+    const esc = (x) => String(x).replace(/\|/g, '\\|').replace(/\n/g, ' ');
+    const manualSet = new Set(manual);
+    d.edits.slice(0, 200).forEach((e) => lines.push('| ' + (manualSet.has(e) ? '⚠ ' : '') + esc(e.old) + ' | ' + esc(e.new) + ' | ' + esc(e.reason) + ' |'));
+    if (d.edits.length > 200) lines.push('', '(' + (d.edits.length - 200) + ' more edits are in the file.)');
+    chat.messages.push({ role: 'assistant', content: lines.join('\n'), cost: d.cost, file: true, model: 'claude-opus-5-5' });
+    fileOutputs[chat.messages.length - 1] = out;
+    showUsage(d); saveChat(); setStatus(st, '');
+  } catch (e) {
+    chat.messages.pop(); saveChat();
+    $('prompt').value = text; setStatus(st, e.message, true);
+    if (/log in again/i.test(e.message)) logout();
+  }
+  clearInterval(timer); typing.remove(); renderChat();
+  $('sendBtn').disabled = false;
+}
+
+// ---------------------------------------------------------------------------
+// Word export. Each export re-parses the original XML, so repeated exports never compound.
+// ---------------------------------------------------------------------------
+const XML_NS = 'http://www.w3.org/XML/1998/namespace';
+function freshDoc(d) { return new DOMParser().parseFromString(d.xml, 'application/xml'); }
+async function packDocx(d, doc) {
+  d.zip.file('word/document.xml', new XMLSerializer().serializeToString(doc));
+  return d.zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+}
+
+// Word-level diff: returns hunks {start, end, ins} relative to the old string.
+function wordHunks(oldS, newS) {
+  const tok = (x) => x.match(/\s+|[A-Za-z0-9À-￿]+|[^\sA-Za-z0-9À-￿]/g) || [];
+  const a = tok(oldS), b = tok(newS), n = a.length, m = b.length;
+  const L = Array.from({ length: n + 1 }, () => new Int32Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = a[i] === b[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  const hunks = []; let i = 0, j = 0, pos = 0, cur = null;
+  const flush = () => { if (cur) { hunks.push(cur); cur = null; } };
+  while (i < n || j < m) {
+    if (i < n && j < m && a[i] === b[j]) { flush(); pos += a[i].length; i++; j++; }
+    else if (j < m && (i >= n || L[i][j + 1] >= L[i + 1][j])) { cur = cur || { start: pos, end: pos, ins: '' }; cur.ins += b[j++]; }
+    else { cur = cur || { start: pos, end: pos, ins: '' }; pos += a[i].length; cur.end = pos; i++; }
+  }
+  flush();
+  return hunks;
+}
+
+// Tracked version: each changed word group becomes w:del + w:ins with the formatting of the run it sits in.
+// The clean version is the same document with these tracked changes accepted, so formatting is never merged.
+async function exportDocx(d, edits, accept) {
+  const doc = freshDoc(d);
+  let paras = Array.from(doc.getElementsByTagNameNS(W_NS, 'p'));
+  const date = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
+  let nextId = 900000, applied = 0; const manual = [];
+  const W = (name) => doc.createElementNS(W_NS, 'w:' + name);
+  const mark = (name) => { const e = W(name); e.setAttributeNS(W_NS, 'w:id', String(nextId++)); e.setAttributeNS(W_NS, 'w:author', 'Manuscript Portal'); e.setAttributeNS(W_NS, 'w:date', date); return e; };
+  const simple = (r) => r.localName === 'r' && /^(p|hyperlink)$/.test(r.parentNode.localName)
+    && Array.from(r.childNodes).filter((c) => c.nodeType === 1).every((c) => c.localName === 'rPr' || c.localName === 't')
+    && r.getElementsByTagNameNS(W_NS, 't').length === 1;
+  const runWith = (src, text, tag) => {
+    const r = src.cloneNode(true), t = r.getElementsByTagNameNS(W_NS, 't')[0];
+    const nn = W(tag || 't'); nn.setAttributeNS(XML_NS, 'xml:space', 'preserve'); nn.textContent = text;
+    r.replaceChild(nn, t); return r;
+  };
+  const segsOf = (p) => { const out = []; let pos = 0;
+    for (const t of Array.from(p.getElementsByTagNameNS(W_NS, 't'))) { const len = t.textContent.length; out.push({ t, run: t.parentNode, a: pos, b: pos + len }); pos += len; }
+    return out; };
+  // Replaces visible text [s0, s1) of paragraph p by ins as a tracked change. Returns false if the runs are too complex.
+  const hunk = (p, s0, s1, ins) => {
+    const segs = segsOf(p);
+    if (s0 === s1) {   // pure insertion
+      const x = segs.find((y) => y.a < s0 && s0 <= y.b) || segs.find((y) => y.a === s0);
+      if (!x || !simple(x.run)) return false;
+      const text = x.t.textContent, k = s0 - x.a, parent = x.run.parentNode;
+      const e = mark('ins'); e.appendChild(runWith(x.run, ins));
+      const frag = []; if (text.slice(0, k)) frag.push(runWith(x.run, text.slice(0, k))); frag.push(e); if (text.slice(k)) frag.push(runWith(x.run, text.slice(k)));
+      frag.forEach((nn) => parent.insertBefore(nn, x.run)); parent.removeChild(x.run);
+      return true;
+    }
+    const hit = segs.filter((y) => y.b > s0 && y.a < s1 && y.b > y.a);
+    if (!hit.length || !hit.every((y) => simple(y.run) && y.run.parentNode === hit[0].run.parentNode)) return false;
+    let lastDel = null;
+    hit.forEach((y) => {
+      const text = y.t.textContent, i0 = Math.max(0, s0 - y.a), i1 = Math.min(text.length, s1 - y.a), parent = y.run.parentNode;
+      const frag = [];
+      if (text.slice(0, i0)) frag.push(runWith(y.run, text.slice(0, i0)));
+      const del = mark('del'); del.appendChild(runWith(y.run, text.slice(i0, i1), 'delText')); frag.push(del); lastDel = del;
+      if (text.slice(i1)) frag.push(runWith(y.run, text.slice(i1)));
+      frag.forEach((nn) => parent.insertBefore(nn, y.run)); parent.removeChild(y.run);
+    });
+    if (ins) { const e = mark('ins'); e.appendChild(runWith(hit[0].run, ins)); lastDel.parentNode.insertBefore(e, lastDel.nextSibling); }
+    return true;
+  };
+  edits.forEach((ed) => {
+    for (let k = 0; k < paras.length; k++) {
+      const p = paras[k];
+      const s0 = segsOf(p).map((x) => x.t.textContent).join('').indexOf(ed.old);
+      if (s0 < 0) continue;
+      const backup = p.cloneNode(true);
+      const hs = wordHunks(ed.old, ed.new);
+      let ok = true;
+      for (let h = hs.length - 1; h >= 0 && ok; h--) ok = hunk(p, s0 + hs[h].start, s0 + hs[h].end, hs[h].ins);
+      if (ok) { applied++; return; }
+      p.parentNode.replaceChild(backup, p); paras[k] = backup;   // undo a partial edit
+      break;
+    }
+    manual.push(ed);
+  });
+  if (accept) {   // accept only the changes made here; pre-existing tracked changes are left alone
+    Array.from(doc.getElementsByTagNameNS(W_NS, 'del')).filter((e) => e.getAttributeNS(W_NS, 'author') === 'Manuscript Portal').forEach((e) => e.parentNode.removeChild(e));
+    Array.from(doc.getElementsByTagNameNS(W_NS, 'ins')).filter((e) => e.getAttributeNS(W_NS, 'author') === 'Manuscript Portal').forEach((e) => {
+      while (e.firstChild) e.parentNode.insertBefore(e.firstChild, e); e.parentNode.removeChild(e);
+    });
+  }
+  return { blob: await packDocx(d, doc), applied, manual };
+}
+const writeDocxTracked = (d, edits) => exportDocx(d, edits, false);
+const writeDocxClean = (d, edits) => exportDocx(d, edits, true);
+
 // ---------------------------------------------------------------------------
 // Structured polish / review (edits written back into .docx)
 // ---------------------------------------------------------------------------
@@ -374,7 +536,11 @@ $('runBtn').onclick = async () => {
     if (/\.docx$/i.test(f.name)) { lastDocx = await readDocx(f); text = lastDocx.text; } else { text = await f.text(); }
     const { jobId } = await api({ action: 'start', token, mode, filename: f.name, text });
     const d = await waitForJob(jobId);
-    if (lastDocx && d.mode === 'polish') d.docxBlob = await writeDocx(lastDocx, d.edits);
+    if (lastDocx && d.mode === 'polish') {
+      const tr = await writeDocxTracked(lastDocx, d.edits);
+      d.docxBlob = tr.blob; d.docxBlob.applied = tr.applied; d.docxBlob.manual = tr.manual;
+      d.cleanBlob = (await writeDocxClean(lastDocx, d.edits)).blob;
+    }
     lastResult = d; clearInterval(timer);
     setStatus(st, 'Done. Cost $' + d.cost.toFixed(3) + '.'); showUsage(d);
     renderResult(d);
@@ -385,32 +551,14 @@ $('runBtn').onclick = async () => {
   $('runBtn').disabled = false;
 };
 
-// Applies each edit inside the paragraph that contains it. If the old text sits in one run, only that
-// run changes; if it spans several runs, the paragraph's text is merged into its first run.
-async function writeDocx(d, edits) {
-  let applied = 0, manual = [];
-  edits.forEach((ed) => {
-    let done = false;
-    for (const p of d.paras) {
-      const ts = Array.from(p.getElementsByTagNameNS(W_NS, 't'));
-      const single = ts.find((t) => t.textContent.includes(ed.old));
-      if (single) { setT(single, single.textContent.replace(ed.old, ed.new)); done = true; break; }
-      const full = ts.map((t) => t.textContent).join('');
-      if (ts.length && full.includes(ed.old)) { setT(ts[0], full.replace(ed.old, ed.new)); ts.slice(1).forEach((t) => setT(t, '')); done = true; break; }
-    }
-    if (done) applied++; else manual.push(ed);
-  });
-  d.zip.file('word/document.xml', new XMLSerializer().serializeToString(d.doc));
-  const blob = await d.zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-  blob.applied = applied; blob.manual = manual;
-  return blob;
-}
 function setT(t, value) { t.textContent = value; t.setAttributeNS('http://www.w3.org/XML/1998/namespace', 'xml:space', 'preserve'); }
 
 function renderResult(d) {
   const body = $('resultBody'); body.textContent = '';
   $('resultView').classList.remove('hidden');
   $('dlBtn').classList.toggle('hidden', d.mode !== 'polish');
+  $('dlCleanBtn').classList.toggle('hidden', !d.cleanBlob);
+  $('dlBtn').textContent = d.docxBlob ? 'Download Word (tracked changes)' : 'Download revised file';
   $('dlReviewBtn').classList.toggle('hidden', d.mode !== 'review');
   if (d.mode === 'review') {
     $('resultTitle').textContent = 'Review report';
@@ -422,7 +570,7 @@ function renderResult(d) {
   $('resultTitle').textContent = title;
   if (d.truncated) body.appendChild(el('div', 'notice', 'Time limit reached: the last part of the manuscript was left unchanged. Split the file and submit the remainder separately.'));
   if (d.docxBlob) {
-    let msg = d.docxBlob.applied + ' of ' + d.edits.length + ' changes were written into the Word file with formatting preserved.';
+    let msg = d.docxBlob.applied + ' of ' + d.edits.length + ' changes are in the Word file as tracked changes (accept or reject them in Word under Review). A clean version is also available.';
     if (d.docxBlob.manual.length) msg += ' ' + d.docxBlob.manual.length + ' could not be placed automatically and are listed first below for manual editing.';
     body.appendChild(el('div', 'notice', msg));
     const manualSet = new Set(d.docxBlob.manual);
@@ -443,8 +591,9 @@ function downloadBlob(name, blob) {
 $('dlBtn').onclick = () => {
   if (!lastResult) return;
   const name = lastName.replace(/(\.[^.]+)?$/, '_polished$1');
-  if (lastResult.docxBlob) downloadBlob(name, lastResult.docxBlob); else download(name, lastResult.revised);
+  if (lastResult.docxBlob) downloadBlob(name.replace(/\.docx$/i, '_tracked.docx'), lastResult.docxBlob); else download(name, lastResult.revised);
 };
+$('dlCleanBtn').onclick = () => { if (lastResult && lastResult.cleanBlob) downloadBlob(lastName.replace(/\.docx$/i, '_polished.docx'), lastResult.cleanBlob); };
 $('dlReviewBtn').onclick = () => lastResult && download(lastName.replace(/(\.[^.]+)?$/, '_review.md'), lastResult.review);
 
 // Restore session
