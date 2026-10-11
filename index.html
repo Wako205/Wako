@@ -159,11 +159,11 @@
 <body>
 <main>
   <div class="top">
-    <h1>Wako205</h1>
+    <h1 id="brand">Wako205</h1>
     <div class="themes" id="themes" role="group" aria-label="Color theme">
       <button data-theme="eye" title="Warm paper tones, less blue light">护眼</button><button data-theme="day" title="White background">白天</button><button data-theme="night" title="Dark background">黑夜</button>
     </div>
-    <div class="who hidden" id="who"><span id="whoName"></span><span id="whoUsage"></span><button class="ghost small" id="logoutBtn">Log out</button></div>
+    <div class="who hidden" id="who"><span id="whoUsage"></span><button class="ghost small" id="logoutBtn">Log out</button></div>
   </div>
 
   <!-- Login -->
@@ -340,6 +340,10 @@
       <!-- Library -->
       <h2>Your audio library <span class="status" id="libUsage" style="font-weight:normal;font-size:13px;margin-left:8px"></span></h2>
       <div id="library"><div class="status">Loading...</div></div>
+      <div id="sharedCard" class="hidden">
+        <h2 style="margin-top:22px">Shared library <span class="status" style="font-weight:normal;font-size:13px;margin-left:8px">Shared by accounts of this site; listen only</span></h2>
+        <div id="sharedLib"></div>
+      </div>
     </section>
   </div>
 </main>
@@ -458,7 +462,7 @@ setTheme(document.documentElement.getAttribute('data-theme') || 'day');
 // ---------------------------------------------------------------------------
 function showApp() {
   $('loginView').classList.add('hidden'); $('appView').classList.remove('hidden');
-  $('who').classList.remove('hidden'); $('whoName').textContent = username;
+  $('who').classList.remove('hidden'); $('brand').textContent = username + '@Wako205';
   renderChat();
   switchTab('audio');
 }
@@ -473,8 +477,9 @@ function logout() {
   // so the position saved just above is not refused.
   const old = token;
   if (old) setTimeout(() => { api({ action: 'logout', token: old }).catch(() => {}); }, 2000);
-  token = username = null; store('mp_token', null); store('mp_user', null);
-  clearTimeout(libTimer); libItems = []; $('library').textContent = ''; $('libUsage').textContent = '';
+  token = username = null; store('mp_token', null); store('mp_user', null); $('brand').textContent = 'Wako205';
+  clearTimeout(libTimer); libItems = []; sharedItems = []; $('library').textContent = ''; $('libUsage').textContent = '';
+  $('sharedLib').textContent = ''; $('sharedCard').classList.add('hidden');
   chat = { convId: null, messages: [] }; pendingDoc = null; currentFile = null; store('mp_chat', null);
   Object.keys(fileOutputs).forEach((k) => delete fileOutputs[k]);
   lastResult = lastDocx = null; $('resultView').classList.add('hidden'); $('resultBody').textContent = '';
@@ -1008,12 +1013,46 @@ async function loadLibrary() {
         (libUsage.s0Until ? ', then trial credit ' + fmtK(libUsage.s0Used, true) + ' of ' + fmtK(libUsage.s0Cap) +
           ' (through ' + fmtDay(libUsage.s0Until - 1) + ')' : '') : '');
     renderLibrary(); bookSummary();
+    loadShared();
     pollLibrary();
   } catch (e) {
     $('library').textContent = e.message;
     if (/log in again/i.test(e.message)) logout();
   }
 }
+
+/** Items other accounts have shared (audio_public). A failure leaves the section hidden. */
+let sharedItems = [];
+async function loadShared() {
+  try {
+    const d = await api({ action: 'audio_public', token });
+    sharedItems = (d.items || []).filter((x) => x && x.id && !x.mine);
+  } catch (e) { sharedItems = []; }
+  renderShared();
+}
+function renderShared() {
+  const box = $('sharedLib'); box.textContent = '';
+  $('sharedCard').classList.toggle('hidden', !sharedItems.length);
+  sharedItems.forEach((it) => {
+    const row = el('div', 'libitem');
+    const g = el('div', 'grow');
+    const t = el('div', 't', it.title); t.onclick = () => openItem(it.id, it.owner);
+    g.appendChild(t);
+    const meta = ['Shared by ' + it.owner, it.kind === 'book' ? 'Book' : 'Paper'];
+    if (it.kind === 'book') meta.push(chaptersDone(it) + ' of ' + it.chapters.length + ' chapters converted');
+    if (it.chars) meta.push('about ' + fmtDur(itemMinutes(it)));
+    if (it.voice) meta.push('voice ' + voiceLabel(it.voice));
+    if (it.pos && it.chapters && it.chapters[it.pos.c]) meta.push('resume at ' + (it.chapters.length > 1 ? it.chapters[it.pos.c].title + ' ' : '') + fmtTime(it.pos.t));
+    g.appendChild(el('div', 'm', meta.join(' · ')));
+    row.appendChild(g);
+    const open = el('button', 'small', it.pos ? 'Resume' : 'Listen'); open.onclick = () => openItem(it.id, it.owner);
+    open.disabled = !(it.chapters || []).some((ch, i) => chapterReadyCount(it, i) > 0);
+    row.appendChild(open);
+    box.appendChild(row);
+  });
+}
+/** Extra request field for an item another account shared: whose library it is in. */
+function ownerOf(it) { return it && it.owner && !it.mine ? { owner: it.owner } : {}; }
 
 function itemMinutes(it) {
   if (!it.chars) return 0;
@@ -1033,6 +1072,7 @@ function renderLibrary() {
     else if (it.chapters && it.chapters.length > 1) meta.push(it.chapters.length + ' chapters');
     if (it.chars) meta.push('about ' + fmtDur(itemMinutes(it)));
     if (it.voice) meta.push('voice ' + voiceLabel(it.voice));
+    if (it.shared) meta.push('shared');
     if (it.pos && it.chapters && it.chapters[it.pos.c]) meta.push('resume at ' + (it.chapters.length > 1 ? it.chapters[it.pos.c].title + ' ' : '') + fmtTime(it.pos.t));
     g.appendChild(el('div', 'm', meta.join(' · ')));
     if (it.state === 'processing') {
@@ -1050,6 +1090,14 @@ function renderLibrary() {
       add.onclick = () => toggleAddPanel(it, row); row.appendChild(add);
     }
     if (it.state !== 'processing') {
+      const sh = el('button', 'ghost small', it.shared ? 'Unshare' : 'Share');
+      sh.title = it.shared ? 'Shared with every account of this site; click to stop sharing' : 'Let every account of this site listen to this';
+      sh.onclick = async () => {
+        sh.disabled = true;
+        try { await api({ action: 'audio_share', token, id: it.id, shared: !it.shared }); await loadLibrary(); }
+        catch (e) { setStatus($('audioStatus'), e.message, true); sh.disabled = false; }
+      };
+      row.appendChild(sh);
       const del = el('button', 'ghost small', 'Delete');
       del.onclick = async () => {
         if (!window.confirm('Delete "' + it.title + '" and its audio from Drive?')) return;
@@ -1196,8 +1244,8 @@ function speakWeight(s) {
   return cjk + other * 0.3 + pauses * 0.8 + 1.5;
 }
 
-function openItem(id) {
-  const it = libItems.find((x) => x.id === id);
+function openItem(id, owner) {
+  const it = owner ? sharedItems.find((x) => x.id === id && x.owner === owner) : libItems.find((x) => x.id === id);
   if (!it) return;
   const local = (() => { try { return JSON.parse(lsGet('mp_pos_' + id) || 'null'); } catch (e) { return null; } })();
   const pos = [it.pos, local].filter(Boolean).sort((a, b) => (b.at || 0) - (a.at || 0))[0] || { c: 0, t: 0 };
@@ -1219,7 +1267,7 @@ function openItem(id) {
 
 function refreshChapterSelect() {
   if (!P) return;
-  const sel = $('pChapter'), it = libItems.find((x) => x.id === P.item.id) || P.item;
+  const sel = $('pChapter'), it = (P.item.owner ? null : libItems.find((x) => x.id === P.item.id)) || P.item;
   P.item = it;
   const chs = it.chapters || [];
   sel.textContent = '';
@@ -1268,7 +1316,7 @@ const EARLY_PARTS = 2;   // playback starts once this many parts (several minute
  * parts, so playback can start while the rest is still loading.
  */
 function fetchChapter(c, onStatus, onEarly) {
-  const id = P.item.id, ch = P.item.chapters[c], cache = P.cache, loading = P.loading;
+  const id = P.item.id, ch = P.item.chapters[c], cache = P.cache, loading = P.loading, from = ownerOf(P.item);
   if (cache[c] && cache[c].parts >= ch.n) return Promise.resolve(cache[c]);
   if (loading[c]) { if (onEarly) loading[c].early = onEarly; return loading[c]; }
   const say = onStatus || (() => {});
@@ -1276,13 +1324,13 @@ function fetchChapter(c, onStatus, onEarly) {
   const job = (async () => {
     say('Loading audio...');
     const used = pronUsed(id);
-    const texts = (await api({ action: 'audio_text', token, id, chapter: c })).texts.map((t) => unrespell(t, used));
+    const texts = (await api({ action: 'audio_text', token, id, chapter: c, ...from })).texts.map((t) => unrespell(t, used));
     const bufs = new Array(ch.n);
     let next = 0, stop = ch.n;
     const worker = async () => {
       while (next < stop) {
         const k = next++;
-        try { bufs[k] = unb64((await api({ action: 'audio_part', token, id, chapter: c, index: k })).data); }
+        try { bufs[k] = unb64((await api({ action: 'audio_part', token, id, chapter: c, index: k, ...from })).data); }
         catch (e) { if (/not ready/i.test(e.message)) { stop = Math.min(stop, k); continue; } throw e; }
         say('Loading audio: ' + bufs.filter(Boolean).length + ' of ' + ch.n);
         const cb = job.early;
@@ -1742,7 +1790,7 @@ function saveProgress(force) {
   lsSet('mp_pos_' + P.item.id, JSON.stringify(pos));
   P.item.pos = pos;
   renderMarks();
-  api({ action: 'audio_progress', token, id: P.item.id, chapter: P.c, time: t, label: pos.label }).catch(() => {});
+  api({ action: 'audio_progress', token, id: P.item.id, chapter: P.c, time: t, label: pos.label, ...ownerOf(P.item) }).catch(() => {});
 }
 
 // ---------------------------------------------------------------------------
@@ -1769,7 +1817,7 @@ function saveMark(slot) {
   P.item.marks = P.item.marks || {}; P.item.marks[slot] = m;
   lsSet('mp_mark_' + slot + '_' + P.item.id, JSON.stringify(m));
   renderMarks();
-  api({ action: 'audio_progress', token, id: P.item.id, slot, chapter: m.c, time: m.t, label: m.label })
+  api({ action: 'audio_progress', token, id: P.item.id, slot, chapter: m.c, time: m.t, label: m.label, ...ownerOf(P.item) })
     .catch((e) => setStatus($('pStatus'), 'Bookmark saved on this device only: ' + e.message, true));
 }
 function renderMarks() {
@@ -1788,7 +1836,7 @@ function renderMarks() {
 }
 window.addEventListener('pagehide', () => {
   if (!P || P.c < 0 || !token) return;
-  try { navigator.sendBeacon(BACKEND_URL, JSON.stringify({ action: 'audio_progress', token, id: P.item.id, chapter: P.c, time: player.currentTime || 0 })); } catch (e) {}
+  try { navigator.sendBeacon(BACKEND_URL, JSON.stringify({ action: 'audio_progress', token, id: P.item.id, chapter: P.c, time: player.currentTime || 0, ...ownerOf(P.item) })); } catch (e) {}
 });
 
 $('dlAudioBtn').onclick = async () => {
