@@ -4,7 +4,7 @@
 // change, so they are served from the cache first. The scripts are cached under their
 // integrity hashes. Audio saved for offline listening is kept by the page in IndexedDB,
 // per user, and is not handled here.
-const SHELL = 'wako-shell-v1';
+const SHELL = 'wako-shell-v2';
 // Same URLs and hashes as in index.html (tests/offline.spec.js checks that they match).
 const CDN = [
   ['https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js', 'sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG'],
@@ -13,7 +13,6 @@ const CDN = [
   ['https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js', 'sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI'],
   ['https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js', 'sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e'],
   ['https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js', 'sha384-SnzOobpRMLXZ52iJvZm/C0fYw0OQemTXzTjIsdsfMcrCtCEe9qgzxTd3RSklO5x2'],
-  ['https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js', 'sha384-xuasJXVcyv3hZq0eYpelEkBC8l4yufatZXDsKuyCU2rqfhDCb+ftuE/mSfZAteiK'],
 ];
 const PAGE = new URL('./index.html', self.registration.scope).href;
 
