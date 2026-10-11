@@ -77,6 +77,10 @@
   .readtext span.s:hover { background:var(--soft); }
   .readtext span.s.cur { background:#fff1b8; }
   .readtext span.s.flash { background:#ffd84d; }
+  .marks { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  .mark { border:1px solid var(--line); border-radius:8px; padding:6px 10px; font-size:13px; display:flex; gap:8px; align-items:center; background:var(--soft); }
+  .mark b { font-weight:600; } .mark .w { color:var(--muted); max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .mark button { padding:3px 8px; font-size:12px; }
   .readtext span.s.pend { color:#aaa; cursor:default; }
   h2 { font-size: 18px; margin: 24px 0 12px; }
 </style>
@@ -190,6 +194,7 @@
           <button class="ghost small" id="dlAudioBtn">Download MP3</button>
           <button class="ghost small" id="dlScriptBtn">Download text</button>
         </div>
+        <div id="pMarks" class="marks"></div>
         <div id="pText" class="readtext"></div>
       </section>
 
@@ -651,6 +656,12 @@ function openItem(id) {
   const local = (() => { try { return JSON.parse(lsGet('mp_pos_' + id) || 'null'); } catch (e) { return null; } })();
   const pos = [it.pos, local].filter(Boolean).sort((a, b) => (b.at || 0) - (a.at || 0))[0] || { c: 0, t: 0 };
   P = { item: it, c: -1, cache: {} };
+  it.marks = it.marks || {};
+  ['b1', 'b2'].forEach((slot) => {                      // a bookmark saved while offline is kept if newer
+    try { const m = JSON.parse(lsGet('mp_mark_' + slot + '_' + id) || 'null'); if (m && (!it.marks[slot] || m.at > it.marks[slot].at)) it.marks[slot] = m; } catch (e) {}
+  });
+  if (pos && pos.at && (!it.pos || pos.at > (it.pos.at || 0))) it.pos = pos;
+  renderMarks();
   $('playerCard').classList.remove('hidden');
   $('pTitle').textContent = it.title;
   refreshChapterSelect();
@@ -946,10 +957,53 @@ function saveProgress(force) {
   const t = player.currentTime || 0;
   if (!force && Date.now() - lastSave < 20000) return;
   lastSave = Date.now();
-  const pos = { c: P.c, t, at: Date.now() };
+  const pos = { c: P.c, t, at: Date.now(), label: currentLabel() };
   lsSet('mp_pos_' + P.item.id, JSON.stringify(pos));
   P.item.pos = pos;
-  api({ action: 'audio_progress', token, id: P.item.id, chapter: P.c, time: t }).catch(() => {});
+  renderMarks();
+  api({ action: 'audio_progress', token, id: P.item.id, chapter: P.c, time: t, label: pos.label }).catch(() => {});
+}
+
+// ---------------------------------------------------------------------------
+// Three resume points: the last position (saved automatically) and two
+// bookmarks saved by hand. All are stored in the library, so they follow the account.
+// ---------------------------------------------------------------------------
+function currentLabel() {
+  if (!P || !P.sents || P.cur < 0 || !P.sents[P.cur]) return '';
+  return P.sents[P.cur].el.textContent.trim().slice(0, 60);
+}
+function markText(m) {
+  const chs = P.item.chapters || [];
+  return (chs.length > 1 && chs[m.c] ? chs[m.c].title + ' ' : '') + fmtTime(m.t);
+}
+function goToMark(m) {
+  if (!P || !m) return;
+  lastUserScroll = 0;
+  if (m.c === P.c && P.cache[P.c]) { player.currentTime = m.t; player.play().catch(() => {}); setTimeout(jumpToCurrent, 300); }
+  else loadChapter(m.c, m.t, true).then(() => setTimeout(jumpToCurrent, 600));
+}
+function saveMark(slot) {
+  if (!P || P.c < 0 || !player.src) return;
+  const m = { c: P.c, t: player.currentTime || 0, at: Date.now(), label: currentLabel() };
+  P.item.marks = P.item.marks || {}; P.item.marks[slot] = m;
+  lsSet('mp_mark_' + slot + '_' + P.item.id, JSON.stringify(m));
+  renderMarks();
+  api({ action: 'audio_progress', token, id: P.item.id, slot, chapter: m.c, time: m.t, label: m.label })
+    .catch((e) => setStatus($('pStatus'), 'Bookmark saved on this device only: ' + e.message, true));
+}
+function renderMarks() {
+  const box = $('pMarks'); if (!box) return; box.textContent = '';
+  if (!P) return;
+  const marks = P.item.marks || {};
+  [['last', 'Last position', P.item.pos], ['b1', 'Bookmark 1', marks.b1], ['b2', 'Bookmark 2', marks.b2]].forEach(([slot, name, m]) => {
+    const d = el('div', 'mark');
+    d.appendChild(el('b', null, name));
+    d.appendChild(el('span', null, m ? markText(m) : 'empty'));
+    if (m && m.label) { const w = el('span', 'w', m.label); w.title = m.label; d.appendChild(w); }
+    if (m) { const go = el('button', 'small', 'Go'); go.onclick = () => goToMark(m); d.appendChild(go); }
+    if (slot !== 'last') { const sv = el('button', 'ghost small', m ? 'Replace' : 'Save here'); sv.title = 'Save the current position as ' + name; sv.onclick = () => saveMark(slot); d.appendChild(sv); }
+    box.appendChild(d);
+  });
 }
 window.addEventListener('pagehide', () => {
   if (!P || P.c < 0 || !token) return;
