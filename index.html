@@ -100,6 +100,43 @@
   .pron th { font-weight:normal; color:var(--muted); font-size:13px; }
   .pron input[type=text] { padding:6px 8px; }
   .pron td:last-child { width:1%; white-space:nowrap; }
+  select, input[type=file] { max-width:100%; }
+  .status:empty { min-height:0; }
+  .md table { display:block; overflow-x:auto; max-width:100%; }
+
+  /* Phones (360 to 600 px): no horizontal scrolling, touch targets at least 44 px tall,
+     player controls in two rows (chapter navigation, then speed, volume and follow). */
+  @media (max-width: 600px) {
+    main { padding: 12px 10px 32px; }
+    .card { padding: 12px; }
+    .top { gap: 8px; }
+    .who { flex-wrap: wrap; }
+    button, select, input[type=text], input[type=password] { min-height: 44px; }
+    select, input[type=text], input[type=password], textarea { font-size: 16px !important; }   /* below 16 px iOS zooms in on focus */
+    .themes button { padding: 4px 12px; font-size: 14px; }
+    .tabs button { flex: 1; padding: 8px 4px; }
+    .wide-only { display: none; }
+    #preset { width: 100% !important; }
+    .chlist { max-height: 50vh; }
+    .chlist label { flex-wrap: wrap; min-height: 44px; gap: 2px 10px; }
+    .chlist label input { width: 20px; height: 20px; }
+    .chlist .n { flex-basis: 100%; margin-left: 30px; white-space: normal; }
+    .libitem { padding: 10px 12px; gap: 8px; }
+    .libitem .grow { min-width: 100%; }
+    .pnav select { flex: 1; min-width: 0; max-width: none !important; }
+    .pnav button { min-width: 44px; }
+    .pnav .status { flex-basis: 100%; }
+    .pset { flex-wrap: nowrap; gap: 4px; }
+    .pset #pJump { margin-left: 0 !important; flex: none; padding: 5px 8px; }
+    .pset > label[for] { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+    .pset select { flex: 1; min-width: 0; padding: 4px 6px !important; }
+    .pset #arate { flex: none; }
+    .pset .follow { white-space: nowrap; min-height: 44px; gap: 3px !important; }
+    .pset .follow input { width: 20px; height: 20px; }
+    .mark { flex-wrap: wrap; flex: 1 1 100%; }
+    .mark .w { max-width: 100%; flex: 1 1 100%; order: 3; }
+    .readtext { max-height: 60vh; font-size: 18px; }
+  }
 </style>
 </head>
 <body>
@@ -124,7 +161,7 @@
   <div id="appView" class="hidden" style="display:flex;flex-direction:column;flex:1">
     <div class="tabs">
       <button id="tabChat" class="active">Chat</button>
-      <button id="tabTools">Polish / Review (Word &amp; LaTeX)</button>
+      <button id="tabTools">Polish / Review<span class="wide-only"> (Word &amp; LaTeX)</span></button>
       <button id="tabAudio">PDF to audio</button>
     </div>
 
@@ -141,7 +178,7 @@
         </div>
         <div class="row" style="margin-bottom:8px;font-size:13px;color:var(--muted)">
           <label for="preset" style="margin:0">Model</label>
-          <select id="preset" style="width:auto;padding:5px 8px;font-size:13px">
+          <select id="preset" style="width:auto;max-width:100%;padding:5px 8px;font-size:13px">
             <option value="opus-low">Opus 5.5, light reasoning (default)</option>
             <option value="opus-medium">Opus 5.5, deeper reasoning (slower, may return no text on very long tasks)</option>
             <option value="sonnet-fast">Sonnet 5.5, no reasoning (fastest, cheapest)</option>
@@ -192,14 +229,14 @@
           <h2 id="pTitle" style="margin:0"></h2>
           <button class="ghost small" id="pClose">Close</button>
         </div>
-        <div class="row" style="margin-top:10px">
-          <button class="ghost small" id="pPrev" title="Previous chapter">◀</button>
-          <select id="pChapter" style="width:auto;max-width:60%;padding:5px 8px"></select>
-          <button class="ghost small" id="pNext" title="Next chapter">▶</button>
+        <div class="row pnav" style="margin-top:10px">
+          <button class="ghost small" id="pPrev" title="Previous chapter" aria-label="Previous chapter">◀</button>
+          <select id="pChapter" style="width:auto;max-width:60%;padding:5px 8px" aria-label="Chapter"></select>
+          <button class="ghost small" id="pNext" title="Next chapter" aria-label="Next chapter">▶</button>
           <span class="status" id="pStatus"></span>
         </div>
         <audio id="player" controls preload="auto" style="width:100%;margin-top:10px"></audio>
-        <div class="row" style="margin-top:6px;font-size:13px;color:var(--muted)">
+        <div class="row pset" style="margin-top:6px;font-size:13px;color:var(--muted)">
           <label for="arate" style="margin:0">Speed</label>
           <select id="arate" style="width:auto;padding:4px 8px;font-size:13px">
             <option value="0.85">0.85×</option><option value="1" selected>1×</option><option value="1.15">1.15×</option>
@@ -209,13 +246,15 @@
           <select id="pVol" style="width:auto;padding:4px 8px;font-size:13px" title="Louder modes raise quiet speech to a standard level with a limiter, so peaks do not distort">
             <option value="normal">Original</option><option value="loud" selected>Louder</option><option value="max">Loudest</option>
           </select>
-          <label style="margin:0;display:flex;gap:4px;align-items:center"><input type="checkbox" id="pFollow" checked> Follow text</label>
-          <button class="ghost small" id="pJump" style="margin-left:auto" title="Scroll the text to the sentence being read">Jump to current</button>
-          <button class="ghost small" id="dlAudioBtn">Download MP3</button>
-          <button class="ghost small" id="dlScriptBtn">Download text</button>
+          <label class="follow" style="margin:0;display:flex;gap:4px;align-items:center"><input type="checkbox" id="pFollow" checked> Follow<span class="wide-only"> text</span></label>
+          <button class="ghost small" id="pJump" style="margin-left:auto" title="Scroll the text to the sentence being read">Jump<span class="wide-only"> to current</span></button>
         </div>
         <div id="pMarks" class="marks"></div>
         <div id="pText" class="readtext"></div>
+        <div class="row" style="margin-top:10px">
+          <button class="ghost small" id="dlAudioBtn">Download MP3</button>
+          <button class="ghost small" id="dlScriptBtn">Download text</button>
+        </div>
       </section>
 
       <!-- New conversion -->
