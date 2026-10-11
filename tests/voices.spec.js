@@ -44,3 +44,25 @@ test('Microsoft: free tier first, then the trial credit, with a clear end date',
   await expect(panel).toContainText('1k of 500k free, then 12,000k trial credit (the trial credit will be used for 0.4k)');
   await expect(panel).not.toContainText('not enough');
 });
+
+test('the allowances are shown as a column chart beside the conversion form', async ({ page, backend }) => {
+  backend.on('audio_library', () => ({ items: JSON.parse(JSON.stringify(backend.library)), ttsUsed: 20000, ttsCap: 1030000,
+                                       azReady: true, azUsed: 154000, azCap: 500000, s0Used: 200, s0Cap: 12000000, azTier: 's0', azUntil: new Date(2026, 10, 8).getTime() }));
+  await page.setViewportSize({ width: 1100, height: 900 });
+  await login(page);
+  await openAudio(page);
+  const bars = page.locator('#usageBars .ubar');
+  await expect(bars).toHaveCount(3);
+  await expect(bars.nth(0)).toHaveAttribute('aria-label', 'Google: 20k of 1,030k characters this month');
+  await expect(bars.nth(1)).toContainText('31%');
+  await expect(bars.nth(1)).toContainText('154k / 500k');
+  await expect(bars.nth(2)).toContainText('Microsoft trial');
+  const h = await bars.nth(1).locator('.fill').evaluate((e) => e.getBoundingClientRect().height / e.parentElement.getBoundingClientRect().height);
+  expect(h).toBeGreaterThan(0.28); expect(h).toBeLessThan(0.34);
+  await expect(page.locator('#usageNote')).toContainText('through 7 Nov 2026');
+  // Beside the form on a wide screen.
+  const form = await page.locator('#apdf').evaluate((e) => e.closest('.card').getBoundingClientRect());
+  const chart = await page.locator('#usageCard').boundingBox();
+  expect(chart.x).toBeGreaterThan(form.right - 1);
+  expect(Math.abs(chart.y - form.top)).toBeLessThan(2);
+});
