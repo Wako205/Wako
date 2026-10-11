@@ -147,3 +147,21 @@ test('a result in a part that is still loading plays once the chapter is complet
   await expect.poll(() => page.evaluate(() => !player.paused)).toBe(true);
   await page.evaluate(() => player.pause());
 });
+
+test('searching an item another account shared asks for its texts with the owner', async ({ page, backend }) => {
+  backend.shared = [{
+    id: 'shared1', owner: 'bob', mine: false, kind: 'book', title: 'Bob\'s Book', created: '2026-09-02T10:00:00Z', state: 'done',
+    voice: 'Kore', lang: 'en-US', chars: 2800, pos: null, marks: {},
+    chapters: [{ title: 'Part 1', n: 2, chars: 1400, status: 'done' }, { title: 'Part 2', n: 2, chars: 1400, status: 'done' }],
+  }];
+  backend.on('audio_text', (b) => ({ texts: b.chapter === 0 ? ['Shared river text.', 'More.'] : ['The shared lantern.', 'End.'] }));
+  await login(page);
+  await openAudio(page);
+  await page.locator('#sharedLib .libitem').first().getByRole('button', { name: 'Listen' }).click();
+  await expect(page.locator('#pText span.s').first()).toBeVisible();
+  await search(page, 'lantern');
+  await expect(hits(page)).toHaveCount(1);
+  await expect(hits(page).first().locator('b')).toHaveText('Part 2');
+  backend.callsOf('audio_text').forEach((c) => expect(c).toMatchObject({ id: 'shared1', owner: 'bob' }));
+  expect(backend.callsOf('audio_text').map((c) => c.chapter).sort()).toEqual([0, 1]);
+});
