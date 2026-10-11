@@ -479,7 +479,7 @@ function estMinutes(text) {
   return cjk / 270 + (text.length - cjk) / 900;
 }
 /** Character counts are always shown in thousands, e.g. "1.4k characters", to match the monthly allowance. */
-function fmtK(n) { n = Math.max(0, n) / 1000; return (n < 10 ? n.toFixed(1) : Math.round(n).toLocaleString()) + 'k characters'; }
+function fmtK(n, bare) { n = Math.max(0, n) / 1000; return (n < 10 ? n.toFixed(1).replace(/\.0$/, '') : Math.round(n).toLocaleString()) + (bare ? 'k' : 'k characters'); }
 function fmtDur(min) { return min >= 60 ? Math.floor(min / 60) + ' h ' + Math.round(min % 60) + ' min' : Math.max(1, Math.round(min)) + ' min'; }
 function fmtTime(s) { s = Math.max(0, Math.floor(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0'); }
 let docKind = null, docWhy = '', docPages = 0;
@@ -608,7 +608,7 @@ function bookSummary() {
     const pages = sel.reduce((n, c) => n + c.endPage - c.startPage + 1, 0);
     t += ', Claude about $' + (PAPER_COST_PER_PAGE * pages * 1.25).toFixed(2) + (pages > 320 ? ' (limit 320 pages per conversion: select fewer chapters)' : '');
   }
-  if (left != null) t += '. Speech allowance left this month: ' + fmtK(left) + ' of ' + fmtK(libUsage.cap) + (chars > left ? ' (not enough: deselect some chapters)' : '');
+  if (left != null) t += '. Speech allowance left this month: ' + fmtK(left, true) + ' of ' + fmtK(libUsage.cap) + (chars > left ? ' (not enough: deselect some chapters)' : '');
   $('bookSummary').textContent = t;
 }
 $('bookAll').onclick = () => { if (bookData) { bookData.chapters.forEach((c) => { c.sel = true; }); renderBookPanel(); } };
@@ -713,7 +713,7 @@ async function loadLibrary() {
   try {
     const d = await api({ action: 'audio_library', token });
     libItems = d.items || []; libUsage.used = d.ttsUsed || 0; libUsage.cap = d.ttsCap || 0;
-    $('libUsage').textContent = 'Speech used this month: ' + fmtK(libUsage.used).replace(' characters', '') + ' of ' + fmtK(libUsage.cap);
+    $('libUsage').textContent = 'Speech used this month: ' + fmtK(libUsage.used, true) + ' of ' + fmtK(libUsage.cap);
     renderLibrary(); bookSummary();
     pollLibrary();
   } catch (e) {
