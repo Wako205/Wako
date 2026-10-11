@@ -21,9 +21,9 @@ test('every CDN script is pinned to an exact version with a matching integrity h
     expect(attrs).toContain('crossorigin="anonymous"');
     expect(attrs).toContain('integrity="' + sri(npmFile(src)) + '"');
   }
-  // Scripts loaded later (pdf.js, its worker, lamejs).
+  // Scripts loaded later (pdf.js and its worker).
   const lib = [...html.matchAll(/\{ src: '([^']+)', integrity: '([^']+)' \}/g)];
-  expect(lib.length).toBe(3);
+  expect(lib.length).toBe(2);
   for (const [, src, integrity] of lib) expect(integrity, src).toBe(sri(npmFile(src)));
   expect(html).not.toMatch(/cdnjs\.cloudflare\.com|unpkg\.com/);
 });
@@ -31,10 +31,10 @@ test('every CDN script is pinned to an exact version with a matching integrity h
 test('the libraries load under their integrity checks', async ({ page, backend }) => {
   await page.goto(INDEX_URL);
   expect(await page.evaluate(() => [typeof JSZip, typeof marked, typeof DOMPurify, typeof PDFLib])).toEqual(['function', 'object', 'function', 'object']);
-  expect(await page.evaluate(async () => { await getPdfjs(); await loadScript(LIB.lamejs); return [typeof pdfjsLib.getDocument, typeof lamejs.Mp3Encoder, pdfjsLib.GlobalWorkerOptions.workerSrc.slice(0, 5)]; }))
-    .toEqual(['function', 'function', 'blob:']);
+  expect(await page.evaluate(async () => { await getPdfjs(); return [typeof pdfjsLib.getDocument, pdfjsLib.GlobalWorkerOptions.workerSrc.slice(0, 5)]; }))
+    .toEqual(['function', 'blob:']);
   // A wrong hash is refused.
-  const err = await page.evaluate(() => loadScript({ src: LIB.lamejs.src, integrity: 'sha384-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' }).then(() => 'loaded', (e) => e.message));
+  const err = await page.evaluate(() => loadScript({ src: LIB.pdfjs.src, integrity: 'sha384-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' }).then(() => 'loaded', (e) => e.message));
   expect(err).toContain('Could not load');
 });
 
