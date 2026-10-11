@@ -202,10 +202,7 @@
       <div class="card">
         <label for="apdf">PDF</label>
         <input type="file" id="apdf" accept=".pdf,application/pdf">
-        <div class="row" style="margin-top:12px;gap:18px">
-          <label style="margin:0;display:flex;gap:6px;align-items:center;color:var(--ink)"><input type="radio" name="akind" value="paper" checked> Paper: Claude writes a listening script (formulas, units, citations)</label>
-          <label style="margin:0;display:flex;gap:6px;align-items:center;color:var(--ink)"><input type="radio" name="akind" value="book"> Book or plain text: read as written, chapter by chapter (no Claude cost)</label>
-        </div>
+        <div id="kindLine" class="notice hidden" style="margin-top:12px;color:var(--ink)"></div>
         <div id="bookPanel" class="hidden" style="margin-top:12px">
           <div class="row" style="font-size:13px;color:var(--muted)">
             <span id="bookSummary"></span>
@@ -224,7 +221,7 @@
           <option value="Leda">Leda (female, youthful)</option>
         </select>
         <div class="row" style="margin-top:16px"><button id="audioBtn">Generate audio</button><span class="status" id="audioStatus"></span></div>
-        <div class="notice" style="margin-top:14px">Paper mode: Claude rewrites the PDF into a listening script (references and citation numbers skipped; equations and units read in words), then Google Chirp 3 HD reads it. Book mode: the text is read as written, chapter by chapter, with running headers and page numbers removed. English, Japanese and Chinese are detected automatically. Every conversion is saved to your library below, together with your listening position, so it never has to be converted twice. You can close this page while a conversion runs.</div>
+        <div class="notice" style="margin-top:14px">The type of document is detected automatically. Papers: Claude rewrites the PDF into a listening script (references and citation numbers skipped; equations and units read in words), then Google Chirp 3 HD reads it. Books and other text: read as written, chapter by chapter, with running headers and page numbers removed. English, Japanese and Chinese are detected automatically. Every conversion is saved to your library below, together with your listening position, so it never has to be converted twice. You can close this page while a conversion runs.</div>
       </div>
 
       <!-- Library -->
@@ -448,7 +445,48 @@ function estMinutes(text) {
 }
 function fmtDur(min) { return min >= 60 ? Math.floor(min / 60) + ' h ' + Math.round(min % 60) + ' min' : Math.max(1, Math.round(min)) + ' min'; }
 function fmtTime(s) { s = Math.max(0, Math.floor(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0'); }
-function audioKind() { return document.querySelector('input[name=akind]:checked').value; }
+let docKind = null, docWhy = '', docPages = 0;
+function audioKind() { return docKind || 'paper'; }
+
+/**
+ * Decides how a PDF is read. Scientific papers (abstract, reference list, DOI,
+ * numbered citations, figure captions, mathematical symbols) go through Claude,
+ * which turns formulas and citations into speech. Books and other plain text are
+ * read as written, chapter by chapter, which costs nothing on the Claude side.
+ */
+function classifyDoc(pages, chapters) {
+  const text = (L) => L.map((l) => l.s).join('\n');
+  const all = pages.map(text).join('\n'), head = pages.slice(0, 3).map(text).join('\n');
+  const n = pages.length, chars = chapters.reduce((k, c) => k + c.text.length, 0);
+  if (chars < 50 * Math.max(1, n) / 4 && n <= 160) return { kind: 'paper', why: 'little or no text layer (scanned pages); Claude reads the page images' };
+  const sig = [];
+  if (/\babstract\b|摘\s*要|要\s*旨/i.test(head)) sig.push('abstract');
+  if (/^\s*(references|bibliography|参考文献|引用文献)\s*$/im.test(all)) sig.push('reference list');
+  if (/\bdoi\b|doi\.org|arxiv/i.test(all)) sig.push('DOI');
+  if ((all.match(/\[\d+(?:\s*[,–-]\s*\d+)*\]/g) || []).length >= 8) sig.push('numbered citations');
+  if ((all.match(/\b(fig\.|figure|table)\s*S?\d/gi) || []).length >= 3) sig.push('figure captions');
+  if ((all.match(/[∑∫∂∇≈≤≥±×αβγδεηθκλμνπρστφχψωΓΔΘΛΣΦΨΩ∝∞⟨⟩ℏ]/g) || []).length >= 30) sig.push('equations');
+  const chaptered = chapters.length >= 3 && chapters[0].title !== 'Full text';
+  if (n > 160) return { kind: 'book', why: n + ' pages' + (chaptered ? ', ' + chapters.length + ' chapters' : '') };
+  if (sig.length >= 2 && !(chaptered && n > 60)) return { kind: 'paper', why: sig.join(', ') };
+  return { kind: 'book', why: (chaptered ? chapters.length + ' chapters, ' : '') + (sig.length ? 'few scientific features' : 'no scientific features') };
+}
+
+function renderKind() {
+  const line = $('kindLine');
+  if (!docKind) { line.classList.add('hidden'); return; }
+  line.classList.remove('hidden'); line.textContent = '';
+  const paper = docKind === 'paper';
+  line.appendChild(el('b', null, paper ? 'Detected: scientific paper. ' : 'Detected: book or plain text. '));
+  line.appendChild(document.createTextNode(paper
+    ? 'Claude first writes a listening script (equations, units and citations turned into speech, references skipped), then it is read aloud. Claude cost about $' + (0.012 * docPages).toFixed(2) + '. '
+    : 'It is read as written, chapter by chapter, with page headers and page numbers removed. No Claude cost. '));
+  line.appendChild(el('span', 'm', '(' + docWhy + ') '));
+  const sw = el('a', null, paper ? 'Read as written instead' : 'Use paper mode instead');
+  sw.href = '#'; sw.style.color = 'var(--accent)'; sw.style.fontSize = '13px';
+  sw.onclick = (e) => { e.preventDefault(); docKind = paper ? 'book' : 'paper'; docWhy = 'chosen by you'; renderKind(); renderBookPanel(); };
+  if (!(docKind === 'book' && docPages > 160)) line.appendChild(sw);
+}
 
 async function extractBook(file) {
   const st = $('audioStatus');
@@ -463,13 +501,12 @@ async function extractBook(file) {
   }
   const chapters = splitChapters(pages);
   setStatus(st, '');
-  if (chapters.reduce((n, c) => n + c.text.length, 0) < 50) throw new Error('No text found. The PDF may be a scanned image without a text layer.');
-  return { chapters, pages: doc.numPages };
+  return { chapters, pages: doc.numPages, lines: pages };
 }
 
 function renderBookPanel() {
   const box = $('bookChapters'); box.textContent = '';
-  if (!bookData) { $('bookPanel').classList.add('hidden'); return; }
+  if (!bookData || docKind !== 'book') { $('bookPanel').classList.add('hidden'); return; }
   $('bookPanel').classList.remove('hidden');
   bookData.chapters.forEach((c, i) => {
     const lab = el('label');
@@ -492,15 +529,23 @@ function bookSummary() {
 $('bookAll').onclick = () => { if (bookData) { bookData.chapters.forEach((c) => { c.sel = true; }); renderBookPanel(); } };
 $('bookNone').onclick = () => { if (bookData) { bookData.chapters.forEach((c) => { c.sel = false; }); renderBookPanel(); } };
 
+/** Reads the PDF text as soon as a file is chosen and decides how to read it. */
 async function prepareBook() {
   const f = $('apdf').files[0];
-  bookData = null; renderBookPanel();
-  if (!f || audioKind() !== 'book') return;
-  try { bookData = await extractBook(f); renderBookPanel(); }
-  catch (e) { setStatus($('audioStatus'), e.message, true); }
+  bookData = null; docKind = null; renderKind(); renderBookPanel();
+  if (!f) return;
+  $('audioBtn').disabled = true;
+  try {
+    const d = await extractBook(f);
+    const c = classifyDoc(d.lines, d.chapters);
+    delete d.lines;
+    bookData = d; docKind = c.kind; docWhy = c.why; docPages = d.pages;
+    if (docKind === 'book' && d.chapters.reduce((n, x) => n + x.text.length, 0) < 50) throw new Error('No text found. The PDF may be a scanned image without a text layer.');
+    renderKind(); renderBookPanel();
+  } catch (e) { setStatus($('audioStatus'), e.message, true); }
+  $('audioBtn').disabled = false;
 }
 $('apdf').onchange = prepareBook;
-document.querySelectorAll('input[name=akind]').forEach((r) => { r.onchange = prepareBook; });
 
 $('audioBtn').onclick = async () => {
   const f = $('apdf').files[0], st = $('audioStatus');
@@ -510,6 +555,7 @@ $('audioBtn').onclick = async () => {
   audioBusy = true; $('audioBtn').disabled = true;
   try {
     const bytes = new Uint8Array(await f.arrayBuffer());
+    if (!docKind) await prepareBook();
     const payload = { action: 'audio_start', token, filename: f.name, voice: $('avoice').value, kind: audioKind() };
     if (payload.kind === 'book') {
       if (!bookData) await prepareBook();
@@ -520,14 +566,14 @@ $('audioBtn').onclick = async () => {
     } else {
       setStatus(st, 'Reading the PDF...');
       const { parts, total } = await splitPdf(bytes);
-      if (total > 160) throw new Error('This PDF has ' + total + ' pages. Paper mode handles up to 160; use book mode for long texts.');
+      if (total > 160) throw new Error('This PDF has ' + total + ' pages; paper mode handles up to 160. Click "Read as written instead".');
       payload.parts = parts; payload.pages = total;
       if (bytes.length < 25e6) payload.pdf = b64(bytes);
     }
     setStatus(st, 'Uploading...');
     await api(payload);
     setStatus(st, 'Started. It appears in your library below; you can close this page meanwhile.');
-    $('apdf').value = ''; bookData = null; renderBookPanel();
+    $('apdf').value = ''; bookData = null; docKind = null; renderKind(); renderBookPanel();
     await loadLibrary();
   } catch (e) {
     setStatus(st, e.message, true);
