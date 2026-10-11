@@ -52,3 +52,21 @@ test('own items are requested without an owner', async ({ page, backend }) => {
   await expect.poll(() => backend.callsOf('audio_part').length).toBeGreaterThan(0);
   backend.callsOf('audio_part').forEach((c) => expect(c.owner).toBeUndefined());
 });
+
+test('bookmarks and positions belong to the user, not to the book, even in one browser', async ({ page, backend }) => {
+  backend.on('audio_progress', () => ({}));               // the server keeps nothing, so only this browser could leak
+  await login(page, 'alice');
+  await openAudio(page);
+  await page.locator('#library .libitem').first().getByRole('button', { name: 'Listen' }).click();
+  await expect(page.locator('#pMarks .mark')).toHaveCount(3);
+  await page.evaluate(() => { document.getElementById('player').currentTime = 5.2; });
+  await page.locator('#pMarks .mark').nth(1).getByRole('button', { name: 'Save here' }).click();
+  await expect(page.locator('#pMarks .mark').nth(1)).toContainText('0:05');
+
+  await page.click('#logoutBtn');
+  await login(page, 'bob');
+  await openAudio(page);
+  await page.locator('#library .libitem').first().getByRole('button', { name: 'Listen' }).click();
+  await expect(page.locator('#pMarks .mark')).toHaveCount(3);
+  await expect(page.locator('#pMarks .mark').nth(1)).toContainText('empty');
+});

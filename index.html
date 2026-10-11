@@ -1247,12 +1247,12 @@ function speakWeight(s) {
 function openItem(id, owner) {
   const it = owner ? sharedItems.find((x) => x.id === id && x.owner === owner) : libItems.find((x) => x.id === id);
   if (!it) return;
-  const local = (() => { try { return JSON.parse(lsGet('mp_pos_' + id) || 'null'); } catch (e) { return null; } })();
+  const local = (() => { try { return JSON.parse(lsGet('mp_pos_' + username + '_' + id) || 'null'); } catch (e) { return null; } })();
   const pos = [it.pos, local].filter(Boolean).sort((a, b) => (b.at || 0) - (a.at || 0))[0] || { c: 0, t: 0 };
   P = { item: it, c: -1, cache: {}, loading: {} };
   it.marks = it.marks || {};
   ['b1', 'b2'].forEach((slot) => {                      // a bookmark saved while offline is kept if newer
-    try { const m = JSON.parse(lsGet('mp_mark_' + slot + '_' + id) || 'null'); if (m && (!it.marks[slot] || m.at > it.marks[slot].at)) it.marks[slot] = m; } catch (e) {}
+    try { const m = JSON.parse(lsGet('mp_mark_' + slot + '_' + username + '_' + id) || 'null'); if (m && (!it.marks[slot] || m.at > it.marks[slot].at)) it.marks[slot] = m; } catch (e) {}
   });
   if (pos && pos.at && (!it.pos || pos.at > (it.pos.at || 0))) it.pos = pos;
   renderMarks();
@@ -1787,7 +1787,7 @@ function saveProgress(force) {
   if (!force && Date.now() - lastSave < 20000) return;
   lastSave = Date.now();
   const pos = { c: P.c, t, at: Date.now(), label: currentLabel() };
-  lsSet('mp_pos_' + P.item.id, JSON.stringify(pos));
+  lsSet('mp_pos_' + username + '_' + P.item.id, JSON.stringify(pos));
   P.item.pos = pos;
   renderMarks();
   api({ action: 'audio_progress', token, id: P.item.id, chapter: P.c, time: t, label: pos.label, ...ownerOf(P.item) }).catch(() => {});
@@ -1815,7 +1815,7 @@ function saveMark(slot) {
   if (!P || P.c < 0 || !player.src) return;
   const m = { c: P.c, t: player.currentTime || 0, at: Date.now(), label: currentLabel() };
   P.item.marks = P.item.marks || {}; P.item.marks[slot] = m;
-  lsSet('mp_mark_' + slot + '_' + P.item.id, JSON.stringify(m));
+  lsSet('mp_mark_' + slot + '_' + username + '_' + P.item.id, JSON.stringify(m));
   renderMarks();
   api({ action: 'audio_progress', token, id: P.item.id, slot, chapter: m.c, time: m.t, label: m.label, ...ownerOf(P.item) })
     .catch((e) => setStatus($('pStatus'), 'Bookmark saved on this device only: ' + e.message, true));
