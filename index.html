@@ -83,6 +83,18 @@
   .bar { height:4px; background:var(--soft); border-radius:2px; margin-top:6px; overflow:hidden; } .bar i { display:block; height:100%; background:var(--accent); }
   .readtext { margin-top:14px; max-height: 55vh; overflow-y:auto; border-top:1px solid var(--line); padding-top:10px; line-height:1.9; font-size:17px; }
   .readtext p { margin:0 0 12px; }
+  /* Reading mode: only the text and a small control bar, filling the screen. */
+  .pmini { display:none; }
+  #playerCard.reading { position:fixed; inset:0; z-index:50; margin:0 !important; border:0; border-radius:0; padding:0;
+    display:flex; flex-direction:column; background:var(--bg); }
+  #playerCard.reading > :not(#pText):not(#pMini):not(audio) { display:none !important; }
+  #playerCard.reading > audio { position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; }
+  #playerCard.reading #pText { flex:1; max-height:none; margin:0; border:0; padding:24px max(20px, calc((100% - 760px) / 2)) 24px; font-size:20px; line-height:2; }
+  #playerCard.reading .pmini { display:flex; align-items:center; gap:10px; padding:8px max(12px, calc((100% - 760px) / 2));
+    padding-bottom:max(8px, env(safe-area-inset-bottom)); border-top:1px solid var(--line); background:var(--soft); }
+  .pmini input[type=range] { flex:1; min-width:0; accent-color:var(--accent); height:28px; }
+  .pmini .t { font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .pmini button { min-width:44px; min-height:40px; }
   .readtext span.s { cursor:pointer; border-radius:4px; transition: background .2s; }
   .readtext span.s:hover { background:var(--soft); }
   .readtext span.s.cur { background:var(--hl); }
@@ -250,9 +262,16 @@
           </select>
           <label class="follow" style="margin:0;display:flex;gap:4px;align-items:center"><input type="checkbox" id="pFollow" checked> Follow<span class="wide-only"> text</span></label>
           <button class="ghost small" id="pJump" style="margin-left:auto" title="Scroll the text to the sentence being read">Jump<span class="wide-only"> to current</span></button>
+          <button class="ghost small" id="pRead" title="Show only the text, with a small progress bar">Full screen</button>
         </div>
         <div id="pMarks" class="marks"></div>
         <div id="pText" class="readtext"></div>
+        <div id="pMini" class="pmini" role="group" aria-label="Playback">
+          <button class="small" id="mPlay" aria-label="Play">▶</button>
+          <span class="t" id="mTime">0:00 / 0:00</span>
+          <input type="range" id="mSeek" min="0" max="1000" value="0" step="1" aria-label="Position in the chapter">
+          <button class="ghost small" id="mExit" aria-label="Leave full screen">Exit</button>
+        </div>
         <div class="row" style="margin-top:10px">
           <button class="ghost small" id="dlAudioBtn">Download MP3</button>
           <button class="ghost small" id="dlScriptBtn">Download text</button>
@@ -1149,6 +1168,7 @@ $('pPrev').onclick = () => stepChapter(-1);
 $('pNext').onclick = () => stepChapter(1);
 $('pClose').onclick = () => closePlayer();
 function closePlayer() {
+  leaveReading();
   saveProgress(true);
   player.pause(); player.removeAttribute('src'); player.load();
   if (P) Object.values(P.cache).forEach((x) => URL.revokeObjectURL(x.url));
@@ -1443,6 +1463,52 @@ function jumpToCurrent() {
   e.classList.add('flash'); setTimeout(() => e.classList.remove('flash'), 900);
 }
 $('pJump').onclick = jumpToCurrent;
+
+// Reading mode: the text fills the screen with a small control bar. Uses the browser's full
+// screen where it is available (not for this kind of page on iPhone), otherwise fills the window.
+let readTimer = null, seeking = false;
+function updateMini() {
+  const d = isFinite(player.duration) ? player.duration : 0, t = player.currentTime || 0;
+  $('mTime').textContent = fmtTime(t) + ' / ' + fmtTime(d);
+  if (!seeking) $('mSeek').value = d ? Math.round(t / d * 1000) : 0;
+  $('mPlay').textContent = player.paused ? '▶' : '❚❚';
+  $('mPlay').setAttribute('aria-label', player.paused ? 'Play' : 'Pause');
+}
+function enterReading() {
+  if (!P) return;
+  const card = $('playerCard');
+  card.classList.add('reading'); document.body.style.overflow = 'hidden';
+  if (card.requestFullscreen && !document.fullscreenElement) card.requestFullscreen().catch(() => {});
+  clearInterval(readTimer); readTimer = setInterval(updateMini, 250); updateMini();
+  setTimeout(jumpToCurrent, 50);
+}
+function leaveReading() {
+  const card = $('playerCard');
+  if (!card.classList.contains('reading')) return;
+  card.classList.remove('reading'); document.body.style.overflow = '';
+  clearInterval(readTimer); readTimer = null;
+  if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+  setTimeout(jumpToCurrent, 50);
+}
+$('pRead').onclick = enterReading;
+$('mExit').onclick = leaveReading;
+$('mPlay').onclick = () => { if (player.paused) player.play().catch(() => {}); else player.pause(); setTimeout(updateMini, 50); };
+$('mSeek').addEventListener('input', () => {
+  seeking = true;
+  const d = isFinite(player.duration) ? player.duration : 0;
+  $('mTime').textContent = fmtTime(d * $('mSeek').value / 1000) + ' / ' + fmtTime(d);
+});
+$('mSeek').addEventListener('change', () => {
+  const d = isFinite(player.duration) ? player.duration : 0;
+  if (d) player.currentTime = d * $('mSeek').value / 1000;
+  seeking = false; updateMini();
+});
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) leaveReading(); });
+document.addEventListener('keydown', (e) => {
+  if (!$('playerCard').classList.contains('reading')) return;
+  if (e.key === 'Escape') leaveReading();
+  else if (e.key === ' ' && e.target === document.body) { e.preventDefault(); $('mPlay').click(); }
+});
 
 function frame() { if (!rafOn) return; highlight(); requestAnimationFrame(frame); }
 
