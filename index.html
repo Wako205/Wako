@@ -24,6 +24,22 @@
   .top { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom: 14px; }
   .who { font-size:13px; color:var(--muted); display:flex; gap:10px; align-items:center; }
   .card { border:1px solid var(--line); border-radius:10px; padding:20px; background:var(--bg); }
+  .sr-only { position:absolute !important; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+  /* New conversion form with the speech allowance as a column chart beside it (below it on phones). */
+  .genrow { display:grid; grid-template-columns: minmax(0,1fr) 210px; gap:16px; align-items:start; }
+  .genrow.nousage { grid-template-columns: minmax(0,1fr); }
+  .usage { padding:16px 14px; }
+  .usage .uh { font-weight:600; font-size:14px; margin-bottom:10px; }
+  .ubars { display:flex; gap:12px; align-items:flex-end; justify-content:space-around; }
+  .ubar { flex:1; display:flex; flex-direction:column; align-items:center; min-width:0; }
+  .ubar .pct { font-size:12px; font-weight:600; margin-bottom:4px; font-variant-numeric:tabular-nums; }
+  .ubar .col { width:100%; max-width:44px; height:150px; border-radius:6px; background:var(--soft); border:1px solid var(--line); display:flex; align-items:flex-end; overflow:hidden; }
+  .ubar .fill { width:100%; background:var(--accent); min-height:2px; transition:height .4s; }
+  .ubar .fill.warn { background:#b5651d; }
+  .ubar .lbl { font-size:12px; margin-top:6px; text-align:center; line-height:1.25; }
+  .ubar .amt { font-size:11px; color:var(--muted); text-align:center; font-variant-numeric:tabular-nums; }
+  .usage .un { font-size:11px; color:var(--muted); margin-top:10px; line-height:1.4; }
+  @media (max-width: 760px) { .genrow { grid-template-columns: minmax(0,1fr); } .ubar .col { height:110px; } }
   label { display:block; font-size:14px; color:var(--muted); margin:14px 0 6px; }
   input[type=text], input[type=password], select, textarea { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font:inherit; background:var(--field); color:var(--ink); }
   textarea { resize: vertical; min-height: 64px; max-height: 40vh; }
@@ -279,7 +295,8 @@
         </div>
       </section>
 
-      <!-- New conversion -->
+      <!-- New conversion, with the speech allowance beside it -->
+      <div class="genrow nousage">
       <div class="card">
         <label for="apdf">PDF</label>
         <input type="file" id="apdf" accept=".pdf,application/pdf">
@@ -334,9 +351,15 @@
         <div class="row" style="margin-top:16px"><button id="audioBtn">Generate audio</button><span class="status" id="audioStatus"></span></div>
         <div class="notice" style="margin-top:14px">The type of document is detected automatically. Papers: Claude rewrites the PDF into a listening script (references and citation numbers skipped; equations and units read in words), then Google Chirp 3 HD reads it. Books and other text: read as written, chapter by chapter, with running headers and page numbers removed. English, Japanese and Chinese are detected automatically. Every conversion is saved to your library below, together with your listening position, so it never has to be converted twice. You can close this page while a conversion runs.</div>
       </div>
+      <aside class="card usage hidden" id="usageCard" aria-label="Speech used">
+        <div class="uh">Speech used</div>
+        <div class="ubars" id="usageBars"></div>
+        <div class="un" id="usageNote"></div>
+      </aside>
+      </div>
 
       <!-- Library -->
-      <h2>Your audio library <span class="status" id="libUsage" style="font-weight:normal;font-size:13px;margin-left:8px"></span></h2>
+      <h2>Your audio library <span class="status sr-only" id="libUsage"></span></h2>
       <div id="library"><div class="status">Loading...</div></div>
       <div id="sharedCard" class="hidden">
         <h2 style="margin-top:22px">Shared library <span class="status" style="font-weight:normal;font-size:13px;margin-left:8px">Shared by accounts of this site; listen only</span></h2>
@@ -475,7 +498,7 @@ function logout() {
   const old = token;
   if (old) setTimeout(() => { api({ action: 'logout', token: old }).catch(() => {}); }, 2000);
   token = username = null; store('mp_token', null); store('mp_user', null); $('brand').textContent = 'Wako205';
-  clearTimeout(libTimer); libItems = []; sharedItems = []; $('library').textContent = ''; $('libUsage').textContent = '';
+  clearTimeout(libTimer); libItems = []; sharedItems = []; $('library').textContent = ''; $('libUsage').textContent = ''; $('usageCard').classList.add('hidden'); $('usageCard').parentElement.classList.add('nousage');
   $('sharedLib').textContent = ''; $('sharedCard').classList.add('hidden');
   chat = { convId: null, messages: [] }; pendingDoc = null; currentFile = null; store('mp_chat', null);
   Object.keys(fileOutputs).forEach((k) => delete fileOutputs[k]);
@@ -1009,6 +1032,7 @@ async function loadLibrary() {
       (libUsage.azReady ? ' · Microsoft ' + (libUsage.s0Until ? 'free ' : '') + fmtK(libUsage.azUsed, true) + ' of ' + fmtK(libUsage.azCap, !!libUsage.s0Until) +
         (libUsage.s0Until ? ', then trial credit ' + fmtK(libUsage.s0Used, true) + ' of ' + fmtK(libUsage.s0Cap) +
           ' (through ' + fmtDay(libUsage.s0Until - 1) + ')' : '') : '');
+    renderUsage(d);
     renderLibrary(); bookSummary();
     if (P && !P.item.owner) { refreshChapterSelect(); resumeIfWaiting(); }
     loadShared();
@@ -1051,6 +1075,30 @@ function renderShared() {
 }
 /** Extra request field for an item another account shared: whose library it is in. */
 function ownerOf(it) { return it && it.owner && !it.mine ? { owner: it.owner } : {}; }
+
+/** Column chart of the speech allowances: Google, Microsoft free tier, Microsoft trial credit. */
+function renderUsage(d) {
+  const bars = [{ name: 'Google', used: libUsage.used, cap: libUsage.cap, sub: 'this month' }];
+  if (libUsage.azReady) bars.push({ name: 'Microsoft free', used: libUsage.azUsed, cap: libUsage.azCap, sub: 'this month' });
+  if (libUsage.s0Until) bars.push({ name: 'Microsoft trial', used: libUsage.s0Used, cap: libUsage.s0Cap, sub: 'in total' });
+  const box = $('usageBars'); box.textContent = '';
+  bars.forEach((b) => {
+    const f = b.cap ? Math.min(1, b.used / b.cap) : 0, pct = Math.round(f * 1000) / 10;
+    const col = el('div', 'ubar');
+    col.setAttribute('role', 'img');
+    col.setAttribute('aria-label', b.name + ': ' + fmtK(b.used, true) + ' of ' + fmtK(b.cap) + ' ' + b.sub);
+    col.appendChild(el('div', 'pct', (pct < 10 ? pct.toFixed(1) : Math.round(pct)) + '%'));
+    const c = el('div', 'col'), fill = el('div', 'fill' + (f > 0.9 ? ' warn' : ''));
+    fill.style.height = (f * 100) + '%'; c.appendChild(fill); col.appendChild(c);
+    col.appendChild(el('div', 'lbl', b.name));
+    col.appendChild(el('div', 'amt', fmtK(b.used, true) + ' / ' + fmtK(b.cap, true)));
+    box.appendChild(col);
+  });
+  $('usageNote').textContent = 'Characters. Google and Microsoft free reset on the 1st' +
+    (libUsage.s0Until ? '; the trial credit lasts through ' + fmtDay(libUsage.s0Until - 1) + ' and is used only when the free tier runs out.' : '.');
+  $('usageCard').classList.remove('hidden');
+  $('usageCard').parentElement.classList.remove('nousage');
+}
 
 function itemMinutes(it) {
   if (!it.chars) return 0;
