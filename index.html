@@ -154,7 +154,8 @@
     .pset > label[for] { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
     .pset select { flex: 1; min-width: 0; padding: 4px 6px !important; }
     .pset #arate { flex: none; }
-    .pset .follow { white-space: nowrap; min-height: 44px; gap: 3px !important; }
+    .pset .follow { white-space: nowrap; min-height: 44px; gap: 1px !important; }
+    .pset #pRead { flex: none; padding: 5px 8px; }
     .pset .follow input { width: 20px; height: 20px; }
     .mark { flex-wrap: wrap; flex: 1 1 100%; }
     .mark .w { max-width: 100%; flex: 1 1 100%; order: 3; }
@@ -277,8 +278,9 @@
             <option value="normal">Original</option><option value="loud" selected>Louder</option><option value="max">Loudest</option>
           </select>
           <label class="follow" style="margin:0;display:flex;gap:4px;align-items:center"><input type="checkbox" id="pFollow" checked> Follow<span class="wide-only"> text</span></label>
+          <label class="follow" style="margin:0;display:flex;gap:4px;align-items:center" title="Keep the screen on (no auto-lock) while audio plays"><input type="checkbox" id="pAwake" checked aria-label="Keep the screen on while audio plays"> <span aria-hidden="true">☀</span><span class="wide-only">Screen on</span></label>
           <button class="ghost small" id="pJump" style="margin-left:auto" title="Scroll the text to the sentence being read">Jump<span class="wide-only"> to current</span></button>
-          <button class="ghost small" id="pRead" title="Show only the text, with a small progress bar">Full screen</button>
+          <button class="ghost small" id="pRead" title="Show only the text, with a small progress bar">Full<span class="wide-only"> screen</span></button>
         </div>
         <div id="pMarks" class="marks"></div>
         <div id="pText" class="readtext"></div>
@@ -2073,7 +2075,25 @@ function bindPlayer(a) {
   on('ratechange', updatePositionState);
   on('timeupdate', () => { if (Date.now() - lastSave > 20000) saveProgress(false); });
   on('ended', chapterEnded);
+  on('play', keepAwake);
+  on('pause', keepAwake);
 }
+
+// Keeps the screen from locking while audio plays (Screen Wake Lock API; Safari 16.4+, Chrome).
+// The browser drops the lock whenever the page is hidden, so it is requested again on return.
+let wakeLock = null;
+async function keepAwake() {
+  const want = !!P && !player.paused && $('pAwake').checked && document.visibilityState === 'visible';
+  try {
+    if (want && !wakeLock && navigator.wakeLock) {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    } else if (!want && wakeLock) { const w = wakeLock; wakeLock = null; await w.release(); }
+  } catch (e) { wakeLock = null; }
+}
+document.addEventListener('visibilitychange', keepAwake);
+try { $('pAwake').checked = lsGet('mp_awake') !== '0'; } catch (e) {}
+$('pAwake').onchange = () => { lsSet('mp_awake', $('pAwake').checked ? '1' : '0'); keepAwake(); };
 bindPlayer(player);
 
 // ---------------------------------------------------------------------------
