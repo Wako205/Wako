@@ -886,7 +886,7 @@ function pollLibrary() {
 // segment from character counts and pauses, scaled to the segment's exact length.
 // ---------------------------------------------------------------------------
 let P = null;               // { item, c, segs: [{t0, dur}], sents: [{t0, t1, el}], blob, url, cur, texts }
-const player = $('player');
+let player = $('player');   // replaced by a plain element on iOS when the page is hidden (see bindPlayer)
 let lastUserScroll = 0, lastSave = 0, rafOn = false;
 
 /** Exact duration of an MP3 buffer from its frame headers. */
@@ -921,7 +921,7 @@ function openItem(id) {
   if (!it) return;
   const local = (() => { try { return JSON.parse(lsGet('mp_pos_' + id) || 'null'); } catch (e) { return null; } })();
   const pos = [it.pos, local].filter(Boolean).sort((a, b) => (b.at || 0) - (a.at || 0))[0] || { c: 0, t: 0 };
-  P = { item: it, c: -1, cache: {} };
+  P = { item: it, c: -1, cache: {}, loading: {} };
   it.marks = it.marks || {};
   ['b1', 'b2'].forEach((slot) => {                      // a bookmark saved while offline is kept if newer
     try { const m = JSON.parse(lsGet('mp_mark_' + slot + '_' + id) || 'null'); if (m && (!it.marks[slot] || m.at > it.marks[slot].at)) it.marks[slot] = m; } catch (e) {}
@@ -966,6 +966,67 @@ function closePlayer() {
   player.pause(); player.removeAttribute('src'); player.load();
   if (P) Object.values(P.cache).forEach((x) => URL.revokeObjectURL(x.url));
   P = null; $('playerCard').classList.add('hidden');
+  if (MS) { try { MS.metadata = null; MS.playbackState = 'none'; } catch (e) {} }
+}
+
+/**
+ * Audio and text of chapter c: all its segments, fetched four at a time and joined
+ * into one MP3. Concurrent calls for the same chapter share one download.
+ */
+function fetchChapter(c, onStatus) {
+  const id = P.item.id, ch = P.item.chapters[c], cache = P.cache, loading = P.loading;
+  if (cache[c] && cache[c].parts >= ch.n) return Promise.resolve(cache[c]);
+  if (loading[c]) return loading[c];
+  const say = onStatus || (() => {});
+  const job = (async () => {
+    say('Loading audio...');
+    const texts = (await api({ action: 'audio_text', token, id, chapter: c })).texts;
+    const bufs = new Array(ch.n);
+    let next = 0, stop = ch.n;
+    const worker = async () => {
+      while (next < stop) {
+        const k = next++;
+        try { bufs[k] = unb64((await api({ action: 'audio_part', token, id, chapter: c, index: k })).data); }
+        catch (e) { if (/not ready/i.test(e.message)) { stop = Math.min(stop, k); continue; } throw e; }
+        say('Loading audio: ' + bufs.filter(Boolean).length + ' of ' + ch.n);
+      }
+    };
+    await Promise.all([worker(), worker(), worker(), worker()]);
+    let parts = 0; while (parts < ch.n && bufs[parts]) parts++;
+    if (!parts) throw new Error('This chapter has not been converted yet.');
+    const segs = []; let t = 0;
+    for (let k = 0; k < parts; k++) { const d = mp3Duration(bufs[k]); segs.push({ t0: t, dur: d }); t += d; }
+    const blob = new Blob(bufs.slice(0, parts), { type: 'audio/mpeg' });
+    if (cache[c]) URL.revokeObjectURL(cache[c].url);
+    cache[c] = { texts, segs, parts, blob, bufs: bufs.slice(0, parts), url: URL.createObjectURL(blob) };
+    if (!P || P.cache !== cache) URL.revokeObjectURL(cache[c].url);   // the player was closed meanwhile
+    return cache[c];
+  })();
+  loading[c] = job;
+  job.then(() => { delete loading[c]; }, () => { delete loading[c]; });
+  return job;
+}
+
+/** Next chapter after c that has audio, or -1. */
+function nextReadyChapter(c) {
+  const chs = P.item.chapters;
+  for (let n = c + 1; n < chs.length; n++) if (chs[n].status !== 'none' && chapterReadyCount(P.item, n)) return n;
+  return -1;
+}
+
+/**
+ * Downloads the next chapter while the current one plays, so the switch at its end
+ * needs no network. This keeps playback going with the screen locked, where timers
+ * and requests of a hidden page may be delayed. Only the current and next chapters
+ * stay in memory.
+ */
+function prefetchNext() {
+  if (!P || P.c < 0) return;
+  const n = nextReadyChapter(P.c);
+  Object.keys(P.cache).forEach((k) => {
+    if (Number(k) !== P.c && Number(k) !== n) { URL.revokeObjectURL(P.cache[k].url); delete P.cache[k]; }
+  });
+  if (n >= 0) fetchChapter(n).catch(() => {});
 }
 
 async function loadChapter(c, startAt, autoplay) {
@@ -974,33 +1035,14 @@ async function loadChapter(c, startAt, autoplay) {
   const id = P.item.id, ch = P.item.chapters[c];
   if (!ch) return;
   P.c = c; $('pChapter').value = c;
-  player.pause();
   const st = $('pStatus');
+  // A chapter already in memory starts synchronously, still inside the 'ended' event of
+  // the previous one: browsers then allow play() in the background.
+  const ready = P.cache[c] && P.cache[c].parts >= ch.n;
+  if (!ready) player.pause();
   try {
-    let data = P.cache[c];
-    if (!data || data.parts < ch.n) {
-      setStatus(st, 'Loading audio...');
-      const texts = (await api({ action: 'audio_text', token, id, chapter: c })).texts;
-      const bufs = new Array(ch.n);
-      let next = 0, stop = ch.n;
-      const worker = async () => {
-        while (next < stop) {
-          const k = next++;
-          try { bufs[k] = unb64((await api({ action: 'audio_part', token, id, chapter: c, index: k })).data); }
-          catch (e) { if (/not ready/i.test(e.message)) { stop = Math.min(stop, k); continue; } throw e; }
-          setStatus(st, 'Loading audio: ' + bufs.filter(Boolean).length + ' of ' + ch.n);
-        }
-      };
-      await Promise.all([worker(), worker(), worker(), worker()]);
-      let parts = 0; while (parts < ch.n && bufs[parts]) parts++;
-      if (!parts) throw new Error('This chapter has not been converted yet.');
-      const segs = []; let t = 0;
-      for (let k = 0; k < parts; k++) { const d = mp3Duration(bufs[k]); segs.push({ t0: t, dur: d }); t += d; }
-      const blob = new Blob(bufs.slice(0, parts), { type: 'audio/mpeg' });
-      if (data) URL.revokeObjectURL(data.url);
-      data = P.cache[c] = { texts, segs, parts, blob, bufs: bufs.slice(0, parts), url: URL.createObjectURL(blob) };
-    }
-    if (P.c !== c || P.item.id !== id) return;          // the user moved on meanwhile
+    const data = ready ? P.cache[c] : await fetchChapter(c, (m) => setStatus(st, m));
+    if (!P || P.c !== c || P.item.id !== id) return;          // the user moved on meanwhile
     renderReadText(data);
     P.sents = data.sents; P.cur = -1;
     player.src = data.url;
@@ -1008,11 +1050,13 @@ async function loadChapter(c, startAt, autoplay) {
     player.onloadedmetadata = () => {
       player.playbackRate = Number($('arate').value);
       if (startAt) player.currentTime = Math.min(startAt, player.duration - 1);
-      if (autoplay) player.play().catch(() => {});
-      highlight();
+      highlight(); updatePositionState();
     };
+    if (autoplay) player.play().catch(() => {});
     setStatus(st, data.parts < ch.n ? 'Converted so far: ' + data.parts + ' of ' + ch.n + ' parts of this chapter.' : '');
+    updateMediaSession();
     if (!data.refined) { data.refined = true; refineTimings(data).catch(() => {}); }
+    prefetchNext();
   } catch (e) { setStatus(st, e.message, true); if (/log in again/i.test(e.message)) logout(); }
 }
 
@@ -1121,7 +1165,7 @@ async function refineTimings(data) {
 // limiter keeps peaks below full scale; "Loudest" targets -12 dBFS.
 // ---------------------------------------------------------------------------
 const VOL_TARGET = { normal: null, loud: -19, max: -15 };   // the compressor adds about 3 dB of make-up gain
-let AG = null;               // { ctx, gain, comp, lim }
+let AG = null;               // { ctx, src, el, gain, comp, lim }
 function volumeMode() { return $('pVol').value; }
 function gainFor(data, mode) {
   const target = VOL_TARGET[mode];
@@ -1135,18 +1179,24 @@ function buildChain(ctx, input) {
   comp.threshold.value = -14; comp.knee.value = 8; comp.ratio.value = 4; comp.attack.value = 0.005; comp.release.value = 0.2;
   const lim = ctx.createDynamicsCompressor();       // brick-wall style limiter just below 0 dBFS
   lim.threshold.value = -2; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = 0.001; lim.release.value = 0.1;
-  input.connect(gain); gain.connect(comp); comp.connect(lim); lim.connect(ctx.destination);
+  input.connect(gain); gain.connect(comp); comp.connect(lim); lim.connect(ctx.destination);   // input first, so it can be swapped later
   return { gain, comp, lim };
 }
 function applyVolume() {
   const mode = volumeMode();
-  if (mode === 'normal' && !AG) return;            // never routed through Web Audio: leave the element alone
-  if (!AG) {
-    try {
+  if (mode === 'normal' && (!AG || AG.el !== player)) return;   // not routed through Web Audio: leave the element alone
+  if (IOS && document.hidden) return;              // iOS silences Web Audio in the background (see below)
+  try {
+    if (!AG) {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      AG = Object.assign({ ctx }, buildChain(ctx, ctx.createMediaElementSource(player)));
-    } catch (e) { return; }
-  }
+      const src = ctx.createMediaElementSource(player);
+      AG = Object.assign({ ctx, src, el: player }, buildChain(ctx, src));
+    } else if (AG.el !== player) {                 // the element was replaced while the page was hidden
+      AG.src.disconnect();
+      AG.src = AG.ctx.createMediaElementSource(player); AG.el = player;
+      AG.src.connect(AG.gain);
+    }
+  } catch (e) { return; }
   if (AG.ctx.state === 'suspended') AG.ctx.resume().catch(() => {});
   const g = gainFor(P && P.cache[P.c], mode);
   AG.gain.gain.setTargetAtTime(g, AG.ctx.currentTime, 0.05);
@@ -1155,7 +1205,6 @@ function applyVolume() {
 }
 $('pVol').onchange = () => { lsSet('mp_vol', $('pVol').value); applyVolume(); };
 try { const v = lsGet('mp_vol'); if (v && VOL_TARGET.hasOwnProperty(v)) $('pVol').value = v; } catch (e) {}
-player.addEventListener('play', applyVolume);
 
 /** MP3 of the current chapter at the chosen loudness (decoded, processed and re-encoded here). */
 async function loudMp3(data, onProgress) {
@@ -1208,18 +1257,108 @@ function jumpToCurrent() {
 $('pJump').onclick = jumpToCurrent;
 
 function frame() { if (!rafOn) return; highlight(); requestAnimationFrame(frame); }
-player.addEventListener('play', () => { rafOn = true; requestAnimationFrame(frame); });
-player.addEventListener('pause', () => { rafOn = false; saveProgress(true); });
-player.addEventListener('seeked', highlight);
-player.addEventListener('timeupdate', () => { if (Date.now() - lastSave > 20000) saveProgress(false); });
-player.addEventListener('ended', () => {
+
+/** At the end of a chapter the next converted one starts (from memory when prefetched). */
+function chapterEnded() {
   rafOn = false;
   if (!P) return;
-  const chs = P.item.chapters;
-  let n = P.c + 1;
-  while (n < chs.length && chs[n].status === 'none') n++;          // skip chapters not converted
-  if (n < chs.length && chapterReadyCount(P.item, n)) loadChapter(n, 0, true);
+  const n = nextReadyChapter(P.c);
+  if (n >= 0) loadChapter(n, 0, true);
   else saveProgress(true);
+}
+
+/** Player events. Listeners of an element that has been replaced are ignored. */
+function bindPlayer(a) {
+  const on = (ev, fn) => a.addEventListener(ev, (e) => { if (a === player) fn(e); });
+  on('play', applyVolume);
+  on('play', () => { rafOn = true; requestAnimationFrame(frame); setPlaybackState('playing'); });
+  on('pause', () => { rafOn = false; saveProgress(true); setPlaybackState('paused'); });
+  on('seeked', () => { highlight(); updatePositionState(); });
+  on('ratechange', updatePositionState);
+  on('timeupdate', () => { if (Date.now() - lastSave > 20000) saveProgress(false); });
+  on('ended', chapterEnded);
+}
+bindPlayer(player);
+
+// ---------------------------------------------------------------------------
+// Lock screen and background playback. The Media Session API shows the title and
+// chapter on the lock screen and in the notification shade, with play/pause,
+// previous/next segment and seeking.
+// ---------------------------------------------------------------------------
+const MS = 'mediaSession' in navigator ? navigator.mediaSession : null;
+function updateMediaSession() {
+  if (!MS || !P || !window.MediaMetadata) return;
+  const chs = P.item.chapters || [], ch = chs[P.c];
+  try { MS.metadata = new MediaMetadata({ title: P.item.title, artist: chs.length > 1 && ch ? ch.title : 'Wako205', album: 'Wako205' }); } catch (e) {}
+}
+function setPlaybackState(s) { if (MS) try { MS.playbackState = s; } catch (e) {} updatePositionState(); }
+function updatePositionState() {
+  if (!MS || !MS.setPositionState || !P || !isFinite(player.duration) || !player.duration) return;
+  try { MS.setPositionState({ duration: player.duration, playbackRate: player.playbackRate || 1, position: Math.min(player.currentTime, player.duration) }); } catch (e) {}
+}
+/** Moves by d audio segments; past the first or last segment it moves to the neighbouring chapter. */
+function stepSegment(d) {
+  if (!P || !P.cache[P.c]) return;
+  const segs = P.cache[P.c].segs, t = player.currentTime;
+  let k = segs.findIndex((x) => t < x.t0 + x.dur);
+  if (k < 0) k = segs.length - 1;
+  if (d < 0 && t - segs[k].t0 > 3) k++;           // "previous" first returns to the start of the current segment
+  const n = k + d;
+  if (n < 0) return stepChapter(-1);
+  if (n >= segs.length) return stepChapter(1);
+  player.currentTime = segs[n].t0 + 0.01;
+  if (player.paused) player.play().catch(() => {});
+}
+function seekBy(sec) { if (P && isFinite(player.duration)) player.currentTime = Math.max(0, Math.min(player.duration - 0.1, player.currentTime + sec)); }
+if (MS) {
+  const act = (name, fn) => { try { MS.setActionHandler(name, fn); } catch (e) {} };
+  act('play', () => { player.play().catch(() => {}); });
+  act('pause', () => player.pause());
+  act('previoustrack', () => stepSegment(-1));
+  act('nexttrack', () => stepSegment(1));
+  act('seekbackward', (d) => seekBy(-(d && d.seekOffset || 10)));
+  act('seekforward', (d) => seekBy(d && d.seekOffset || 10));
+  act('seekto', (d) => { if (d && d.seekTime != null) { player.currentTime = d.seekTime; updatePositionState(); } });
+}
+
+/*
+ * iOS suspends Web Audio when the screen locks or the browser goes to the background,
+ * and an element routed through it (the loudness chain) then goes silent. On iOS the
+ * playing element is therefore replaced by a plain one when the page is hidden; it
+ * continues at the original loudness, and is routed through the chain again at the
+ * next play in the foreground. iOS only lets an element start playing after a tap, so a
+ * spare element is unlocked with a short silent sound on the first tap of the page.
+ */
+const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+let spareAudio = null;
+function silentWavUrl() {
+  const n = 800, b = new DataView(new ArrayBuffer(44 + 2 * n));
+  const s = (o, str) => { for (let i = 0; i < str.length; i++) b.setUint8(o + i, str.charCodeAt(i)); };
+  s(0, 'RIFF'); b.setUint32(4, 36 + 2 * n, true); s(8, 'WAVE'); s(12, 'fmt '); b.setUint32(16, 16, true); b.setUint16(20, 1, true);
+  b.setUint16(22, 1, true); b.setUint32(24, 8000, true); b.setUint32(28, 16000, true); b.setUint16(32, 2, true); b.setUint16(34, 16, true);
+  s(36, 'data'); b.setUint32(40, 2 * n, true);
+  return URL.createObjectURL(new Blob([b.buffer], { type: 'audio/wav' }));
+}
+function unlockSpare() {
+  if (!IOS || spareAudio || unlockSpare.busy) return;
+  unlockSpare.busy = true;
+  const a = new Audio(silentWavUrl());
+  a.play().then(() => { a.pause(); spareAudio = a; }, () => {}).then(() => { unlockSpare.busy = false; });
+}
+['touchend', 'click'].forEach((ev) => document.addEventListener(ev, unlockSpare, true));
+function useSpareAudio() {
+  const old = player, a = spareAudio, t = old.currentTime;
+  spareAudio = null;
+  a.id = 'player'; a.controls = true; a.preload = 'auto'; a.style.cssText = old.style.cssText;
+  a.src = old.src;
+  a.addEventListener('loadedmetadata', () => { a.playbackRate = old.playbackRate; a.currentTime = t; updatePositionState(); }, { once: true });
+  player = a; bindPlayer(a);               // from here on, events of the old element are ignored
+  old.replaceWith(a);
+  old.pause();
+  a.play().catch(() => {});
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && IOS && AG && AG.el === player && !player.paused && spareAudio) useSpareAudio();
 });
 ['wheel', 'touchmove', 'keydown'].forEach((ev) => $('pText').addEventListener(ev, () => { lastUserScroll = Date.now(); }, { passive: true }));
 $('arate').onchange = () => { player.playbackRate = Number($('arate').value); lsSet('mp_rate', $('arate').value); };
