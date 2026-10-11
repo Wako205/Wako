@@ -4,8 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Manuscript Portal</title>
+<script>try { var t = localStorage.getItem('mp_theme'); if (t === 'night' || t === 'eye') document.documentElement.setAttribute('data-theme', t); } catch (e) {}</script>
 <style>
-  :root { --ink:#1c1c28; --muted:#666a7a; --line:#dcdde6; --accent:#4b2e83; --bg:#ffffff; --soft:#f6f6fa; --del:#fdecec; --ins:#e9f7ec; --user:#eef0fb; }
+  /* Themes: day (default), night, eye care (warm paper tones, low blue light). Chosen in the top bar. */
+  :root { --ink:#1c1c28; --muted:#666a7a; --line:#dcdde6; --accent:#4b2e83; --on-accent:#ffffff; --bg:#ffffff; --field:#ffffff; --soft:#f6f6fa;
+          --del:#fdecec; --ins:#e9f7ec; --user:#eef0fb; --err:#b3261e; --hl:#fff1b8; --hl2:#ffd84d; --pend:#aaaaaa; color-scheme: light; }
+  :root[data-theme="night"] { --ink:#e6e6ee; --muted:#9a9eb0; --line:#353849; --accent:#b8a2f0; --on-accent:#17161f; --bg:#16171d; --field:#20222b; --soft:#23252f;
+          --del:#4a2326; --ins:#1f3d29; --user:#2a2d3e; --err:#ff8a80; --hl:#5a4a12; --hl2:#8a6d10; --pend:#5c6070; color-scheme: dark; }
+  :root[data-theme="eye"] { --ink:#3b3226; --muted:#7a6d5a; --line:#ddd0b3; --accent:#6b5a2e; --on-accent:#fbf3df; --bg:#f6edd6; --field:#fbf5e4; --soft:#efe3c4;
+          --del:#f3d9cc; --ins:#dfe8c8; --user:#ece0bf; --err:#a33a24; --hl:#e9d48a; --hl2:#dcbc55; --pend:#b3a68c; color-scheme: light; }
+  .themes { display:inline-flex; border:1px solid var(--line); border-radius:999px; overflow:hidden; }
+  .themes button { background:transparent; color:var(--muted); border-radius:0; padding:4px 10px; font-size:13px; }
+  .themes button.on { background:var(--accent); color:var(--on-accent); }
   * { box-sizing: border-box; }
   html, body { height: 100%; }
   body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.55 "Helvetica Neue", Arial, "Hiragino Sans", "PingFang SC", sans-serif; }
@@ -15,16 +25,16 @@
   .who { font-size:13px; color:var(--muted); display:flex; gap:10px; align-items:center; }
   .card { border:1px solid var(--line); border-radius:10px; padding:20px; background:var(--bg); }
   label { display:block; font-size:14px; color:var(--muted); margin:14px 0 6px; }
-  input[type=text], input[type=password], select, textarea { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font:inherit; background:#fff; color:var(--ink); }
+  input[type=text], input[type=password], select, textarea { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font:inherit; background:var(--field); color:var(--ink); }
   textarea { resize: vertical; min-height: 64px; max-height: 40vh; }
-  button { padding:9px 16px; border:0; border-radius:8px; background:var(--accent); color:#fff; font:inherit; cursor:pointer; }
+  button { padding:9px 16px; border:0; border-radius:8px; background:var(--accent); color:var(--on-accent); font:inherit; cursor:pointer; }
   button.ghost { background:transparent; color:var(--accent); border:1px solid var(--accent); }
   button.small { padding:5px 10px; font-size:13px; }
   button.chip { background:var(--soft); color:var(--ink); border:1px solid var(--line); font-size:13px; padding:5px 10px; }
   button:disabled { opacity:.5; cursor:default; }
   .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
   .status { font-size:14px; color:var(--muted); min-height: 1.4em; }
-  .status.err { color:#b3261e; }
+  .status.err { color:var(--err); }
   .notice { font-size:13px; color:var(--muted); background:var(--soft); border-radius:8px; padding:10px 12px; }
   .hidden { display:none !important; }
   .tabs { display:flex; gap:4px; border-bottom:1px solid var(--line); margin-bottom:16px; }
@@ -36,7 +46,7 @@
   #messages { flex:1; overflow-y:auto; padding: 4px 2px; }
   .msg { margin: 10px 0; display:flex; }
   .msg.user { justify-content:flex-end; }
-  .bubble { max-width: 85%; padding: 10px 14px; border-radius: 12px; border:1px solid var(--line); background:#fff; overflow-wrap:anywhere; }
+  .bubble { max-width: 85%; padding: 10px 14px; border-radius: 12px; border:1px solid var(--line); background:var(--field); overflow-wrap:anywhere; }
   .msg.user .bubble { background:var(--user); border-color:transparent; white-space:pre-wrap; }
   .bubble .doc { font-size:12px; color:var(--muted); background:var(--soft); border-radius:6px; padding:3px 8px; display:inline-block; margin-bottom:6px; }
   .bubble .meta { font-size:12px; color:var(--muted); margin-top:6px; display:flex; gap:10px; align-items:center; }
@@ -75,13 +85,13 @@
   .readtext p { margin:0 0 12px; }
   .readtext span.s { cursor:pointer; border-radius:4px; transition: background .2s; }
   .readtext span.s:hover { background:var(--soft); }
-  .readtext span.s.cur { background:#fff1b8; }
-  .readtext span.s.flash { background:#ffd84d; }
+  .readtext span.s.cur { background:var(--hl); }
+  .readtext span.s.flash { background:var(--hl2); }
   .marks { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
   .mark { border:1px solid var(--line); border-radius:8px; padding:6px 10px; font-size:13px; display:flex; gap:8px; align-items:center; background:var(--soft); }
   .mark b { font-weight:600; } .mark .w { color:var(--muted); max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .mark button { padding:3px 8px; font-size:12px; }
-  .readtext span.s.pend { color:#aaa; cursor:default; }
+  .readtext span.s.pend { color:var(--pend); cursor:default; }
   h2 { font-size: 18px; margin: 24px 0 12px; }
 </style>
 </head>
@@ -89,6 +99,9 @@
 <main>
   <div class="top">
     <h1>Manuscript Portal</h1>
+    <div class="themes" id="themes" role="group" aria-label="Color theme">
+      <button data-theme="day" title="White background">白天</button><button data-theme="night" title="Dark background">黑夜</button><button data-theme="eye" title="Warm paper tones, less blue light">护眼</button>
+    </div>
     <div class="who hidden" id="who"><span id="whoName"></span><span id="whoUsage"></span><button class="ghost small" id="logoutBtn">Log out</button></div>
   </div>
 
@@ -241,6 +254,15 @@ const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbyMPCW8XBoolVwUI_Sp
 const MAX_DOC_CHARS = 400000;
 
 const $ = (id) => document.getElementById(id);
+
+// Color theme: remembered in this browser and restored on the next visit.
+function setTheme(t) {
+  if (t === 'night' || t === 'eye') document.documentElement.setAttribute('data-theme', t); else { t = 'day'; document.documentElement.removeAttribute('data-theme'); }
+  try { localStorage.setItem('mp_theme', t); } catch (e) {}
+  document.querySelectorAll('#themes button').forEach((b) => b.classList.toggle('on', b.dataset.theme === t));
+}
+document.querySelectorAll('#themes button').forEach((b) => { b.onclick = () => setTheme(b.dataset.theme); });
+setTheme(document.documentElement.getAttribute('data-theme') || 'day');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let token = null, username = null;
 
@@ -405,37 +427,50 @@ function splitChapters(pages) {
   const TOC_LINE = /\s+[0-9ivxlc]{1,4}$/i;
   const isToc = (L) => L.filter((l) => TOC_LINE.test(l.s) && CHAPTER_RE.test(l.s.replace(TOC_LINE, ''))).length >= 3;
   const chapters = [];
+  const front = { lines: [] };                     // everything before the first chapter heading
   let cur = null;
-  const open = (title) => { cur = { title: title.replace(/\s+/g, ' ').trim(), lines: [] }; chapters.push(cur); };
+  const open = (title, pi, atTop) => { cur = { title: title.replace(/\s+/g, ' ').trim(), lines: [], startPage: pi + 1, atTop }; chapters.push(cur); };
   const strip = (L0) => {
     const L = L0.slice();
     while (L.length && PAGENUM_RE.test(L[L.length - 1].s)) L.pop();     // footer page number
     while (L.length && PAGENUM_RE.test(L[0].s)) L.shift();
     return L;
   };
-  pages.forEach((L0) => {
+  pages.forEach((L0, pi) => {
     if (isToc(L0)) return;                                               // table of contents page
     let L = strip(L0);
     if (L.length && (isRunning(L[0].s) || CHAPTER_RE.test(L[0].s))) {
       const head = L.shift().s;
       while (L.length && PAGENUM_RE.test(L[0].s)) L.shift();
-      if (CHAPTER_RE.test(head) && (!cur || cur.title !== head.replace(/\s+/g, ' ').trim())) open(head);
+      if (CHAPTER_RE.test(head) && (!cur || cur.title !== head.replace(/\s+/g, ' ').trim())) open(head, pi, true);
     }
     // A line indented relative to the page's text block starts a paragraph.
     const left = Math.min.apply(null, L.map((l) => l.x).concat([1e9]));
-    L.forEach((l) => {
-      if (l.s.length <= 30 && !TOC_LINE.test(l.s) && CHAPTER_RE.test(l.s) && !(cur && cur.title === l.s)) { open(l.s); return; }
-      if (cur) cur.lines.push({ s: l.s, para: l.x - left > 0.8 * l.h });
+    L.forEach((l, li) => {
+      if (l.s.length <= 30 && !TOC_LINE.test(l.s) && CHAPTER_RE.test(l.s) && !(cur && cur.title === l.s)) { open(l.s, pi, li < 2); return; }
+      (cur || front).lines.push({ s: l.s, para: l.x - left > 0.8 * l.h });
     });
   });
-  const out = chapters.map((c) => ({ title: c.title, text: joinLines(c.lines).trim() })).filter((c) => c.text.length > 20);
-  if (out.length) return out;
+  chapters.forEach((c, k) => {
+    const nx = chapters[k + 1];
+    c.endPage = nx ? Math.max(c.startPage, nx.atTop ? nx.startPage - 1 : nx.startPage) : pages.length;
+  });
+  const out = chapters.map((c) => ({ title: c.title, text: joinLines(c.lines).trim(), startPage: c.startPage, endPage: c.endPage }))
+    .filter((c) => c.text.length > 20);
+  if (out.length) {
+    const ft = joinLines(front.lines).trim();
+    if (ft.length > 20) {
+      const cjk = new RegExp('[' + CJK + ']').test(out[0].title + ft.slice(0, 200));
+      out.unshift({ title: cjk ? '开头部分（第一章之前）' : 'Front matter (before the first chapter)', text: ft, startPage: 1,
+                    endPage: Math.max(1, out[0].startPage - 1), front: true });
+    }
+    return out;
+  }
   // No chapter structure found: read the whole text, minus running headers, as one part.
   const all = [];
   pages.forEach((L) => strip(L).forEach((l, i) => { if (!(i === 0 && isRunning(l.s))) all.push({ s: l.s, para: false }); }));
-  return [{ title: 'Full text', text: joinLines(all).trim() }];
+  return [{ title: 'Full text', text: joinLines(all).trim(), startPage: 1, endPage: pages.length }];
 }
-
 
 const CJK_CHAR = new RegExp('[' + CJK + ']', 'g');
 /** Rough listening time in minutes: about 270 CJK characters or 900 Latin characters per minute. */
@@ -447,16 +482,18 @@ function fmtDur(min) { return min >= 60 ? Math.floor(min / 60) + ' h ' + Math.ro
 function fmtTime(s) { s = Math.max(0, Math.floor(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0'); }
 let docKind = null, docWhy = '', docPages = 0;
 function audioKind() { return docKind || 'paper'; }
+const PAPER_COST_PER_PAGE = 0.012;          // USD, Claude listening script, measured on a 6-page paper
 
 /**
- * Decides how a PDF is read. Scientific papers (abstract, reference list, DOI,
- * numbered citations, figure captions, mathematical symbols) go through Claude,
- * which turns formulas and citations into speech. Books and other plain text are
- * read as written, chapter by chapter, which costs nothing on the Claude side.
+ * Decides how a PDF is read:
+ *  paper  - a scientific article: Claude writes a listening script of the whole PDF;
+ *  thesis - a long scientific document with chapters: the user picks chapters and
+ *           Claude writes a listening script for each selected chapter;
+ *  book   - other text: read as written, chapter by chapter, no Claude cost.
  */
 function classifyDoc(pages, chapters) {
   const text = (L) => L.map((l) => l.s).join('\n');
-  const all = pages.map(text).join('\n'), head = pages.slice(0, 3).map(text).join('\n');
+  const all = pages.map(text).join('\n'), head = pages.slice(0, 6).map(text).join('\n');
   const n = pages.length, chars = chapters.reduce((k, c) => k + c.text.length, 0);
   if (chars < 50 * Math.max(1, n) / 4 && n <= 160) return { kind: 'paper', why: 'little or no text layer (scanned pages); Claude reads the page images' };
   const sig = [];
@@ -466,26 +503,30 @@ function classifyDoc(pages, chapters) {
   if ((all.match(/\[\d+(?:\s*[,–-]\s*\d+)*\]/g) || []).length >= 8) sig.push('numbered citations');
   if ((all.match(/\b(fig\.|figure|table)\s*S?\d/gi) || []).length >= 3) sig.push('figure captions');
   if ((all.match(/[∑∫∂∇≈≤≥±×αβγδεηθκλμνπρστφχψωΓΔΘΛΣΦΨΩ∝∞⟨⟩ℏ]/g) || []).length >= 30) sig.push('equations');
-  const chaptered = chapters.length >= 3 && chapters[0].title !== 'Full text';
-  if (n > 160) return { kind: 'book', why: n + ' pages' + (chaptered ? ', ' + chapters.length + ' chapters' : '') };
-  if (sig.length >= 2 && !(chaptered && n > 60)) return { kind: 'paper', why: sig.join(', ') };
-  return { kind: 'book', why: (chaptered ? chapters.length + ' chapters, ' : '') + (sig.length ? 'few scientific features' : 'no scientific features') };
+  const real = chapters.filter((c) => !c.front && c.title !== 'Full text');
+  const chaptered = real.length >= 3;
+  const scientific = sig.length >= 2;
+  if (scientific && (chaptered || n > 40)) return { kind: 'thesis', why: n + ' pages, ' + (chaptered ? real.length + ' chapters, ' : '') + sig.join(', ') };
+  if (scientific) return { kind: 'paper', why: sig.join(', ') };
+  return { kind: 'book', why: n + ' pages' + (chaptered ? ', ' + real.length + ' chapters' : '') + ', no scientific features' };
 }
 
 function renderKind() {
   const line = $('kindLine');
   if (!docKind) { line.classList.add('hidden'); return; }
   line.classList.remove('hidden'); line.textContent = '';
-  const paper = docKind === 'paper';
-  line.appendChild(el('b', null, paper ? 'Detected: scientific paper. ' : 'Detected: book or plain text. '));
-  line.appendChild(document.createTextNode(paper
-    ? 'Claude first writes a listening script (equations, units and citations turned into speech, references skipped), then it is read aloud. Claude cost about $' + (0.012 * docPages).toFixed(2) + '. '
-    : 'It is read as written, chapter by chapter, with page headers and page numbers removed. No Claude cost. '));
+  const msg = {
+    paper: ['Detected: scientific paper. ', 'Claude first writes a listening script (equations, units and citations turned into speech, references skipped), then it is read aloud. Claude cost about $' + (PAPER_COST_PER_PAGE * docPages).toFixed(2) + '. '],
+    thesis: ['Detected: thesis or long scientific document. ', 'It has been split into chapters below. Choose the chapters to convert; Claude writes a listening script for each, then it is read aloud. '],
+    book: ['Detected: book or plain text. ', 'It has been split into chapters below and is read as written, without page headers and page numbers. No Claude cost. ']
+  }[docKind];
+  line.appendChild(el('b', null, msg[0])); line.appendChild(document.createTextNode(msg[1]));
   line.appendChild(el('span', 'm', '(' + docWhy + ') '));
-  const sw = el('a', null, paper ? 'Read as written instead' : 'Use paper mode instead');
+  const alt = docKind === 'book' ? (docPages <= 160 ? 'paper' : 'thesis') : 'book';
+  const sw = el('a', null, alt === 'book' ? 'Read as written instead' : alt === 'thesis' ? 'Use Claude per chapter instead' : 'Use paper mode instead');
   sw.href = '#'; sw.style.color = 'var(--accent)'; sw.style.fontSize = '13px';
-  sw.onclick = (e) => { e.preventDefault(); docKind = paper ? 'book' : 'paper'; docWhy = 'chosen by you'; renderKind(); renderBookPanel(); };
-  if (!(docKind === 'book' && docPages > 160)) line.appendChild(sw);
+  sw.onclick = (e) => { e.preventDefault(); docKind = alt; docWhy = 'chosen by you'; defaultSelection(); renderKind(); renderBookPanel(); };
+  line.appendChild(sw);
 }
 
 async function extractBook(file) {
@@ -499,20 +540,54 @@ async function extractBook(file) {
     pages.push(pageLines((await page.getTextContent()).items));
     if (i % 40 === 0) setStatus(st, 'Reading the PDF text: page ' + i + ' of ' + doc.numPages);
   }
-  const chapters = splitChapters(pages);
   setStatus(st, '');
-  return { chapters, pages: doc.numPages, lines: pages };
+  return { chapters: splitChapters(pages), pages: doc.numPages, lines: pages };
+}
+
+/**
+ * When no chapter headings can be recognized by rule (e.g. "1 Introduction"), Claude
+ * reads the first pages (table of contents) and the first lines of every page and
+ * returns the chapter titles with their start pages.
+ */
+async function outlineWithClaude(d) {
+  const head = d.lines.slice(0, 15).map((L, i) => '[page ' + (i + 1) + ']\n' + L.map((l) => l.s).join('\n')).join('\n').slice(0, 30000);
+  const firsts = d.lines.map((L, i) => (i + 1) + ': ' + L.slice(0, 3).map((l) => l.s).join(' | ').slice(0, 120)).join('\n').slice(0, 60000);
+  setStatus($('audioStatus'), 'Claude is finding the chapters...');
+  const r = await api({ action: 'audio_outline', token, pages: d.pages, head, firsts });
+  setStatus($('audioStatus'), '');
+  const list = (r.chapters || []).filter((c) => c.page >= 1 && c.page <= d.pages).sort((a, b) => a.page - b.page);
+  if (list.length < 2) return null;
+  const text = (a, b) => d.lines.slice(a - 1, b).map((L) => L.map((l) => l.s).join(' ')).join(' ');
+  const out = [];
+  if (list[0].page > 1) out.push({ title: 'Front matter (before the first chapter)', startPage: 1, endPage: list[0].page - 1, front: true });
+  list.forEach((c, k) => out.push({ title: String(c.title).slice(0, 80), startPage: c.page, endPage: k + 1 < list.length ? Math.max(c.page, list[k + 1].page - 1) : d.pages }));
+  out.forEach((c) => { c.text = text(c.startPage, c.endPage); });
+  return out;
+}
+
+function defaultSelection() {
+  if (!bookData) return;
+  bookData.chapters.forEach((c) => {
+    // Front matter: off for books (title pages, copyright), on for theses (abstract).
+    c.sel = c.front ? docKind === 'thesis' : !/^(references|bibliography|参考文献|appendix|附录)/i.test(c.title);
+  });
+}
+
+function chapterNote(c) {
+  const pages = c.endPage - c.startPage + 1;
+  if (docKind === 'thesis') return 'pp. ' + c.startPage + '–' + c.endPage + ' · about ' + fmtDur(estMinutes(c.text) * 0.9) + ' · Claude about $' + (PAPER_COST_PER_PAGE * (pages + 0.25 * pages)).toFixed(2);
+  return c.text.length.toLocaleString() + ' chars · ' + fmtDur(estMinutes(c.text));
 }
 
 function renderBookPanel() {
   const box = $('bookChapters'); box.textContent = '';
-  if (!bookData || docKind !== 'book') { $('bookPanel').classList.add('hidden'); return; }
+  if (!bookData || docKind === 'paper') { $('bookPanel').classList.add('hidden'); return; }
   $('bookPanel').classList.remove('hidden');
-  bookData.chapters.forEach((c, i) => {
+  bookData.chapters.forEach((c) => {
     const lab = el('label');
     const cb = el('input'); cb.type = 'checkbox'; cb.checked = c.sel !== false; cb.onchange = () => { c.sel = cb.checked; bookSummary(); };
     lab.appendChild(cb); lab.appendChild(el('span', null, c.title));
-    lab.appendChild(el('span', 'n', c.text.length.toLocaleString() + ' chars · ' + fmtDur(estMinutes(c.text))));
+    lab.appendChild(el('span', 'n', chapterNote(c)));
     box.appendChild(lab);
   });
   bookSummary();
@@ -520,16 +595,21 @@ function renderBookPanel() {
 function bookSummary() {
   if (!bookData) return;
   const sel = bookData.chapters.filter((c) => c.sel !== false);
-  const chars = sel.reduce((n, c) => n + c.text.replace(/\n/g, '').length, 0);
+  const chars = sel.reduce((n, c) => n + c.text.replace(/\n/g, '').length, 0) * (docKind === 'thesis' ? 0.9 : 1);
   const left = libUsage.cap ? Math.max(0, libUsage.cap - libUsage.used) : null;
-  $('bookSummary').textContent = bookData.pages + ' pages, ' + bookData.chapters.length + ' chapters found. Selected: ' + sel.length +
-    ' chapters, ' + chars.toLocaleString() + ' characters, about ' + fmtDur(sel.reduce((n, c) => n + estMinutes(c.text), 0)) +
-    (left != null ? '. Speech allowance left this month: ' + left.toLocaleString() + ' characters' + (chars > left ? ' (not enough: deselect some chapters)' : '') : '');
+  let t = bookData.pages + ' pages, ' + bookData.chapters.length + ' parts. Selected: ' + sel.length + ', about ' +
+    fmtDur(sel.reduce((n, c) => n + estMinutes(c.text), 0)) + ', ' + Math.round(chars).toLocaleString() + ' characters of speech';
+  if (docKind === 'thesis') {
+    const pages = sel.reduce((n, c) => n + c.endPage - c.startPage + 1, 0);
+    t += ', Claude about $' + (PAPER_COST_PER_PAGE * pages * 1.25).toFixed(2) + (pages > 320 ? ' (limit 320 pages per conversion: select fewer chapters)' : '');
+  }
+  if (left != null) t += '. Speech allowance left this month: ' + left.toLocaleString() + (chars > left ? ' (not enough: deselect some chapters)' : '');
+  $('bookSummary').textContent = t;
 }
 $('bookAll').onclick = () => { if (bookData) { bookData.chapters.forEach((c) => { c.sel = true; }); renderBookPanel(); } };
 $('bookNone').onclick = () => { if (bookData) { bookData.chapters.forEach((c) => { c.sel = false; }); renderBookPanel(); } };
 
-/** Reads the PDF text as soon as a file is chosen and decides how to read it. */
+/** Reads the PDF text as soon as a file is chosen, decides how to read it and splits it into chapters. */
 async function prepareBook() {
   const f = $('apdf').files[0];
   bookData = null; docKind = null; renderKind(); renderBookPanel();
@@ -538,14 +618,43 @@ async function prepareBook() {
   try {
     const d = await extractBook(f);
     const c = classifyDoc(d.lines, d.chapters);
+    docKind = c.kind; docWhy = c.why; docPages = d.pages;
+    if (docKind === 'thesis' && d.chapters.filter((x) => !x.front && x.title !== 'Full text').length < 3) {
+      try { const o = await outlineWithClaude(d); if (o) { d.chapters = o; docWhy += ', chapters found by Claude'; } }
+      catch (e) { setStatus($('audioStatus'), 'Chapter search failed (' + e.message + '); split by pages instead.', true); }
+      if (d.chapters.length < 2) {           // last resort: blocks of 20 pages
+        d.chapters = [];
+        for (let a = 1; a <= d.pages; a += 20) {
+          const b = Math.min(d.pages, a + 19);
+          d.chapters.push({ title: 'Pages ' + a + '–' + b, startPage: a, endPage: b,
+                            text: d.lines.slice(a - 1, b).map((L) => L.map((l) => l.s).join(' ')).join(' ') });
+        }
+      }
+    }
     delete d.lines;
-    bookData = d; docKind = c.kind; docWhy = c.why; docPages = d.pages;
+    bookData = d;
     if (docKind === 'book' && d.chapters.reduce((n, x) => n + x.text.length, 0) < 50) throw new Error('No text found. The PDF may be a scanned image without a text layer.');
-    renderKind(); renderBookPanel();
+    defaultSelection(); renderKind(); renderBookPanel();
   } catch (e) { setStatus($('audioStatus'), e.message, true); }
   $('audioBtn').disabled = false;
 }
 $('apdf').onchange = prepareBook;
+
+/** PDF parts of AUDIO_PAGES pages (plus one look-ahead page) for the selected page ranges. */
+async function splitPdfRanges(bytes, ranges) {
+  const src = await PDFLib.PDFDocument.load(bytes, { ignoreEncryption: true });
+  const total = src.getPageCount(), parts = [];
+  for (const r of ranges) {
+    for (let from = r.from; from <= r.to; from += AUDIO_PAGES) {
+      const to = Math.min(from + AUDIO_PAGES - 1, r.to), last = Math.min(to + 1, total);
+      const doc = await PDFLib.PDFDocument.create();
+      const idx = []; for (let i = from; i <= last; i++) idx.push(i - 1);
+      (await doc.copyPages(src, idx)).forEach((pg) => doc.addPage(pg));
+      parts.push({ b64: b64(await doc.save()), from, to, n: idx.length, ctx: last > to, c: r.c });
+    }
+  }
+  return { parts, total };
+}
 
 $('audioBtn').onclick = async () => {
   const f = $('apdf').files[0], st = $('audioStatus');
@@ -554,22 +663,29 @@ $('audioBtn').onclick = async () => {
   if (audioBusy) return;
   audioBusy = true; $('audioBtn').disabled = true;
   try {
-    const bytes = new Uint8Array(await f.arrayBuffer());
     if (!docKind) await prepareBook();
-    const payload = { action: 'audio_start', token, filename: f.name, voice: $('avoice').value, kind: audioKind() };
-    if (payload.kind === 'book') {
-      if (!bookData) await prepareBook();
+    const bytes = new Uint8Array(await f.arrayBuffer());
+    const kind = audioKind();
+    const payload = { action: 'audio_start', token, filename: f.name, voice: $('avoice').value, kind: kind === 'book' ? 'book' : 'paper' };
+    if (kind === 'book') {
       if (!bookData) throw new Error('Could not read the text of this PDF.');
       payload.chapters = bookData.chapters.filter((c) => c.sel !== false).map((c) => ({ title: c.title, text: c.text }));
       if (!payload.chapters.length) throw new Error('Select at least one chapter.');
-      if (bytes.length < 25e6) payload.pdf = b64(bytes);
+    } else if (kind === 'thesis') {
+      const sel = bookData.chapters.filter((c) => c.sel !== false);
+      if (!sel.length) throw new Error('Select at least one chapter.');
+      const pages = sel.reduce((n, c) => n + c.endPage - c.startPage + 1, 0);
+      if (pages > 320) throw new Error('Selected chapters have ' + pages + ' pages; the limit is 320 per conversion. Convert the rest separately.');
+      setStatus(st, 'Preparing the selected chapters...');
+      const { parts, total } = await splitPdfRanges(bytes, sel.map((c, i) => ({ from: c.startPage, to: c.endPage, c: i })));
+      payload.parts = parts; payload.pages = total; payload.chapterTitles = sel.map((c) => c.title);
     } else {
       setStatus(st, 'Reading the PDF...');
       const { parts, total } = await splitPdf(bytes);
-      if (total > 160) throw new Error('This PDF has ' + total + ' pages; paper mode handles up to 160. Click "Read as written instead".');
+      if (total > 160) throw new Error('This PDF has ' + total + ' pages; paper mode handles up to 160.');
       payload.parts = parts; payload.pages = total;
-      if (bytes.length < 25e6) payload.pdf = b64(bytes);
     }
+    if (bytes.length < 25e6) payload.pdf = b64(bytes);
     setStatus(st, 'Uploading...');
     await api(payload);
     setStatus(st, 'Started. It appears in your library below; you can close this page meanwhile.');
