@@ -22,23 +22,47 @@ test('WebKit renders the generated music at the chosen level', async ({ page, ba
   expect(r.size).toBe(44 + 2 * Math.round(r.seconds * 22050));
 });
 
-test('WebKit plays two audio elements at the same time', async ({ page, backend }) => {
+/** Media state of the test elements, for a readable failure. */
+const media = (page) => page.evaluate(() => ['__a', '__b'].filter((k) => window[k]).map((k) => {
+  const e = window[k];
+  return { el: k, t: +e.currentTime.toFixed(2), paused: e.paused, readyState: e.readyState, networkState: e.networkState, duration: e.duration, error: e.error && e.error.code };
+}));
+async function setUp(page, a, b) {
   await page.goto(INDEX_URL);
-  await page.evaluate(async (b64) => {
-    const y = await renderGeneratedSamples('rain', 1); setLevel(y, -30);
-    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-    window.__a = new Audio(URL.createObjectURL(new Blob([bytes], { type: 'audio/wav' })));     // stands for the narration
-    window.__b = new Audio(URL.createObjectURL(wavBlob(y, MUSIC_RATE)));                       // the music
-    const b = document.createElement('button'); b.id = 'both'; b.textContent = 'Play both';
-    b.onclick = () => { window.__a.play(); window.__b.play(); };
-    document.body.prepend(b);
-  }, toneWav(20, 220).toString('base64'));
-  await page.click('#both');                                   // a real click, as iOS requires
-  await expect.poll(() => page.evaluate(() => [__a.currentTime > 0.5, __b.currentTime > 0.5, !__a.paused, !__b.paused])).toEqual([true, true, true, true]);
-  // Pausing one leaves the other playing.
-  await page.evaluate(() => __a.pause());
-  const t = await page.evaluate(() => __b.currentTime);
-  await expect.poll(() => page.evaluate(() => __b.currentTime)).toBeGreaterThan(t + 0.3);
+  await page.evaluate(async ([a64, b64]) => {
+    const blob = async (x) => {
+      if (x === 'music') { const y = await renderGeneratedSamples('rain', 1); setLevel(y, -30); return wavBlob(y, MUSIC_RATE); }
+      return new Blob([Uint8Array.from(atob(x), (c) => c.charCodeAt(0))], { type: 'audio/wav' });
+    };
+    window.__a = new Audio(URL.createObjectURL(await blob(a64)));
+    if (b64) window.__b = new Audio(URL.createObjectURL(await blob(b64)));
+    const btn = document.createElement('button'); btn.id = 'go'; btn.textContent = 'Play';
+    btn.onclick = () => { window.__a.play(); if (window.__b) window.__b.play(); };
+    document.body.prepend(btn);
+  }, [a, b]);
+  await page.click('#go');                                     // a real click, as iOS requires
+}
+const advancing = async (page, keys) => {
+  await expect.poll(async () => (await media(page)).filter((m) => keys.includes(m.el)).every((m) => m.t > 0.5 && !m.paused),
+    { message: 'elements playing', timeout: 15000 }).toBe(true).catch(async (e) => { throw new Error(e.message + '\n' + JSON.stringify(await media(page))); });
+};
+
+test('WebKit plays two audio elements at the same time', async ({ page, backend }) => {
+  await setUp(page, toneWav(20, 220).toString('base64'), toneWav(20, 330).toString('base64'));
+  await advancing(page, ['__a', '__b']);
+  await page.evaluate(() => __a.pause());                      // pausing one leaves the other playing
+  const t = (await media(page))[1].t;
+  await expect.poll(async () => (await media(page))[1].t).toBeGreaterThan(t + 0.3);
+});
+
+test('WebKit plays the rendered music file', async ({ page, backend }) => {
+  await setUp(page, 'music');
+  await advancing(page, ['__a']);
+});
+
+test('WebKit plays the narration and the rendered music together', async ({ page, backend }) => {
+  await setUp(page, toneWav(20, 220).toString('base64'), 'music');
+  await advancing(page, ['__a', '__b']);
 });
 
 test('WebKit decodes and renders a file of "My music"', async ({ page, backend }) => {
