@@ -76,6 +76,7 @@
   .readtext span.s { cursor:pointer; border-radius:4px; transition: background .2s; }
   .readtext span.s:hover { background:var(--soft); }
   .readtext span.s.cur { background:#fff1b8; }
+  .readtext span.s.flash { background:#ffd84d; }
   .readtext span.s.pend { color:#aaa; cursor:default; }
   h2 { font-size: 18px; margin: 24px 0 12px; }
 </style>
@@ -185,7 +186,8 @@
             <option value="normal">Original</option><option value="loud" selected>Louder</option><option value="max">Loudest</option>
           </select>
           <label style="margin:0;display:flex;gap:4px;align-items:center"><input type="checkbox" id="pFollow" checked> Follow text</label>
-          <button class="ghost small" id="dlAudioBtn" style="margin-left:auto">Download MP3</button>
+          <button class="ghost small" id="pJump" style="margin-left:auto" title="Scroll the text to the sentence being read">Jump to current</button>
+          <button class="ghost small" id="dlAudioBtn">Download MP3</button>
           <button class="ghost small" id="dlScriptBtn">Download text</button>
         </div>
         <div id="pText" class="readtext"></div>
@@ -910,6 +912,17 @@ function highlight() {
     box.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
   }
 }
+/** Scrolls the text to the sentence being read and resumes following it. */
+function jumpToCurrent() {
+  if (!P || !P.sents || !P.sents.length) return;
+  lastUserScroll = 0;
+  if (P.cur < 0) highlight();
+  const e = P.sents[Math.max(0, P.cur)].el, box = $('pText');
+  box.scrollTo({ top: Math.max(0, e.offsetTop - box.offsetTop - box.clientHeight / 3), behavior: 'smooth' });
+  e.classList.add('flash'); setTimeout(() => e.classList.remove('flash'), 900);
+}
+$('pJump').onclick = jumpToCurrent;
+
 function frame() { if (!rafOn) return; highlight(); requestAnimationFrame(frame); }
 player.addEventListener('play', () => { rafOn = true; requestAnimationFrame(frame); });
 player.addEventListener('pause', () => { rafOn = false; saveProgress(true); });
