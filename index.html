@@ -136,6 +136,8 @@
     .mark { flex-wrap: wrap; flex: 1 1 100%; }
     .mark .w { max-width: 100%; flex: 1 1 100%; order: 3; }
     .readtext { max-height: 60vh; font-size: 18px; }
+    details.pron summary { min-height: 44px; display: flex; align-items: center; }
+    .pron td:last-child button { min-height: 44px; }
   }
 </style>
 </head>
@@ -431,6 +433,10 @@ function showApp() {
  */
 function logout() {
   if (P) closePlayer();                                   // saves the position while the token is still valid
+  // End the session on the server too (every token of this user stops working). Sent a moment later,
+  // so the position saved just above is not refused.
+  const old = token;
+  if (old) setTimeout(() => { api({ action: 'logout', token: old }).catch(() => {}); }, 2000);
   token = username = null; store('mp_token', null); store('mp_user', null);
   clearTimeout(libTimer); libItems = []; $('library').textContent = ''; $('libUsage').textContent = '';
   chat = { convId: null, messages: [] }; pendingDoc = null; currentFile = null; store('mp_chat', null);

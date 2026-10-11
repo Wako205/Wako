@@ -7,7 +7,8 @@ Every call is `POST` with a JSON body `{action, token, ...}` (sent as `text/plai
 ## Account
 | action | request | reply |
 |---|---|---|
-| `login` | `username, password` | `token, username` |
+| `login` | `username, password` | `token, username` (at most 5 failed attempts per user name per day, Japan time) |
+| `logout` | | `ok`; every token of this user issued so far stops working |
 
 ## Polish / review (async jobs)
 | action | request | reply |
@@ -21,7 +22,7 @@ Every call is `POST` with a JSON body `{action, token, ...}` (sent as `text/plai
 | action | request | reply |
 |---|---|---|
 | `audio_start` | `filename, voice, kind ('paper' or 'book')`; paper/thesis: `parts` (base64 PDF parts), `pages`, optional `chapterTitles`; book: `chapters [{title,text}]`, `selected [indices]` | `id` (library item), `jobId` |
-| `pdf_upload` | `id, size, index, data` (base64 of 4 MiB raw chunk `index`), `filename` | `done` (true after the last chunk) |
+| `pdf_upload` | `id, size, index, data` (base64 of 4 MiB raw chunk `index`), `filename` | `done` (true after the last chunk). The server checks `size` (at most 200 MB), `index`, the chunk length, and refuses a second upload for an item that already has its PDF |
 | `audio_library` | | `items, ttsUsed, ttsCap` |
 | `audio_text` | `id, chapter` | `texts` (one string per audio segment) |
 | `audio_part` | `id, chapter, index` | `data` (base64 MP3 of that segment) |
