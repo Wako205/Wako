@@ -130,3 +130,20 @@ test.describe('360 px', () => {
     expect(r).toEqual({ overflow: 0, small: [] });
   });
 });
+
+test('a result in a part that is still loading plays once the chapter is complete', async ({ page, backend }) => {
+  backend.library[0].chapters[0].n = 4;
+  const texts = ['Alpha one. Alpha two.', 'Beta one. Beta two.', 'Gamma one. Gamma two.', 'Delta target here. Delta two.'];
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  backend.on('audio_part', (b) => (b.chapter !== 0 || b.index < 2 ? { data: backend.mp3.toString('base64') } : gate.then(() => ({ data: backend.mp3.toString('base64') }))));
+  await openBook(page, backend, { 0: texts, 1: TEXTS[1] });
+  await expect.poll(() => page.evaluate(() => P && P.partial && P.partial.parts)).toBe(2);
+  await search(page, 'target');
+  await hits(page).first().click();
+  await expect(page.locator('#pStatus')).toHaveText('Loading the rest of this chapter...');
+  release();
+  await expect(page.locator('#pText span.s.cur')).toHaveText('Delta target here.');
+  await expect.poll(() => page.evaluate(() => !player.paused)).toBe(true);
+  await page.evaluate(() => player.pause());
+});

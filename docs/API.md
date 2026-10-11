@@ -23,7 +23,7 @@ Every call is `POST` with a JSON body `{action, token, ...}` (sent as `text/plai
 |---|---|---|
 | `audio_start` | `filename, voice, kind ('paper' or 'book')`; paper/thesis: `parts` (base64 PDF parts), `pages`, optional `chapterTitles`; book: `chapters [{title,text}]`, `selected [indices]` | `id` (library item), `jobId` |
 | `pdf_upload` | `id, size, index, data` (base64 of 4 MiB raw chunk `index`), `filename` | `done` (true after the last chunk). The server checks `size` (at most 200 MB), `index`, the chunk length, and refuses a second upload for an item that already has its PDF |
-| `audio_library` | | `items, ttsUsed, ttsCap` |
+| `audio_library` | | `items, ttsUsed, ttsCap` (Google), `azReady, azUsed, azCap` (Microsoft) |
 | `audio_text` | `id, chapter` | `texts` (one string per audio segment) |
 | `audio_part` | `id, chapter, index` | `data` (base64 MP3 of that segment) |
 | `audio_progress` | `id, chapter, time, label, slot ('last','b1','b2')` | `ok` |
@@ -35,4 +35,6 @@ Every call is `POST` with a JSON body `{action, token, ...}` (sent as `text/plai
 
 Library item: `{id, kind, title, created, state ('processing','done','error'), voice, lang, chars, chapters [{title, n, chars, status, voice}], pos, marks {b1, b2}, jobId, pdf}`. Chapter `n` is the number of audio segments; segment `k` of chapter `c` plays in order.
 
-Spending: speech is capped by the server at 1,030k characters per month (Google's free tier is 1,000k). `audio_preview` also counts. Tests must never call the real backend.
+Voices: Google Chirp 3 HD names (`Charon`, `Kore`, ...) or Microsoft Azure voices as `az:<voice name>` (for example `az:zh-CN-YunxiNeural`), accepted by `audio_start`, `audio_add` and `audio_preview`.
+
+Spending: Google speech is capped by the server at 1,030k characters per month (Google's free tier is 1,000k); Microsoft speech at 500k (the free F0 tier). `audio_preview` also counts. Tests must never call the real backend.

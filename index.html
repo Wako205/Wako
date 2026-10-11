@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="eye">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Wako205</title>
-<script>try { var t = localStorage.getItem('mp_theme'); if (t === 'night' || t === 'eye') document.documentElement.setAttribute('data-theme', t); } catch (e) {}</script>
+<script>try { var t = localStorage.getItem('mp_theme'); if (t === 'night') document.documentElement.setAttribute('data-theme', t); else if (t === 'day') document.documentElement.removeAttribute('data-theme'); } catch (e) {}</script>
 <style>
   /* Themes: day (default), night, eye care (warm paper tones, low blue light). Chosen in the top bar. */
   :root { --ink:#1c1c28; --muted:#666a7a; --line:#dcdde6; --accent:#4b2e83; --on-accent:#ffffff; --bg:#ffffff; --field:#ffffff; --soft:#f6f6fa;
@@ -83,6 +83,18 @@
   .bar { height:4px; background:var(--soft); border-radius:2px; margin-top:6px; overflow:hidden; } .bar i { display:block; height:100%; background:var(--accent); }
   .readtext { margin-top:14px; max-height: 55vh; overflow-y:auto; border-top:1px solid var(--line); padding-top:10px; line-height:1.9; font-size:17px; }
   .readtext p { margin:0 0 12px; }
+  /* Reading mode: only the text and a small control bar, filling the screen. */
+  .pmini { display:none; }
+  #playerCard.reading { position:fixed; inset:0; z-index:50; margin:0 !important; border:0; border-radius:0; padding:0;
+    display:flex; flex-direction:column; background:var(--bg); }
+  #playerCard.reading > :not(#pText):not(#pMini):not(audio) { display:none !important; }
+  #playerCard.reading > audio { position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; }
+  #playerCard.reading #pText { flex:1; max-height:none; margin:0; border:0; padding:24px max(20px, calc((100% - 760px) / 2)) 24px; font-size:20px; line-height:2; }
+  #playerCard.reading .pmini { display:flex; align-items:center; gap:10px; padding:8px max(12px, calc((100% - 760px) / 2));
+    padding-bottom:max(8px, env(safe-area-inset-bottom)); border-top:1px solid var(--line); background:var(--soft); }
+  .pmini input[type=range] { flex:1; min-width:0; accent-color:var(--accent); height:28px; }
+  .pmini .t { font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .pmini button { min-width:44px; min-height:40px; }
   .readtext span.s { cursor:pointer; border-radius:4px; transition: background .2s; }
   .readtext span.s:hover { background:var(--soft); }
   .readtext span.s.cur { background:var(--hl); }
@@ -154,7 +166,7 @@
   <div class="top">
     <h1>Wako205</h1>
     <div class="themes" id="themes" role="group" aria-label="Color theme">
-      <button data-theme="day" title="White background">白天</button><button data-theme="night" title="Dark background">黑夜</button><button data-theme="eye" title="Warm paper tones, less blue light">护眼</button>
+      <button data-theme="eye" title="Warm paper tones, less blue light">护眼</button><button data-theme="day" title="White background">白天</button><button data-theme="night" title="Dark background">黑夜</button>
     </div>
     <div class="who hidden" id="who"><span id="whoName"></span><span id="whoUsage"></span><button class="ghost small" id="logoutBtn">Log out</button></div>
   </div>
@@ -170,13 +182,13 @@
 
   <div id="appView" class="hidden" style="display:flex;flex-direction:column;flex:1">
     <div class="tabs">
-      <button id="tabChat" class="active">Chat</button>
+      <button id="tabAudio" class="active">PDF to audio</button>
       <button id="tabTools">Polish / Review<span class="wide-only"> (Word &amp; LaTeX)</span></button>
-      <button id="tabAudio">PDF to audio</button>
+      <button id="tabChat">Chat</button>
     </div>
 
     <!-- Chat -->
-    <section id="chatView">
+    <section id="chatView" class="hidden">
       <div id="messages"></div>
       <div class="composer">
         <div class="row" style="margin-bottom:8px">
@@ -232,7 +244,7 @@
     </section>
 
     <!-- PDF to audio -->
-    <section id="audioView" class="hidden">
+    <section id="audioView">
       <!-- Player (opened from the library) -->
       <section class="card hidden" id="playerCard" style="margin-bottom:16px">
         <div class="row" style="justify-content:space-between">
@@ -258,6 +270,7 @@
           </select>
           <label class="follow" style="margin:0;display:flex;gap:4px;align-items:center"><input type="checkbox" id="pFollow" checked> Follow<span class="wide-only"> text</span></label>
           <button class="ghost small" id="pJump" style="margin-left:auto" title="Scroll the text to the sentence being read">Jump<span class="wide-only"> to current</span></button>
+          <button class="ghost small" id="pRead" title="Show only the text, with a small progress bar">Full screen</button>
         </div>
         <div id="pMarks" class="marks"></div>
         <form class="row psearch" id="pSearchForm" role="search" style="margin-top:10px">
@@ -267,6 +280,12 @@
         <div class="status" id="pSearchInfo" aria-live="polite"></div>
         <div id="pResults" class="results"></div>
         <div id="pText" class="readtext"></div>
+        <div id="pMini" class="pmini" role="group" aria-label="Playback">
+          <button class="small" id="mPlay" aria-label="Play">▶</button>
+          <span class="t" id="mTime">0:00 / 0:00</span>
+          <input type="range" id="mSeek" min="0" max="1000" value="0" step="1" aria-label="Position in the chapter">
+          <button class="ghost small" id="mExit" aria-label="Leave full screen">Exit</button>
+        </div>
         <div class="row" style="margin-top:10px">
           <button class="ghost small" id="dlAudioBtn">Download MP3</button>
           <button class="ghost small" id="dlScriptBtn">Download text</button>
@@ -289,12 +308,25 @@
         <label for="avoice">Voice</label>
         <div class="row" style="flex-wrap:nowrap">
         <select id="avoice" style="flex:1">
-          <option value="Charon">Charon (male, calm)</option>
-          <option value="Kore">Kore (female, clear)</option>
-          <option value="Aoede">Aoede (female, light)</option>
-          <option value="Orus">Orus (male, firm)</option>
-          <option value="Puck">Puck (male, lively)</option>
-          <option value="Leda">Leda (female, youthful)</option>
+          <optgroup label="Google (best for English)">
+            <option value="Charon">Charon (male, calm)</option>
+            <option value="Kore">Kore (female, clear)</option>
+            <option value="Aoede">Aoede (female, light)</option>
+            <option value="Orus">Orus (male, firm)</option>
+            <option value="Puck">Puck (male, lively)</option>
+            <option value="Leda">Leda (female, youthful)</option>
+          </optgroup>
+          <optgroup label="Microsoft (best for Chinese)" id="azVoices" class="hidden" disabled>
+            <option value="az:zh-CN-YunxiNeural">云希 Yunxi (男, 叙述)</option>
+            <option value="az:zh-CN-YunjianNeural">云健 Yunjian (男, 浑厚)</option>
+            <option value="az:zh-CN-YunyangNeural">云扬 Yunyang (男, 播音)</option>
+            <option value="az:zh-CN-XiaoxiaoNeural">晓晓 Xiaoxiao (女, 温暖)</option>
+            <option value="az:zh-CN-XiaochenNeural">晓辰 Xiaochen (女, 自然)</option>
+            <option value="az:ja-JP-NanamiNeural">七海 Nanami (日本語, 女)</option>
+            <option value="az:ja-JP-KeitaNeural">圭太 Keita (日本語, 男)</option>
+            <option value="az:en-US-AndrewMultilingualNeural">Andrew (English, male)</option>
+            <option value="az:en-US-AvaMultilingualNeural">Ava (English, female)</option>
+          </optgroup>
         </select>
         <button class="ghost" id="previewBtn" type="button" title="Hear the first sentences of the selected text in this voice (uses about 0.1k characters of the allowance)">试听 Preview</button>
         </div>
@@ -421,7 +453,7 @@ async function waitForJob(jobId, onTick) {
 function showUsage(d) { if (d && d.used != null) $('whoUsage').textContent = 'Used this month: $' + d.used.toFixed(2) + ' of $' + d.limit; }
 
 // ---------------------------------------------------------------------------
-// 3. Color theme: white (default), night or eye care; remembered in this browser.
+// 3. Color theme: eye care (default), white or night; remembered in this browser.
 // The saved theme is applied before the page is drawn by the script in <head>.
 // ---------------------------------------------------------------------------
 function setTheme(t) {
@@ -439,6 +471,7 @@ function showApp() {
   $('loginView').classList.add('hidden'); $('appView').classList.remove('hidden');
   $('who').classList.remove('hidden'); $('whoName').textContent = username;
   renderChat();
+  switchTab('audio');
 }
 /**
  * Ends the session: forgets the token and everything shown for the account (chat with
@@ -462,7 +495,7 @@ function logout() {
   ['chatStatus', 'runStatus', 'audioStatus'].forEach((id) => setStatus($(id), ''));
   $('whoUsage').textContent = '';
   $('appView').classList.add('hidden'); $('who').classList.add('hidden'); $('loginView').classList.remove('hidden');
-  switchTab('chat');
+  switchTab('audio');
 }
 $('loginBtn').onclick = async () => {
   const st = $('loginStatus'); $('loginBtn').disabled = true; setStatus(st, 'Checking...');
@@ -483,7 +516,7 @@ function switchTab(t) {
   [['chat', 'tabChat', 'chatView'], ['tools', 'tabTools', 'toolsView'], ['audio', 'tabAudio', 'audioView']].forEach(([k, tab, view]) => {
     $(tab).classList.toggle('active', t === k); $(view).classList.toggle('hidden', t !== k);
   });
-  if (t === 'audio') { renderPron(); loadLibrary(); } else clearTimeout(libTimer);
+  if (t === 'audio' && token) { renderPron(); loadLibrary(); } else clearTimeout(libTimer);
 }
 
 // ---------------------------------------------------------------------------
@@ -749,7 +782,7 @@ function bookSummary() {
   if (!bookData) return;
   const sel = bookData.chapters.filter((c) => c.sel !== false);
   const chars = sel.reduce((n, c) => n + c.text.replace(/\n/g, '').length, 0) * (docKind === 'thesis' ? 0.9 : 1);
-  const left = libUsage.cap ? Math.max(0, libUsage.cap - libUsage.used) : null;
+  const al = allowance($('avoice').value), left = al.cap ? Math.max(0, al.cap - al.used) : null;
   if (!sel.length) { $('bookSummary').textContent = bookData.pages + ' pages, ' + bookData.chapters.length + ' parts. Tick the chapters you want converted to audio.'; $('audioBtn').disabled = true; return; }
   if (!audioBusy) $('audioBtn').disabled = false;
   let t = bookData.pages + ' pages, ' + bookData.chapters.length + ' parts. Selected: ' + sel.length + ', about ' +
@@ -758,7 +791,7 @@ function bookSummary() {
     const pages = sel.reduce((n, c) => n + c.endPage - c.startPage + 1, 0);
     t += ', Claude about $' + (PAPER_COST_PER_PAGE * pages * 1.25).toFixed(2) + (pages > 320 ? ' (limit 320 pages per conversion: select fewer chapters)' : '');
   }
-  if (left != null) t += '. Speech allowance left this month: ' + fmtK(left, true) + ' of ' + fmtK(libUsage.cap) + (chars > left ? ' (not enough: deselect some chapters)' : '');
+  if (left != null) t += '. Speech allowance left this month for this voice: ' + fmtK(left, true) + ' of ' + fmtK(al.cap) + (chars > left ? ' (not enough: deselect some chapters)' : '');
   $('bookSummary').textContent = t;
 }
 $('bookAll').onclick = () => { if (bookData) { bookData.chapters.forEach((c) => { c.sel = true; }); renderBookPanel(); } };
@@ -957,12 +990,24 @@ $('audioBtn').onclick = async () => {
 // ---------------------------------------------------------------------------
 // 9. Audio: library
 // ---------------------------------------------------------------------------
-const libUsage = { used: 0, cap: 0 };
+const libUsage = { used: 0, cap: 0, azUsed: 0, azCap: 0, azReady: false };
+/** Short display name of a voice value. */
+function voiceLabel(v) { const o = Array.from($('avoice').options).find((x) => x.value === v); return o ? o.textContent.replace(/\s*\(.*\)$/, '') : v; }
+$('avoice').addEventListener('change', () => bookSummary());
+/** Allowance of the engine a voice belongs to ('az:...' voices are Microsoft, the others Google). */
+function allowance(voice) {
+  return /^az:/.test(voice || '') ? { used: libUsage.azUsed, cap: libUsage.azCap } : { used: libUsage.used, cap: libUsage.cap };
+}
 async function loadLibrary() {
   try {
     const d = await api({ action: 'audio_library', token });
-    libItems = d.items || []; libUsage.used = d.ttsUsed || 0; libUsage.cap = d.ttsCap || 0;
-    $('libUsage').textContent = 'Speech used this month: ' + fmtK(libUsage.used, true) + ' of ' + fmtK(libUsage.cap);
+    libItems = (d.items || []).filter((x) => x && x.id); libUsage.used = d.ttsUsed || 0; libUsage.cap = d.ttsCap || 0;
+    libUsage.azUsed = d.azUsed || 0; libUsage.azCap = d.azCap || 0; libUsage.azReady = !!d.azReady;
+    const az = $('azVoices'); az.disabled = !libUsage.azReady; az.classList.toggle('hidden', !libUsage.azReady);
+    if (!libUsage.azReady && /^az:/.test($('avoice').value)) $('avoice').value = 'Charon';
+    $('libUsage').textContent = 'Speech used this month: ' + (libUsage.azReady ? 'Google ' : '') + fmtK(libUsage.used, true) + ' of ' + fmtK(libUsage.cap) +
+      (libUsage.azReady ? ' · Microsoft' + (d.azTier === 's0' && d.azUntil ? ' (trial tier until ' + new Date(d.azUntil - 1).toLocaleDateString() + ')' : '') + ' ' +
+        fmtK(libUsage.azUsed, true) + ' of ' + fmtK(libUsage.azCap) : '');
     renderLibrary(); bookSummary();
     pollLibrary();
   } catch (e) {
@@ -988,7 +1033,7 @@ function renderLibrary() {
     if (it.kind === 'book') meta.push(chaptersDone(it) + ' of ' + it.chapters.length + ' chapters converted');
     else if (it.chapters && it.chapters.length > 1) meta.push(it.chapters.length + ' chapters');
     if (it.chars) meta.push('about ' + fmtDur(itemMinutes(it)));
-    if (it.voice) meta.push('voice ' + it.voice);
+    if (it.voice) meta.push('voice ' + voiceLabel(it.voice));
     if (it.pos && it.chapters && it.chapters[it.pos.c]) meta.push('resume at ' + (it.chapters.length > 1 ? it.chapters[it.pos.c].title + ' ' : '') + fmtTime(it.pos.t));
     g.appendChild(el('div', 'm', meta.join(' · ')));
     if (it.state === 'processing') {
@@ -1045,11 +1090,14 @@ function toggleAddPanel(it, row) {
   box.appendChild(list);
   const row2 = el('div', 'row'); row2.style.marginTop = '10px';
   const voice = $('avoice').cloneNode(true); voice.removeAttribute('id'); voice.style.width = 'auto'; voice.value = it.voice || 'Charon';
+  voice.querySelectorAll('[id]').forEach((x) => x.removeAttribute('id'));
+  if (!voice.value) voice.value = 'Charon';
+  voice.onchange = () => sum();
   const go = el('button', null, 'Convert selected'); const st = el('span', 'status');
   const sum = () => {
     const chars = it.chapters.reduce((n, ch, i) => n + (picks[i] ? ch.chars || 0 : 0), 0);
-    const left = Math.max(0, libUsage.cap - libUsage.used);
-    st.textContent = chars ? fmtK(chars) + ' of speech; allowance left ' + fmtK(left, true) + ' of ' + fmtK(libUsage.cap) + (chars > left ? ' (not enough)' : '') : 'Tick chapters to convert.';
+    const al = allowance(voice.value), left = Math.max(0, al.cap - al.used);
+    st.textContent = chars ? fmtK(chars) + ' of speech; allowance left for this voice ' + fmtK(left, true) + ' of ' + fmtK(al.cap) + (chars > left ? ' (not enough)' : '') : 'Tick chapters to convert.';
     go.disabled = !chars;
   };
   go.onclick = async () => {
@@ -1166,6 +1214,7 @@ $('pNext').onclick = () => stepChapter(1);
 $('pClose').onclick = () => closePlayer();
 function closePlayer() {
   clearSearch();
+  leaveReading();
   saveProgress(true);
   player.pause(); player.removeAttribute('src'); player.load();
   if (P) Object.values(P.cache).forEach((x) => URL.revokeObjectURL(x.url));
@@ -1177,11 +1226,25 @@ function closePlayer() {
  * Audio and text of chapter c: all its segments, fetched four at a time and joined
  * into one MP3. Concurrent calls for the same chapter share one download.
  */
-function fetchChapter(c, onStatus) {
+/** Chapter data (texts, segment timings, one MP3 blob) from the first `parts` downloaded segments. */
+function chapterData(texts, bufs, parts) {
+  const segs = []; let t = 0;
+  for (let k = 0; k < parts; k++) { const d = mp3Duration(bufs[k]); segs.push({ t0: t, dur: d }); t += d; }
+  const blob = new Blob(bufs.slice(0, parts), { type: 'audio/mpeg' });
+  return { texts, segs, parts, blob, bufs: bufs.slice(0, parts), url: URL.createObjectURL(blob) };
+}
+const EARLY_PARTS = 2;   // playback starts once this many parts (several minutes of speech) are in
+
+/**
+ * Downloads chapter c. onEarly(data), if given, is called once with the first EARLY_PARTS
+ * parts, so playback can start while the rest is still loading.
+ */
+function fetchChapter(c, onStatus, onEarly) {
   const id = P.item.id, ch = P.item.chapters[c], cache = P.cache, loading = P.loading;
   if (cache[c] && cache[c].parts >= ch.n) return Promise.resolve(cache[c]);
-  if (loading[c]) return loading[c];
+  if (loading[c]) { if (onEarly) loading[c].early = onEarly; return loading[c]; }
   const say = onStatus || (() => {});
+  let earlyDone = false;
   const job = (async () => {
     say('Loading audio...');
     const texts = await chapterTexts(P.item, c);
@@ -1193,19 +1256,22 @@ function fetchChapter(c, onStatus) {
         try { bufs[k] = unb64((await api({ action: 'audio_part', token, id, chapter: c, index: k })).data); }
         catch (e) { if (/not ready/i.test(e.message)) { stop = Math.min(stop, k); continue; } throw e; }
         say('Loading audio: ' + bufs.filter(Boolean).length + ' of ' + ch.n);
+        const cb = job.early;
+        if (cb && !earlyDone) {
+          let pre = 0; while (pre < ch.n && bufs[pre]) pre++;
+          if (pre >= EARLY_PARTS && pre < ch.n) { earlyDone = true; cb(chapterData(texts, bufs, pre)); }
+        }
       }
     };
     await Promise.all([worker(), worker(), worker(), worker()]);
     let parts = 0; while (parts < ch.n && bufs[parts]) parts++;
     if (!parts) throw new Error('This chapter has not been converted yet.');
-    const segs = []; let t = 0;
-    for (let k = 0; k < parts; k++) { const d = mp3Duration(bufs[k]); segs.push({ t0: t, dur: d }); t += d; }
-    const blob = new Blob(bufs.slice(0, parts), { type: 'audio/mpeg' });
     if (cache[c]) URL.revokeObjectURL(cache[c].url);
-    cache[c] = { texts, segs, parts, blob, bufs: bufs.slice(0, parts), url: URL.createObjectURL(blob) };
+    cache[c] = chapterData(texts, bufs, parts);
     if (!P || P.cache !== cache) URL.revokeObjectURL(cache[c].url);   // the player was closed meanwhile
     return cache[c];
   })();
+  job.early = onEarly || null;
   loading[c] = job;
   job.then(() => { delete loading[c]; }, () => { delete loading[c]; });
   return job;
@@ -1303,6 +1369,12 @@ async function openHit(h) {
   if (!P) return;
   if (P.c !== h.c || !P.sents) await loadChapter(h.c, 0, false);
   if (!P || P.c !== h.c || !P.sents) return;
+  if (P.partial && P.loading[h.c]) {                   // only the first parts are in: wait for the whole chapter
+    setStatus($('pStatus'), 'Loading the rest of this chapter...');
+    await P.loading[h.c].catch(() => {});
+    await sleep(0);
+    if (!P || P.c !== h.c || P.partial) return;
+  }
   const spans = Array.from($('pText').querySelectorAll('span.s'));
   let sp = null;
   spans.forEach((s) => { if (Number(s.dataset.k) === h.k && Number(s.dataset.off) <= h.from) sp = s; });
@@ -1347,24 +1419,45 @@ async function loadChapter(c, startAt, autoplay) {
   // the previous one: browsers then allow play() in the background.
   const ready = P.cache[c] && P.cache[c].parts >= ch.n;
   if (!ready) player.pause();
+  P.partial = null; P.waitFull = false;
+  const here = () => P && P.c === c && P.item.id === id;
   try {
-    const data = ready ? P.cache[c] : await fetchChapter(c, (m) => setStatus(st, m));
-    if (!P || P.c !== c || P.item.id !== id) return;          // the user moved on meanwhile
-    renderReadText(data);
-    P.sents = data.sents; P.cur = -1;
-    player.src = data.url;
-    player.playbackRate = Number($('arate').value);
-    player.onloadedmetadata = () => {
-      player.playbackRate = Number($('arate').value);
-      if (startAt) player.currentTime = Math.min(startAt, player.duration - 1);
-      highlight(); updatePositionState();
-    };
-    if (autoplay) player.play().catch(() => {});
+    // Playback starts with the first parts; the full chapter replaces them when it is in.
+    const data = ready ? P.cache[c] : await fetchChapter(c, (m) => { if (here()) setStatus(st, m); }, (part) => {
+      if (!here()) { URL.revokeObjectURL(part.url); return; }
+      P.partial = part;
+      startChapter(part, startAt, autoplay);
+    });
+    if (!here()) return;                                       // the user moved on meanwhile
+    const part = P.partial;
+    if (part) {
+      P.partial = null;
+      const t = player.currentTime, resume = P.waitFull || (!player.paused && !player.ended);
+      P.waitFull = false;
+      const box = $('pText'), top = box.scrollTop;
+      startChapter(data, t, resume, true);
+      box.scrollTop = top;
+      URL.revokeObjectURL(part.url);
+    } else startChapter(data, startAt, autoplay);
     setStatus(st, data.parts < ch.n ? 'Converted so far: ' + data.parts + ' of ' + ch.n + ' parts of this chapter.' : '');
-    updateMediaSession();
     if (!data.refined) { data.refined = true; refineTimings(data).catch(() => {}); }
     prefetchNext();
   } catch (e) { setStatus(st, e.message, true); if (/log in again/i.test(e.message)) logout(); }
+}
+
+/** Shows the text of `data` and plays its audio from startAt (seconds). */
+function startChapter(data, startAt, autoplay, keepPlace) {
+  renderReadText(data);
+  P.sents = data.sents; if (!keepPlace) P.cur = -1;
+  player.src = data.url;
+  player.playbackRate = Number($('arate').value);
+  player.onloadedmetadata = () => {
+    player.playbackRate = Number($('arate').value);
+    if (startAt) player.currentTime = Math.min(startAt, Math.max(0, player.duration - 1));
+    highlight(); updatePositionState();
+  };
+  if (autoplay) player.play().catch(() => {});
+  updateMediaSession();
 }
 
 function renderReadText(data) {
@@ -1565,12 +1658,60 @@ function jumpToCurrent() {
 }
 $('pJump').onclick = jumpToCurrent;
 
+// Reading mode: the text fills the screen with a small control bar. Uses the browser's full
+// screen where it is available (not for this kind of page on iPhone), otherwise fills the window.
+let readTimer = null, seeking = false;
+function updateMini() {
+  const d = isFinite(player.duration) ? player.duration : 0, t = player.currentTime || 0;
+  $('mTime').textContent = fmtTime(t) + ' / ' + fmtTime(d);
+  if (!seeking) $('mSeek').value = d ? Math.round(t / d * 1000) : 0;
+  $('mPlay').textContent = player.paused ? '▶' : '❚❚';
+  $('mPlay').setAttribute('aria-label', player.paused ? 'Play' : 'Pause');
+}
+function enterReading() {
+  if (!P) return;
+  const card = $('playerCard');
+  card.classList.add('reading'); document.body.style.overflow = 'hidden';
+  if (card.requestFullscreen && !document.fullscreenElement) card.requestFullscreen().catch(() => {});
+  clearInterval(readTimer); readTimer = setInterval(updateMini, 250); updateMini();
+  setTimeout(jumpToCurrent, 50);
+}
+function leaveReading() {
+  const card = $('playerCard');
+  if (!card.classList.contains('reading')) return;
+  card.classList.remove('reading'); document.body.style.overflow = '';
+  clearInterval(readTimer); readTimer = null;
+  if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+  setTimeout(jumpToCurrent, 50);
+}
+$('pRead').onclick = enterReading;
+$('mExit').onclick = leaveReading;
+$('mPlay').onclick = () => { if (player.paused) player.play().catch(() => {}); else player.pause(); setTimeout(updateMini, 50); };
+$('mSeek').addEventListener('input', () => {
+  seeking = true;
+  const d = isFinite(player.duration) ? player.duration : 0;
+  $('mTime').textContent = fmtTime(d * $('mSeek').value / 1000) + ' / ' + fmtTime(d);
+});
+$('mSeek').addEventListener('change', () => {
+  const d = isFinite(player.duration) ? player.duration : 0;
+  if (d) player.currentTime = d * $('mSeek').value / 1000;
+  seeking = false; updateMini();
+});
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) leaveReading(); });
+document.addEventListener('keydown', (e) => {
+  if (!$('playerCard').classList.contains('reading')) return;
+  if (e.key === 'Escape') leaveReading();
+  else if (e.key === ' ' && e.target === document.body) { e.preventDefault(); $('mPlay').click(); }
+});
+
 function frame() { if (!rafOn) return; highlight(); requestAnimationFrame(frame); }
 
 /** At the end of a chapter the next converted one starts (from memory when prefetched). */
 function chapterEnded() {
   rafOn = false;
   if (!P) return;
+  // Only the first parts are loaded: wait for the rest, which then continues from here.
+  if (P.partial) { P.waitFull = true; setStatus($('pStatus'), 'Loading the rest of this chapter...'); return; }
   const n = nextReadyChapter(P.c);
   if (n >= 0) loadChapter(n, 0, true);
   else saveProgress(true);
