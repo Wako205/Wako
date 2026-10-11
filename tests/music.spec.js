@@ -178,3 +178,25 @@ test('quick changes of the choices end with the music of the last choice', async
   await expect.poll(() => page.evaluate(() => !music.paused)).toBe(true);
   await page.evaluate(() => player.pause());
 });
+
+test('after a media error the music tries the same track once more under a new address', async ({ page, backend }) => {
+  await openBook(page);
+  await musicOn(page);
+  await page.evaluate(() => player.play());
+  await expect(page.locator('#mStatus')).toHaveText('Playing: Rain.', { timeout: 20000 });
+  await expect.poll(async () => (await st(page)).music).toBe(true);
+  // A real media error: the address of the playing file stops working.
+  const breakIt = () => page.evaluate(() => { URL.revokeObjectURL(music.src); music.load(); });
+  const first = (await st(page)).src;
+  await breakIt();
+  await expect.poll(async () => (await st(page)).src).not.toBe(first);
+  await expect.poll(async () => { const s = await st(page); return s.music && s.t > 0.3; }).toBe(true);
+  expect(await page.evaluate(() => mTrack.retried)).toBe(true);
+  // A second error is not retried again (no endless loop); the narration goes on.
+  const second = (await st(page)).src;
+  await breakIt();
+  await expect.poll(() => page.evaluate(() => !!(music.error && music.error.code))).toBe(true);
+  expect((await st(page)).src).toBe(second);
+  expect((await st(page)).player).toBe(true);
+  await page.evaluate(() => player.pause());
+});
