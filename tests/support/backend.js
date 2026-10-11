@@ -118,7 +118,7 @@ class MockBackend {
       if (body.action === 'login') {
         r = body.password === 'secret' ? { token: this.token, username: body.username } : { ok: false, error: 'Wrong username or password.' };
         if (this.handlers.login) r = this.handlers.login(body);
-      } else r = this.reply(body);
+      } else r = await this.reply(body);   // a handler may return a promise (slow replies)
       await route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(Object.assign({ ok: true }, r)) });
     });
     // sendBeacon (used on pagehide) is replaced by a fetch so the mock sees it too.
