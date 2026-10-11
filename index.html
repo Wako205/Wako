@@ -2632,14 +2632,18 @@ async function makeTrack(gen) {
   if (mPrefs.source === 'gen') {
     const seed = mSeed++, y = await renderGeneratedSamples(mPrefs.preset, seed);
     const lv = setLevel(y, musicTarget());
-    return { gen, url: URL.createObjectURL(wavBlob(y, MUSIC_RATE)), label: MUSIC_PRESETS[mPrefs.preset].name, seconds: y.length / MUSIC_RATE, ...lv };
+    return track(gen, y, MUSIC_PRESETS[mPrefs.preset].name, lv);
   }
   const list = await myMusicList();
   if (!list.length) throw new Error('Add audio files to play your own music.');
   mIndex = mPrefs.order === 'shuffle' && list.length > 1 ? (mIndex + 1 + Math.floor(Math.random() * (list.length - 1))) % list.length : (mIndex + 1) % list.length;
   const f = list[mIndex], y = await renderFileSamples(await myMusicData(f.key));
   const lv = setLevel(y, musicTarget());
-  return { gen, url: URL.createObjectURL(wavBlob(y, MUSIC_RATE)), label: f.name, seconds: y.length / MUSIC_RATE, ...lv };
+  return track(gen, y, f.name, lv);
+}
+function track(gen, y, label, lv) {
+  const blob = wavBlob(y, MUSIC_RATE);
+  return { gen, blob, url: URL.createObjectURL(blob), label, seconds: y.length / MUSIC_RATE, retried: false, ...lv };
 }
 function dropTrack(t) { if (t && t.url) URL.revokeObjectURL(t.url); }
 /** Prepares the following track while the current one plays, so the switch needs no work in the background. */
@@ -2686,6 +2690,14 @@ music.addEventListener('ended', () => {
   else music.currentTime = 0;
   if (musicWanted()) music.play().catch(() => {});
   prepareNext();
+});
+// WebKit sometimes refuses a file it can play (seen under load); the track gets one more try under a new address.
+music.addEventListener('error', () => {
+  const t = mTrack;
+  if (!t || t.retried || music.getAttribute('src') !== t.url) return;
+  t.retried = true; URL.revokeObjectURL(t.url); t.url = URL.createObjectURL(t.blob);
+  music.src = t.url;
+  if (musicWanted()) music.play().catch(() => {});
 });
 // iOS lets an element play by itself only after it has played once in a tap.
 function unlockMusic() {
