@@ -1,6 +1,11 @@
 const { test, expect, login, openAudio, INDEX_URL } = require('./support/backend');
 const { makeBookPdf } = require('./support/media');
 
+// The section is hidden in the page for now; these tests show it to check that it still works.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => document.addEventListener('DOMContentLoaded', () => document.getElementById('pronBox').classList.remove('hidden')));
+});
+
 async function addTerm(page, term, say) {
   await page.fill('#pronTerm', term);
   await page.fill('#pronSay', say);

@@ -10,7 +10,7 @@ Ground rules (same as rounds 1 and 2)
 - One branch and one pull request per task, each based on the current `main`. All existing tests must keep passing; add tests for every new behaviour.
 - If a task needs a backend change, describe it in the pull request instead of working around it.
 
-Since round 2, `main` gained: per-chapter delete, shared library (`audio_share`, `audio_public`, `owner` on `audio_text`/`audio_part`/`audio_progress`), positions and bookmarks stored per user in the browser (`mp_pos_<user>_<id>`, `mp_mark_<slot>_<user>_<id>`), waiting for chapters still being converted at the end of a chapter, Screen Wake Lock, Microsoft voices listed first, and the user name in the header (`#brand`).
+Since round 2, `main` gained: per-chapter delete, shared library (`audio_share`, `audio_public`, `owner` on `audio_text`/`audio_part`/`audio_progress`), positions and bookmarks stored per user in the browser (`mp_pos_<user>_<id>`, `mp_mark_<slot>_<user>_<id>`), waiting for chapters still being converted at the end of a chapter, Screen Wake Lock (`#pAwake`), Microsoft voices listed first, the user name in the header (`#brand`), no volume modes and no Web Audio during playback (so it continues with the screen locked), text following always on (no `#pFollow`), the pronunciation list hidden, and the speech allowances as a column chart beside the conversion form (`#usageCard`).
 
 ## 0. Bring the round 2 pull requests up to date
 PRs #6 (pdf.js 4), #7 (sleep timer), #8 (search) and #9 (offline) conflict with the new `main`. Merge `main` into each branch (merge commits, no rewriting), resolve the conflicts, and keep all tests passing. In particular:
@@ -20,14 +20,16 @@ PRs #6 (pdf.js 4), #7 (sleep timer), #8 (search) and #9 (offline) conflict with 
 Do not merge the pull requests; report when each is ready.
 
 ## E. Background music under the narration
-Optional quiet music while listening, mixed under the speech.
-- Sources, in this order of priority:
-  1. "Generated": lo-fi style music synthesized in the browser with the Web Audio API (soft electric piano or pad chords on a slow progression, a gentle drum loop with swing, vinyl crackle, low-pass filtering). No audio files, so no licensing questions. A few presets (for example "Rain", "Night", "Café") that differ in tempo, key and texture; endless and non-repetitive enough for an hour of listening.
+Optional quiet lo-fi music while listening, playing together with the speech.
+- Hard requirement: playback must continue with the iPhone screen locked. iOS suspends Web Audio when the screen locks, which is why `main` removed the volume modes and plays the narration through the plain `<audio id="player">` element only. Do not route the narration through an `AudioContext`, and do not play the music through one at run time either.
+- Sources:
+  1. "Generated": lo-fi style music synthesized in this page (soft electric piano or pad chords on a slow progression, a gentle drum loop with swing, vinyl crackle, low-pass filtering). Render it ahead of time with an `OfflineAudioContext` into a loop of a few minutes (WAV blob), and play that blob in a second plain `<audio>` element with `loop`. A few presets (for example "Rain", "Night", "Café") that differ in tempo, key and texture; vary the loop so an hour of listening is not tiring. No audio files are downloaded, so there are no licensing questions.
   2. "My music": the user picks audio files from the device; they are kept in this browser only (IndexedDB), never uploaded, played in a loop or shuffled.
-- The narration already runs through an `AudioContext` (see the volume modes around `createMediaElementSource(player)`); mix the music into the same graph so one output carries both. Music level relative to speech adjustable (default about -20 dB), and ducking: the music drops further while a sentence is being spoken and rises slightly in pauses.
-- It must keep playing with the screen locked on iPhone (Safari and Home Screen app) together with the narration, and pause and resume with it (including lock-screen controls). Test this on WebKit in Playwright as far as possible and state in the pull request what could only be checked on a real phone.
-- Controls: a "Music" button in the player (not in the full settings row, which has no room at 360 px) opening a small panel with source, preset, level, on/off. Remember the choices per user in this browser.
-- Nothing is downloaded from third-party sites at run time.
+- Level: iOS ignores `HTMLMediaElement.volume`, so the level must be baked into the rendered loop (default about -20 dB below the speech level; offer three levels and re-render when the level changes). For "My music", render a copy at the chosen level with an `OfflineAudioContext` before playing it. No ducking (it cannot work on iOS without Web Audio).
+- The music starts, pauses and resumes with the narration (including lock-screen controls, chapter changes and the sleep timer if merged), and never takes over the lock-screen title.
+- First check whether iOS Safari and Home Screen apps play two `<audio>` elements at the same time, with the screen locked. If they do not, stop and report in the pull request before building the rest.
+- Controls: a "Music" button in the player (the settings row has room again now that the volume select is gone, but check 360 px) opening a small panel with source, preset, level, on/off. Remember the choices per user in this browser.
+- Test in Playwright (Chromium and WebKit) as far as possible and state in the pull request what could only be checked on a real phone.
 
 ## F. Continue listening
 - After login, show at the top of the PDF to audio tab a "Continue listening" card for the item (own or shared) with the most recent position: title, chapter, time, sentence label, and one button that opens the player there.
