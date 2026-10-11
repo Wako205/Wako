@@ -307,32 +307,78 @@
   </div>
 </main>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<!-- Libraries: exact versions from jsDelivr, which serves the npm package files unchanged, so the
+     Subresource Integrity hashes can be checked against the npm registry (versions in package.json). -->
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" integrity="sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js" integrity="sha384-/TQbtLCAerC3jgaim+N78RZSDYV7ryeoBCVqTuzRrFec2akfBkHS7ACQ3PQhvMVi" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.4.16/dist/purify.min.js" integrity="sha384-a7SzOxErzJ3ZpQz0zJ32d67dSitNzPcbfybc/ykU9KJhMgZkwqfSxlhhdJRS+XGL" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js" integrity="sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI" crossorigin="anonymous"></script>
 <script>
+// Sections of this script, in order:
+//   1. Configuration and helpers         9. Audio: library
+//   2. Backend API                      10. Audio: player with synchronized text
+//   3. Color theme                      11. Audio: loudness
+//   4. Session and tabs                 12. Audio: resume points and downloads
+//   5. Audio: paper mode (PDF parts)    13. File reading (.docx, text)
+//   6. Audio: book mode (chapters)      14. Chat
+//   7. Audio: document type             15. Word export with tracked changes
+//   8. Audio: new conversion, upload    16. Structured polish / review, start-up
+// Text from the server, from PDFs or from documents is put into the page only as text
+// (textContent, see el()). The one place that inserts HTML is chat Markdown, which is
+// sanitized by DOMPurify (renderMarkdown).
+
+// ---------------------------------------------------------------------------
+// 1. Configuration and helpers
+// ---------------------------------------------------------------------------
 // Paste the Apps Script web app URL here (it ends with /exec).
 const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbyMPCW8XBoolVwUI_SpiViT3k5KojULj4TwmyOAR4ElwjXdMODygcsof8hxQUJyo9ew/exec';
 const MAX_DOC_CHARS = 400000;
+// Loaded when first needed; pinned with Subresource Integrity like the scripts above.
+const LIB = {
+  pdfjs: { src: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js', integrity: 'sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e' },
+  pdfjsWorker: { src: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js', integrity: 'sha384-SnzOobpRMLXZ52iJvZm/C0fYw0OQemTXzTjIsdsfMcrCtCEe9qgzxTd3RSklO5x2' },
+  lamejs: { src: 'https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js', integrity: 'sha384-xuasJXVcyv3hZq0eYpelEkBC8l4yufatZXDsKuyCU2rqfhDCb+ftuE/mSfZAteiK' },
+};
 
 const $ = (id) => document.getElementById(id);
-
-// Color theme: remembered in this browser and restored on the next visit.
-function setTheme(t) {
-  if (t === 'night' || t === 'eye') document.documentElement.setAttribute('data-theme', t); else { t = 'day'; document.documentElement.removeAttribute('data-theme'); }
-  try { localStorage.setItem('mp_theme', t); } catch (e) {}
-  document.querySelectorAll('#themes button').forEach((b) => b.classList.toggle('on', b.dataset.theme === t));
-}
-document.querySelectorAll('#themes button').forEach((b) => { b.onclick = () => setTheme(b.dataset.theme); });
-setTheme(document.documentElement.getAttribute('data-theme') || 'day');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-let token = null, username = null;
-
+// sessionStorage: this tab only (token, chat). localStorage: this browser (theme, settings, listening positions).
 function store(k, v) { try { v === null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v); } catch (e) {} }
 function load(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } }
+function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
 function setStatus(el, msg, isErr) { el.textContent = msg || ''; el.classList.toggle('err', !!isErr); }
+/** New element; text is set as textContent, never parsed as HTML. */
 function el(tag, cls, text) { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
+function b64(bytes) {
+  let s = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+function unb64(str) { const bin = atob(str); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
+/** Adds a script of LIB to the page; the browser refuses it if it does not match its integrity hash. */
+function loadScript(lib) {
+  return new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = lib.src; s.integrity = lib.integrity; s.crossOrigin = 'anonymous';
+    s.onload = res; s.onerror = () => rej(new Error('Could not load ' + lib.src));
+    document.head.appendChild(s);
+  });
+}
+function download(name, text) { downloadBlob(name, new Blob([text], { type: 'text/plain;charset=utf-8' })); }
+function downloadBlob(name, blob) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+/** Character counts are always shown in thousands, e.g. "1.4k characters", to match the monthly allowance. */
+function fmtK(n, bare) { n = Math.max(0, n) / 1000; return (n < 10 ? n.toFixed(1).replace(/\.0$/, '') : Math.round(n).toLocaleString()) + (bare ? 'k' : 'k characters'); }
+function fmtDur(min) { return min >= 60 ? Math.floor(min / 60) + ' h ' + Math.round(min % 60) + ' min' : Math.max(1, Math.round(min)) + ' min'; }
+function fmtTime(s) { s = Math.max(0, Math.floor(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0'); }
+
+// ---------------------------------------------------------------------------
+// 2. Backend API (contract: docs/API.md)
+// ---------------------------------------------------------------------------
+let token = null, username = null;     // the token is kept in memory and in this tab's sessionStorage only
 
 // text/plain body keeps this a "simple" request, which Apps Script requires (no CORS preflight).
 async function api(payload) {
@@ -359,16 +405,43 @@ async function waitForJob(jobId, onTick) {
 function showUsage(d) { if (d && d.used != null) $('whoUsage').textContent = 'Used this month: $' + d.used.toFixed(2) + ' of $' + d.limit; }
 
 // ---------------------------------------------------------------------------
-// Session
+// 3. Color theme: white (default), night or eye care; remembered in this browser.
+// The saved theme is applied before the page is drawn by the script in <head>.
+// ---------------------------------------------------------------------------
+function setTheme(t) {
+  if (t === 'night' || t === 'eye') document.documentElement.setAttribute('data-theme', t); else { t = 'day'; document.documentElement.removeAttribute('data-theme'); }
+  lsSet('mp_theme', t);
+  document.querySelectorAll('#themes button').forEach((b) => b.classList.toggle('on', b.dataset.theme === t));
+}
+document.querySelectorAll('#themes button').forEach((b) => { b.onclick = () => setTheme(b.dataset.theme); });
+setTheme(document.documentElement.getAttribute('data-theme') || 'day');
+
+// ---------------------------------------------------------------------------
+// 4. Session and tabs
 // ---------------------------------------------------------------------------
 function showApp() {
   $('loginView').classList.add('hidden'); $('appView').classList.remove('hidden');
   $('who').classList.remove('hidden'); $('whoName').textContent = username;
   renderChat();
 }
+/**
+ * Ends the session: forgets the token and everything shown for the account (chat with
+ * its attached text, results, library, player), so the next person to log in on this
+ * tab sees none of it. Listening positions and settings stay in this browser.
+ */
 function logout() {
+  if (P) closePlayer();                                   // saves the position while the token is still valid
   token = username = null; store('mp_token', null); store('mp_user', null);
+  clearTimeout(libTimer); libItems = []; $('library').textContent = ''; $('libUsage').textContent = '';
+  chat = { convId: null, messages: [] }; pendingDoc = null; currentFile = null; store('mp_chat', null);
+  Object.keys(fileOutputs).forEach((k) => delete fileOutputs[k]);
+  lastResult = lastDocx = null; $('resultView').classList.add('hidden'); $('resultBody').textContent = '';
+  ['file', 'sfile', 'apdf', 'prompt'].forEach((id) => { $(id).value = ''; });
+  bookData = null; docKind = null; renderKind(); renderBookPanel(); renderAttach();
+  ['chatStatus', 'runStatus', 'audioStatus'].forEach((id) => setStatus($(id), ''));
+  $('whoUsage').textContent = '';
   $('appView').classList.add('hidden'); $('who').classList.add('hidden'); $('loginView').classList.remove('hidden');
+  switchTab('chat');
 }
 $('loginBtn').onclick = async () => {
   const st = $('loginStatus'); $('loginBtn').disabled = true; setStatus(st, 'Checking...');
@@ -382,7 +455,6 @@ $('loginBtn').onclick = async () => {
 $('pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('loginBtn').click(); });
 $('logoutBtn').onclick = logout;
 
-// Tabs
 $('tabChat').onclick = () => switchTab('chat');
 $('tabTools').onclick = () => switchTab('tools');
 $('tabAudio').onclick = () => switchTab('audio');
@@ -394,28 +466,22 @@ function switchTab(t) {
 }
 
 // ---------------------------------------------------------------------------
-// PDF to audio. Paper mode: the PDF is split here into parts of AUDIO_PAGES
+// 5. Audio: paper mode. The PDF is split here into parts of AUDIO_PAGES
 // pages plus one look-ahead page and Claude writes a listening script. Book
 // mode: text and chapters are extracted here (pdf.js) and read as written.
 // Every conversion is an item of the user's library, stored in Drive.
 // ---------------------------------------------------------------------------
 const AUDIO_PAGES = 4;
-const PDFJS_BASE = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 let libItems = [], libTimer = null, bookData = null, audioBusy = false;
 
-function b64(bytes) {
-  let s = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-  return btoa(s);
-}
-function unb64(str) { const bin = atob(str); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
-function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
-function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
-function loadScript(src) {
-  return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('Could not load ' + src)); document.head.appendChild(s); });
-}
+/** pdf.js, with its worker fetched under the same integrity check and started from a blob URL. */
 async function getPdfjs() {
-  if (!window.pdfjsLib) { await loadScript(PDFJS_BASE + 'pdf.min.js'); window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_BASE + 'pdf.worker.min.js'; }
+  if (!window.pdfjsLib) {
+    await loadScript(LIB.pdfjs);
+    const r = await fetch(LIB.pdfjsWorker.src, { integrity: LIB.pdfjsWorker.integrity, mode: 'cors' });
+    if (!r.ok) throw new Error('Could not load the PDF reader');
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([await r.text()], { type: 'text/javascript' }));
+  }
   return window.pdfjsLib;
 }
 
@@ -435,7 +501,7 @@ async function splitPdf(bytes) {
 }
 
 // ---------------------------------------------------------------------------
-// Book mode: the PDF text is extracted here with pdf.js, running headers and
+// 6. Audio: book mode. The PDF text is extracted here with pdf.js, running headers and
 // page numbers are removed, and the text is split into chapters. Nothing goes
 // through Claude; the server only synthesizes speech.
 // ---------------------------------------------------------------------------
@@ -535,16 +601,15 @@ function splitChapters(pages) {
   return [{ title: 'Full text', text: joinLines(all).trim(), startPage: 1, endPage: pages.length }];
 }
 
+// ---------------------------------------------------------------------------
+// 7. Audio: document type (paper, thesis or book), chapter selection and voice preview
+// ---------------------------------------------------------------------------
 const CJK_CHAR = new RegExp('[' + CJK + ']', 'g');
 /** Rough listening time in minutes: about 270 CJK characters or 900 Latin characters per minute. */
 function estMinutes(text) {
   const cjk = (text.match(CJK_CHAR) || []).length;
   return cjk / 270 + (text.length - cjk) / 900;
 }
-/** Character counts are always shown in thousands, e.g. "1.4k characters", to match the monthly allowance. */
-function fmtK(n, bare) { n = Math.max(0, n) / 1000; return (n < 10 ? n.toFixed(1).replace(/\.0$/, '') : Math.round(n).toLocaleString()) + (bare ? 'k' : 'k characters'); }
-function fmtDur(min) { return min >= 60 ? Math.floor(min / 60) + ' h ' + Math.round(min % 60) + ' min' : Math.max(1, Math.round(min)) + ' min'; }
-function fmtTime(s) { s = Math.max(0, Math.floor(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0'); }
 let docKind = null, docWhy = '', docPages = 0;
 function audioKind() { return docKind || 'paper'; }
 const PAPER_COST_PER_PAGE = 0.012;          // USD, Claude listening script, measured on a 6-page paper
@@ -598,7 +663,8 @@ async function extractBook(file) {
   const st = $('audioStatus');
   setStatus(st, 'Reading the PDF text...');
   const lib = await getPdfjs();
-  const doc = await lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+  // isEvalSupported: false closes CVE-2024-4367 (script in a crafted PDF font) in this pdf.js version.
+  const doc = await lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()), isEvalSupported: false }).promise;
   const pages = [];
   for (let i = 1; i <= doc.numPages; i++) {
     const page = await doc.getPage(i);
@@ -737,7 +803,7 @@ $('previewBtn').onclick = async () => {
   $('previewBtn').disabled = true; setStatus(st, 'Preparing a sample of ' + $('avoice').value + '...');
   try {
     const d = await api({ action: 'audio_preview', token, voice: $('avoice').value, text: respell(text, pronList()) });
-    if (previewAudio) previewAudio.pause();
+    if (previewAudio) { previewAudio.pause(); URL.revokeObjectURL(previewAudio.src); }
     previewAudio = new Audio(URL.createObjectURL(new Blob([unb64(d.data)], { type: 'audio/mpeg' })));
     previewAudio.play().catch(() => {});
     setStatus(st, 'Playing a sample (' + d.lang + ', ' + fmtK(d.chars) + ').');
@@ -795,6 +861,9 @@ $('pronAdd').onclick = () => {
 };
 [$('pronTerm'), $('pronSay')].forEach((x) => x.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('pronAdd').click(); } }));
 
+// ---------------------------------------------------------------------------
+// 8. Audio: new conversion. The original PDF is then saved to Drive in 4 MiB chunks.
+// ---------------------------------------------------------------------------
 const UPLOAD_CHUNK = 4 * 1024 * 1024;   // must match the server
 async function uploadPdf(id, filename, bytes, onProgress) {
   const n = Math.ceil(bytes.length / UPLOAD_CHUNK);
@@ -865,7 +934,7 @@ $('audioBtn').onclick = async () => {
 };
 
 // ---------------------------------------------------------------------------
-// Library
+// 9. Audio: library
 // ---------------------------------------------------------------------------
 const libUsage = { used: 0, cap: 0 };
 async function loadLibrary() {
@@ -994,7 +1063,7 @@ function pollLibrary() {
 }
 
 // ---------------------------------------------------------------------------
-// Player with synchronized text. Sentence times are estimated inside each audio
+// 10. Audio: player with synchronized text. Sentence times are estimated inside each audio
 // segment from character counts and pauses, scaled to the segment's exact length.
 // ---------------------------------------------------------------------------
 let P = null;               // { item, c, segs: [{t0, dur}], sents: [{t0, t1, el}], blob, url, cur, texts }
@@ -1273,7 +1342,7 @@ async function refineTimings(data) {
 }
 
 // ---------------------------------------------------------------------------
-// Loudness. Synthesized speech is mastered quietly (speech level about -24 dBFS).
+// 11. Audio: loudness. Synthesized speech is mastered quietly (speech level about -24 dBFS).
 // "Louder" raises the measured speech level of each chapter to -16 dBFS and a
 // limiter keeps peaks below full scale; "Loudest" targets -12 dBFS.
 // ---------------------------------------------------------------------------
@@ -1323,7 +1392,7 @@ try { const v = lsGet('mp_vol'); if (v && VOL_TARGET.hasOwnProperty(v)) $('pVol'
 async function loudMp3(data, onProgress) {
   const mode = volumeMode();
   if (mode === 'normal') return data.blob;
-  if (!window.lamejs) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js');
+  if (!window.lamejs) await loadScript(LIB.lamejs);
   const g = gainFor(data, mode), out = [];
   let enc = null;
   for (let k = 0; k < data.bufs.length; k++) {
@@ -1491,7 +1560,7 @@ function saveProgress(force) {
 }
 
 // ---------------------------------------------------------------------------
-// Three resume points: the last position (saved automatically) and two
+// 12. Audio: three resume points: the last position (saved automatically) and two
 // bookmarks saved by hand. All are stored in the library, so they follow the account.
 // ---------------------------------------------------------------------------
 function currentLabel() {
@@ -1554,7 +1623,7 @@ $('dlScriptBtn').onclick = () => {
 };
 
 // ---------------------------------------------------------------------------
-// File reading (shared): .docx text is extracted in the browser
+// 13. File reading (shared): .docx text is extracted in the browser
 // ---------------------------------------------------------------------------
 const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 async function readDocx(file) {
@@ -1576,7 +1645,7 @@ async function readAnyFile(f) {
 }
 
 // ---------------------------------------------------------------------------
-// Chat
+// 14. Chat
 // ---------------------------------------------------------------------------
 let chat = { convId: null, messages: [] };   // messages: {role, content, doc?, cost?}
 let pendingDoc = null;                          // {name, kind, text, docx?} waiting to be sent
@@ -1588,10 +1657,26 @@ function loadChat() { try { const c = JSON.parse(load('mp_chat') || 'null'); if 
 function saveChat() { store('mp_chat', JSON.stringify(chat)); }
 function newConvId() { return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 
+/*
+ * Replies are Markdown written by the model, which may repeat text from an attached
+ * manuscript, so they are treated as untrusted: HTML profile only (no SVG or MathML),
+ * no forms, images, media or inline styles (no fake login boxes, no tracking pixels that
+ * could carry text away), and links open in a new tab without access to this page.
+ */
+const MD_PURIFY = {
+  USE_PROFILES: { html: true },
+  FORBID_TAGS: ['style', 'form', 'input', 'button', 'textarea', 'select', 'option', 'img', 'picture', 'video', 'audio', 'source', 'iframe', 'object', 'embed', 'link', 'meta', 'base'],
+  FORBID_ATTR: ['style', 'srcset', 'action', 'formaction'],
+};
+if (window.DOMPurify) {
+  DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+    if (node.tagName === 'A' && node.hasAttribute('href')) { node.setAttribute('target', '_blank'); node.setAttribute('rel', 'noopener noreferrer'); }
+  });
+}
 function renderMarkdown(text) {
-  if (!window.marked || !window.DOMPurify) { const p = el('div', 'md'); p.textContent = text; return p; }
   const div = el('div', 'md');
-  div.innerHTML = DOMPurify.sanitize(marked.parse(text, { breaks: false, gfm: true }));
+  if (!window.marked || !window.DOMPurify) { div.textContent = text; return div; }
+  div.innerHTML = DOMPurify.sanitize(marked.parse(text, { breaks: false, gfm: true }), MD_PURIFY);
   return div;
 }
 
@@ -1754,7 +1839,7 @@ async function polishFileInChat(text, msg) {
 }
 
 // ---------------------------------------------------------------------------
-// Word export. Each export re-parses the original XML, so repeated exports never compound.
+// 15. Word export. Each export re-parses the original XML, so repeated exports never compound.
 // ---------------------------------------------------------------------------
 const XML_NS = 'http://www.w3.org/XML/1998/namespace';
 function freshDoc(d) { return new DOMParser().parseFromString(d.xml, 'application/xml'); }
@@ -1853,7 +1938,7 @@ const writeDocxTracked = (d, edits) => exportDocx(d, edits, false);
 const writeDocxClean = (d, edits) => exportDocx(d, edits, true);
 
 // ---------------------------------------------------------------------------
-// Structured polish / review (edits written back into .docx)
+// 16. Structured polish / review (edits written back into .docx)
 // ---------------------------------------------------------------------------
 let lastResult = null, lastName = 'manuscript.tex', lastDocx = null;
 
@@ -1886,8 +1971,6 @@ $('runBtn').onclick = async () => {
   $('runBtn').disabled = false;
 };
 
-function setT(t, value) { t.textContent = value; t.setAttributeNS('http://www.w3.org/XML/1998/namespace', 'xml:space', 'preserve'); }
-
 function renderResult(d) {
   const body = $('resultBody'); body.textContent = '';
   $('resultView').classList.remove('hidden');
@@ -1918,11 +2001,6 @@ function renderResult(d) {
   });
 }
 
-function download(name, text) { downloadBlob(name, new Blob([text], { type: 'text/plain;charset=utf-8' })); }
-function downloadBlob(name, blob) {
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
-  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-}
 $('dlBtn').onclick = () => {
   if (!lastResult) return;
   const name = lastName.replace(/(\.[^.]+)?$/, '_polished$1');
@@ -1931,7 +2009,9 @@ $('dlBtn').onclick = () => {
 $('dlCleanBtn').onclick = () => { if (lastResult && lastResult.cleanBlob) downloadBlob(lastName.replace(/\.docx$/i, '_polished.docx'), lastResult.cleanBlob); };
 $('dlReviewBtn').onclick = () => lastResult && download(lastName.replace(/(\.[^.]+)?$/, '_review.md'), lastResult.review);
 
-// Restore session
+// ---------------------------------------------------------------------------
+// Start-up: restore the session of this tab
+// ---------------------------------------------------------------------------
 token = load('mp_token'); username = load('mp_user'); loadChat();
 if (token && username) showApp();
 </script>

@@ -7,7 +7,7 @@
   },
   "devDependencies": {
     "@playwright/test": "1.56.1",
-    "dompurify": "3.1.6",
+    "dompurify": "3.4.16",
     "jszip": "3.10.1",
     "lamejs": "1.2.1",
     "marked": "12.0.2",
