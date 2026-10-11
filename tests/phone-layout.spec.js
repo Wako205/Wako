@@ -41,6 +41,8 @@ for (const width of [360, 390, 430]) {
       await page.locator('#library .libitem').first().getByRole('button', { name: 'Listen' }).click();
       await expect(page.locator('#pText span.s').first()).toBeVisible();
       await page.locator('#pMarks .mark').nth(1).getByRole('button', { name: 'Save here' }).click();
+      await page.evaluate(() => { P.item.pos = Object.assign({}, P.item.pos, { label: '那个老人跑到苗田正中扑地趴了下来，脸紧紧地贴在几株青苗之间的田地上' }); renderMarks(); });
+      await expect(page.locator('#pMarks .mark').first().locator('.w')).toHaveText('那个老人跑到…');
       expect(await audit(page, width)).toEqual({ overflow: 0, small: [] });
       expect(await rows(page, '.pnav > *')).toBe(1);
       expect(await rows(page, '.pset > *')).toBe(1);
