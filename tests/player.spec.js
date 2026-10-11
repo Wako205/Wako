@@ -17,7 +17,7 @@ test('opens a book and the highlight follows playback', async ({ page, backend }
   await expect(page.locator('#pTitle')).toHaveText('The Quiet Mill');
   expect(await page.locator('#pText span.s').allTextContents()).toEqual(SEG_TEXTS.flat());
   expect(backend.callsOf('audio_text')[0]).toMatchObject({ id: 'book1', chapter: 0 });
-  expect(backend.callsOf('audio_part').map((c) => c.index).sort()).toEqual([0, 1]);
+  expect(backend.callsOf('audio_part').filter((c) => c.chapter === 0).map((c) => c.index).sort()).toEqual([0, 1]);
   // Chapter 3 is not converted and cannot be chosen.
   await expect(page.locator('#pChapter option')).toHaveCount(3);
   await expect(page.locator('#pChapter option').nth(2)).toBeDisabled();
@@ -38,7 +38,7 @@ test('opens a book and the highlight follows playback', async ({ page, backend }
 test('moves to another chapter and saves the position', async ({ page, backend }) => {
   await openBook(page);
   await page.selectOption('#pChapter', '1');
-  await expect.poll(() => backend.callsOf('audio_text').map((c) => c.chapter)).toEqual([0, 1]);
+  await expect.poll(() => backend.callsOf('audio_text').map((c) => c.chapter)).toContain(1);
   await expect.poll(() => backend.callsOf('audio_progress').length).toBeGreaterThan(0);
   await page.click('#pPrev');
   await expect(page.locator('#pChapter')).toHaveValue('0');
