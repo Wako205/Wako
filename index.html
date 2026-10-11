@@ -41,7 +41,7 @@
   .usage .un { font-size:11px; color:var(--muted); margin-top:10px; line-height:1.4; }
   @media (max-width: 760px) { .genrow { grid-template-columns: minmax(0,1fr); } .ubar .col { height:110px; } }
   label { display:block; font-size:14px; color:var(--muted); margin:14px 0 6px; }
-  input[type=text], input[type=password], select, textarea { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font:inherit; background:var(--field); color:var(--ink); }
+  input[type=text], input[type=password], input[type=search], select, textarea { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font:inherit; background:var(--field); color:var(--ink); }
   textarea { resize: vertical; min-height: 64px; max-height: 40vh; }
   button { padding:9px 16px; border:0; border-radius:8px; background:var(--accent); color:var(--on-accent); font:inherit; cursor:pointer; }
   button.ghost { background:transparent; color:var(--accent); border:1px solid var(--accent); }
@@ -129,6 +129,14 @@
   .sleepmenu .sleepnote { flex-basis:100%; }
   .sleepmenu button.last { border-width:2px; font-weight:600; }
   #pSleepBtn.on { background:var(--accent); color:var(--on-accent); font-variant-numeric:tabular-nums; }
+  .psearch { flex-wrap: nowrap; }
+  .psearch input { flex: 1; min-width: 0; padding: 7px 10px; }
+  .results { max-height: 40vh; overflow-y: auto; }
+  .results:empty { display: none; }
+  .results button.hit { display: block; width: 100%; text-align: left; background: var(--field); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin: 6px 0; font-size: 14px; line-height: 1.45; }
+  .results button.hit:hover { background: var(--soft); }
+  .results .hit b { display: block; font-size: 12px; color: var(--muted); font-weight: 600; }
+  .results mark { background: var(--hl2); color: var(--ink); border-radius: 3px; padding: 0 1px; }
   .musicpanel { margin-top:8px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--soft); font-size:13px; color:var(--muted); display:flex; flex-direction:column; gap:6px; }
   .musicpanel label { margin:0; color:var(--ink); font-size:13px; }
   .musicpanel .mon { display:flex; gap:6px; align-items:center; font-size:14px; min-height:32px; }
@@ -155,8 +163,8 @@
     .card { padding: 12px; }
     .top { gap: 8px; }
     .who { flex-wrap: wrap; }
-    button, select, input[type=text], input[type=password] { min-height: 44px; }
-    select, input[type=text], input[type=password], textarea { font-size: 16px !important; }   /* below 16 px iOS zooms in on focus */
+    button, select, input[type=text], input[type=password], input[type=search] { min-height: 44px; }
+    select, input[type=text], input[type=password], input[type=search], textarea { font-size: 16px !important; }   /* below 16 px iOS zooms in on focus */
     .themes button { padding: 4px 12px; font-size: 14px; }
     .tabs button { flex: 1; padding: 8px 4px; }
     .wide-only { display: none; }
@@ -328,6 +336,12 @@
           <div class="status" id="mStatus" aria-live="polite"></div>
         </div>
         <div id="pMarks" class="marks"></div>
+        <form class="row psearch" id="pSearchForm" role="search" style="margin-top:10px">
+          <input type="search" id="pSearch" placeholder="Search this book" aria-label="Search this book" autocomplete="off" enterkeyhint="search">
+          <button class="ghost small" type="submit" id="pSearchBtn">Search</button>
+        </form>
+        <div class="status" id="pSearchInfo" aria-live="polite"></div>
+        <div id="pResults" class="results"></div>
         <div id="pText" class="readtext"></div>
         <div id="pMini" class="pmini" role="group" aria-label="Playback">
           <button class="small" id="mPlay" aria-label="Play">▶</button>
@@ -555,6 +569,7 @@ function logout() {
   lastResult = lastDocx = null; $('resultView').classList.add('hidden'); $('resultBody').textContent = '';
   ['file', 'sfile', 'apdf', 'prompt'].forEach((id) => { $(id).value = ''; });
   bookData = null; docKind = null; renderKind(); renderBookPanel(); renderAttach();
+  textMemo.clear();
   ['chatStatus', 'runStatus', 'audioStatus'].forEach((id) => setStatus($(id), ''));
   $('whoUsage').textContent = '';
   $('appView').classList.add('hidden'); $('who').classList.add('hidden'); $('loginView').classList.remove('hidden');
@@ -1368,6 +1383,7 @@ function openItem(id, owner) {
   const local = (() => { try { return JSON.parse(lsGet('mp_pos_' + username + '_' + id) || 'null'); } catch (e) { return null; } })();
   const pos = [it.pos, local].filter(Boolean).sort((a, b) => (b.at || 0) - (a.at || 0))[0] || { c: 0, t: 0 };
   P = { item: it, c: -1, cache: {}, loading: {} };
+  clearSearch();
   it.marks = it.marks || {};
   ['b1', 'b2'].forEach((slot) => {                      // a bookmark saved while offline is kept if newer
     try { const m = JSON.parse(lsGet('mp_mark_' + slot + '_' + username + '_' + id) || 'null'); if (m && (!it.marks[slot] || m.at > it.marks[slot].at)) it.marks[slot] = m; } catch (e) {}
@@ -1409,6 +1425,7 @@ $('pNext').onclick = () => stepChapter(1);
 $('pClose').onclick = () => closePlayer();
 function closePlayer() {
   setSleep('off');
+  clearSearch();
   leaveReading();
   saveProgress(true);
   player.pause(); player.removeAttribute('src'); player.load();
@@ -1443,8 +1460,7 @@ function fetchChapter(c, onStatus, onEarly) {
   let earlyDone = false;
   const job = (async () => {
     say('Loading audio...');
-    const used = pronUsed(id);
-    const texts = (await api({ action: 'audio_text', token, id, chapter: c, ...from })).texts.map((t) => unrespell(t, used));
+    const texts = await chapterTexts(P.item, c);
     const bufs = new Array(ch.n);
     let next = 0, stop = ch.n;
     const worker = async () => {
@@ -1473,6 +1489,115 @@ function fetchChapter(c, onStatus, onEarly) {
   job.then(() => { delete loading[c]; }, () => { delete loading[c]; });
   return job;
 }
+
+/**
+ * Texts of the audio segments of chapter c, in the original spelling (see the pronunciation
+ * list). Kept in memory for the session once the chapter is complete, so search and playback
+ * share one request per chapter.
+ */
+const textMemo = new Map();
+async function chapterTexts(it, c) {
+  const key = (it.owner || '') + '|' + it.id + '|' + c;
+  if (textMemo.has(key)) return textMemo.get(key);
+  const used = pronUsed(it.id);
+  const texts = (await api({ action: 'audio_text', token, id: it.id, chapter: c, ...ownerOf(it) })).texts.map((t) => unrespell(t, used));
+  const ch = it.chapters[c];
+  if (ch && (ch.status === 'done' || (!ch.status && it.state === 'done'))) textMemo.set(key, texts);
+  return texts;
+}
+
+// ---------------------------------------------------------------------------
+// Search inside the open item. Every converted chapter is searched; matching ignores
+// letter case, white space and full-width versus half-width forms (NFKC), and works
+// character by character, so Chinese and Japanese text needs no spaces.
+// ---------------------------------------------------------------------------
+const SEARCH_MAX = 200;
+let searchRun = 0;
+/** Normalized text and, for each of its characters, the index of the original character. */
+function foldText(s) {
+  let out = '', map = [], i = 0;
+  for (const ch of s) {
+    if (!/\s/.test(ch)) {
+      for (const x of ch.normalize('NFKC').toLowerCase()) { if (!/\s/.test(x)) { out += x; map.push(i); } }
+    }
+    i += ch.length;
+  }
+  map.push(s.length);
+  return { s: out, map };
+}
+function clearSearch() {
+  searchRun++;
+  $('pResults').textContent = ''; setStatus($('pSearchInfo'), ''); $('pSearch').value = '';
+}
+async function runSearch() {
+  if (!P) return;
+  const q = foldText($('pSearch').value).s, it = P.item, run = ++searchRun, info = $('pSearchInfo'), box = $('pResults');
+  box.textContent = '';
+  if (!q) { setStatus(info, ''); return; }
+  const chs = (it.chapters || []).map((ch, c) => c).filter((c) => it.chapters[c].status !== 'none' && chapterReadyCount(it, c) > 0);
+  const hits = [];
+  let total = 0, done = 0;
+  try {
+    // Chapters are loaded three at a time and searched in order.
+    const texts = new Array(chs.length);
+    let next = 0;
+    const worker = async () => {
+      while (next < chs.length) {
+        const j = next++;
+        texts[j] = await chapterTexts(it, chs[j]);
+        if (run !== searchRun) return;
+        setStatus(info, 'Searching: ' + (++done) + ' of ' + chs.length + ' chapters loaded...');
+      }
+    };
+    await Promise.all([worker(), worker(), worker()]);
+    if (run !== searchRun) return;
+    chs.forEach((c, j) => texts[j].forEach((text, k) => {
+      const f = foldText(text);
+      for (let p = f.s.indexOf(q); p >= 0; p = f.s.indexOf(q, p + q.length)) {
+        total++;
+        if (hits.length < SEARCH_MAX) hits.push({ c, k, text, from: f.map[p], to: f.map[p + q.length - 1] + 1 });
+      }
+    }));
+  } catch (e) {
+    if (run === searchRun) { setStatus(info, e.message, true); if (/log in again/i.test(e.message)) logout(); }
+    return;
+  }
+  if (!total) { setStatus(info, 'No results.'); return; }
+  setStatus(info, total === 1 ? '1 match.' : total.toLocaleString() + ' matches' + (total > SEARCH_MAX ? ', showing the first ' + SEARCH_MAX : '') + '.');
+  const multi = (it.chapters || []).length > 1;
+  hits.forEach((h) => {
+    const b = el('button', 'hit'); b.type = 'button';
+    if (multi) b.appendChild(el('b', null, it.chapters[h.c].title));
+    const a = Math.max(0, h.from - 40), z = Math.min(h.text.length, h.to + 60);
+    const clean = (x) => x.replace(/\s+/g, ' ');
+    b.appendChild(document.createTextNode((a > 0 ? '…' : '') + clean(h.text.slice(a, h.from))));
+    b.appendChild(el('mark', null, clean(h.text.slice(h.from, h.to))));
+    b.appendChild(document.createTextNode(clean(h.text.slice(h.to, z)) + (z < h.text.length ? '…' : '')));
+    b.onclick = () => openHit(h);
+    box.appendChild(b);
+  });
+}
+/** Opens the chapter of a search hit and plays from the sentence that contains it. */
+async function openHit(h) {
+  if (!P) return;
+  if (P.c !== h.c || !P.sents) await loadChapter(h.c, 0, false);
+  if (!P || P.c !== h.c || !P.sents) return;
+  if (P.partial && P.loading[h.c]) {                   // only the first parts are in: wait for the whole chapter
+    setStatus($('pStatus'), 'Loading the rest of this chapter...');
+    await P.loading[h.c].catch(() => {});
+    await sleep(0);
+    if (!P || P.c !== h.c || P.partial) return;
+  }
+  const spans = Array.from($('pText').querySelectorAll('span.s'));
+  let sp = null;
+  spans.forEach((s) => { if (Number(s.dataset.k) === h.k && Number(s.dataset.off) <= h.from) sp = s; });
+  const entry = sp && P.sents.find((x) => x.el === sp);
+  if (!entry) { setStatus($('pStatus'), 'This part of the chapter has not been converted yet.', true); return; }
+  const go = () => { player.currentTime = entry.t0 + 0.02; player.play().catch(() => {}); lastUserScroll = 0; highlight(); jumpToCurrent(); };
+  if (player.readyState >= 1) go(); else player.addEventListener('loadedmetadata', go, { once: true });
+}
+$('pSearchForm').onsubmit = (e) => { e.preventDefault(); runSearch(); };
+$('pSearch').addEventListener('input', () => { if (!$('pSearch').value.trim()) { searchRun++; $('pResults').textContent = ''; setStatus($('pSearchInfo'), ''); } });
 
 /** Next chapter after c that has audio, or -1. */
 function nextReadyChapter(c) {
@@ -1556,12 +1681,14 @@ function renderReadText(data) {
     const paras = text.split(/\n+/).filter((p) => p.trim());
     const pieces = paras.map((p) => p.split(SENT_SPLIT).filter((s) => s.trim()));
     const total = pieces.flat().reduce((n, s) => n + speakWeight(s), 0) || 1;
-    let t = seg ? seg.t0 : null;
+    let t = seg ? seg.t0 : null, at = 0;
     const own = [];
     pieces.forEach((ps) => {
       const pEl = el('p');
       ps.forEach((s) => {
         const sp = el('span', 's' + (seg ? '' : ' pend'), s);
+        const off = text.indexOf(s, at); if (off >= 0) at = off + s.length;
+        sp.dataset.k = k; sp.dataset.off = off;
         pEl.appendChild(sp); pEl.appendChild(document.createTextNode(/[A-Za-z0-9.,;:!?"')]$/.test(s) ? ' ' : ''));
         if (seg) {
           const d = seg.dur * speakWeight(s) / total, entry = { t0: t, t1: t + d, el: sp };
