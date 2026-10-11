@@ -1026,6 +1026,7 @@ async function loadLibrary() {
         (libUsage.s0Until ? ', then trial credit ' + fmtK(libUsage.s0Used, true) + ' of ' + fmtK(libUsage.s0Cap) +
           ' (through ' + fmtDay(libUsage.s0Until - 1) + ')' : '') : '');
     renderLibrary(); bookSummary();
+    if (P && !P.item.owner) { refreshChapterSelect(); resumeIfWaiting(); }
     loadShared();
     pollLibrary();
   } catch (e) {
@@ -1218,7 +1219,7 @@ function pollLibrary() {
       } catch (e) { reload = true; }
     }
     if (reload) return loadLibrary();
-    renderLibrary(); if (P) refreshChapterSelect(); pollLibrary();
+    renderLibrary(); if (P) { refreshChapterSelect(); resumeIfWaiting(); } pollLibrary();
   }, 8000);
 }
 
@@ -1395,7 +1396,7 @@ async function loadChapter(c, startAt, autoplay) {
   saveProgress(true);
   const id = P.item.id, ch = P.item.chapters[c];
   if (!ch) return;
-  P.c = c; $('pChapter').value = c;
+  P.c = c; $('pChapter').value = c; P.waitConv = null;
   const st = $('pStatus');
   // A chapter already in memory starts synchronously, still inside the 'ended' event of
   // the previous one: browsers then allow play() in the background.
@@ -1692,10 +1693,46 @@ function chapterEnded() {
   if (!P) return;
   // Only the first parts are loaded: wait for the rest, which then continues from here.
   if (P.partial) { P.waitFull = true; setStatus($('pStatus'), 'Loading the rest of this chapter...'); return; }
-  if (sleepAtChapterEnd()) return;
-  const n = nextReadyChapter(P.c);
-  if (n >= 0) loadChapter(n, 0, true);
-  else saveProgress(true);
+  // This chapter is still being converted: wait for its next parts and continue where it stopped.
+  const c = P.c, have = P.cache[c] ? P.cache[c].parts : 0;
+  if (converting(P.item, c) && have < P.item.chapters[c].n) return waitConversion(c, player.duration || 0);
+  if (sleepAtChapterEnd()) return;                  // the sleep timer stops at the real end of the chapter
+  // The next chapter in order; one still being converted is waited for, not skipped.
+  const chs = P.item.chapters;
+  for (let n = c + 1; n < chs.length; n++) {
+    if (chapterReadyCount(P.item, n)) return loadChapter(n, 0, true);
+    if (converting(P.item, n)) return waitConversion(n, 0);
+  }
+  saveProgress(true);
+}
+
+/** Chapter c of an item of the own library is queued or being converted right now. */
+function converting(it, c) {
+  const ch = it.chapters[c];
+  return !it.owner && it.state === 'processing' && !!ch && (ch.status === 'queued' || (!ch.status && ch.n > 0));
+}
+/** Waits until more of chapter c is converted (the library poll calls resumeIfWaiting), then plays it from time t. */
+function waitConversion(c, t) {
+  P.waitConv = { c, t, have: P.cache[c] ? P.cache[c].parts : 0 };
+  saveProgress(true);
+  setStatus($('pStatus'), 'Waiting for "' + P.item.chapters[c].title + '" to be converted; playback continues by itself.');
+  pollLibrary();
+}
+function resumeIfWaiting() {
+  const w = P && P.waitConv;
+  if (!w) return;
+  const ready = chapterReadyCount(P.item, w.c);
+  if (ready > w.have) {
+    P.waitConv = null;
+    if (P.cache[w.c]) { URL.revokeObjectURL(P.cache[w.c].url); delete P.cache[w.c]; }
+    delete P.loading[w.c];
+    setStatus($('pStatus'), '');
+    loadChapter(w.c, w.t, true);
+  } else if (!converting(P.item, w.c)) {                    // conversion ended without more audio: go on
+    P.waitConv = null; setStatus($('pStatus'), '');
+    const n = nextReadyChapter(w.c);
+    if (n >= 0) loadChapter(n, 0, true);
+  }
 }
 
 /** Player events. Listeners of an element that has been replaced are ignored. */
@@ -1726,7 +1763,7 @@ let sleepFade = 1;              // volume factor during the fade
 function sleepLeft() {          // seconds of listening left
   if (!sleepT) return Infinity;
   if (sleepT.mode === 'time') return sleepT.left / 1000;
-  if (P && P.partial) return Infinity;                // only the first parts are in: the chapter end is not known yet
+  if (P && (P.partial || (converting(P.item, P.c) && (P.cache[P.c] ? P.cache[P.c].parts : 0) < P.item.chapters[P.c].n))) return Infinity;   // the chapter end is not known yet
   return isFinite(player.duration) ? Math.max(0, (player.duration - player.currentTime) / (player.playbackRate || 1)) : Infinity;
 }
 function setFade(f) {
