@@ -159,14 +159,16 @@ test('"End of chapter" waits for the rest of a chapter that is still loading', a
   await page.evaluate(() => player.pause());
 });
 
-test('"End of chapter" waits while the chapter itself is still being converted', async ({ page, backend }) => {
+test('"End of chapter" stops instead of waiting for a chapter still being converted', async ({ page, backend }) => {
   test.setTimeout(60000);
   const book = backend.library[0];
   book.state = 'processing'; book.jobId = 'job-conv';
   book.chapters[0].status = 'queued'; book.chapters[0].n = 3;
-  backend.on('status', () => ({ state: 'running', progress: 'Synthesizing speech', ready: [2, 2, 0] }));
+  book.chapters[1].status = 'queued'; book.chapters[1].n = 2;
+  let ready = [2, 0, 0];
+  backend.on('status', () => ({ state: 'running', progress: 'Synthesizing speech', ready }));
   backend.on('audio_text', () => ({ texts: ['One a. One b.', 'Two a. Two b.', 'Three a. Three b.'] }));
-  backend.on('audio_part', (b) => (b.chapter === 0 && b.index >= 2 ? { ok: false, error: 'Segment not ready yet' } : { data: backend.mp3.toString('base64') }));
+  backend.on('audio_part', (b) => (b.index >= ready[b.chapter] ? { ok: false, error: 'Segment not ready yet' } : { data: backend.mp3.toString('base64') }));
   await login(page);
   await openAudio(page);
   // The library poll reports the parts already converted; then chapter 1 can be played.
@@ -175,8 +177,14 @@ test('"End of chapter" waits while the chapter itself is still being converted',
   await expect(page.locator('#pChapter')).toHaveValue('0');
   await expect.poll(() => page.evaluate(() => player.duration)).toBeGreaterThan(8);
   await choose(page, 'End of chapter');
-  await page.evaluate(() => { player.currentTime = player.duration - 2; player.play(); });
-  await expect(page.locator('#pStatus')).toContainText('Waiting for "Chapter 1" to be converted', { timeout: 10000 });
-  expect(await page.evaluate(() => sleepFade)).toBe(1);                       // no fade before the real end
-  await expect(page.locator('#pSleepBtn')).toHaveText('☾ End');              // still set
+  await page.evaluate(() => { window.__minFade = 1; setInterval(() => { window.__minFade = Math.min(window.__minFade, sleepFade); }, 50); player.currentTime = player.duration - 3; player.play(); });
+  // At the end of the converted part the player would wait for the rest: the timer stops it instead.
+  await expect(page.locator('#pStatus')).toHaveText('Sleep timer: playback stopped.', { timeout: 10000 });
+  expect(await page.evaluate(() => [player.paused, P.waitConv, sleepFade])).toEqual([true, null, 1]);
+  expect(await page.evaluate(() => window.__minFade)).toBeLessThan(0.5);     // it faded out
+  await expect(page.locator('#pSleepBtn')).toHaveText('☾');
+  // More audio arriving later does not start playback again.
+  ready = [3, 2, 0];
+  await page.waitForTimeout(9000);                                          // one library poll
+  expect(await page.evaluate(() => player.paused)).toBe(true);
 });

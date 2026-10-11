@@ -1693,10 +1693,12 @@ function chapterEnded() {
   if (!P) return;
   // Only the first parts are loaded: wait for the rest, which then continues from here.
   if (P.partial) { P.waitFull = true; setStatus($('pStatus'), 'Loading the rest of this chapter...'); return; }
+  // The sleep timer stops here, also instead of waiting for a chapter that is still being converted
+  // (playback would otherwise start again by itself whenever the conversion finishes).
+  if (sleepAtChapterEnd()) return;
   // This chapter is still being converted: wait for its next parts and continue where it stopped.
   const c = P.c, have = P.cache[c] ? P.cache[c].parts : 0;
   if (converting(P.item, c) && have < P.item.chapters[c].n) return waitConversion(c, player.duration || 0);
-  if (sleepAtChapterEnd()) return;                  // the sleep timer stops at the real end of the chapter
   // The next chapter in order; one still being converted is waited for, not skipped.
   const chs = P.item.chapters;
   for (let n = c + 1; n < chs.length; n++) {
@@ -1763,7 +1765,7 @@ let sleepFade = 1;              // volume factor during the fade
 function sleepLeft() {          // seconds of listening left
   if (!sleepT) return Infinity;
   if (sleepT.mode === 'time') return sleepT.left / 1000;
-  if (P && (P.partial || (converting(P.item, P.c) && (P.cache[P.c] ? P.cache[P.c].parts : 0) < P.item.chapters[P.c].n))) return Infinity;   // the chapter end is not known yet
+  if (P && P.partial) return Infinity;                // only the first parts are loaded: the end is not known yet
   return isFinite(player.duration) ? Math.max(0, (player.duration - player.currentTime) / (player.playbackRate || 1)) : Infinity;
 }
 function setFade(f) {
