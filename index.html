@@ -30,6 +30,7 @@
   button { padding:9px 16px; border:0; border-radius:8px; background:var(--accent); color:var(--on-accent); font:inherit; cursor:pointer; }
   button.ghost { background:transparent; color:var(--accent); border:1px solid var(--accent); }
   button.small { padding:5px 10px; font-size:13px; }
+  button.danger { background:var(--err); border-color:var(--err); color:#fff; }
   button.chip { background:var(--soft); color:var(--ink); border:1px solid var(--line); font-size:13px; padding:5px 10px; }
   button:disabled { opacity:.5; cursor:default; }
   .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
@@ -76,6 +77,8 @@
   .chlist { max-height: 260px; overflow-y:auto; border:1px solid var(--line); border-radius:8px; margin-top:8px; padding:4px 10px; font-size:14px; }
   .chlist label { display:flex; gap:8px; align-items:center; margin:4px 0; color:var(--ink); font-size:14px; }
   .chlist .n { margin-left:auto; color:var(--muted); font-size:12px; white-space:nowrap; }
+  .chlist .chdel { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .chlist .chdel .status { font-size:12px; }
   .libitem { border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin:10px 0; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
   .libitem .t { font-weight:600; cursor:pointer; color:var(--accent); }
   .libitem .m { font-size:13px; color:var(--muted); }
@@ -165,11 +168,11 @@
 <main>
   <div id="netBanner" class="banner hidden" role="status"></div>
   <div class="top">
-    <h1>Wako205</h1>
+    <h1 id="brand">Wako205</h1>
     <div class="themes" id="themes" role="group" aria-label="Color theme">
       <button data-theme="eye" title="Warm paper tones, less blue light">护眼</button><button data-theme="day" title="White background">白天</button><button data-theme="night" title="Dark background">黑夜</button>
     </div>
-    <div class="who hidden" id="who"><span id="whoName"></span><span id="whoUsage"></span><button class="ghost small" id="logoutBtn">Log out</button></div>
+    <div class="who hidden" id="who"><span id="whoUsage"></span><button class="ghost small" id="logoutBtn">Log out</button></div>
   </div>
 
   <!-- Login -->
@@ -308,14 +311,6 @@
         <label for="avoice">Voice</label>
         <div class="row" style="flex-wrap:nowrap">
         <select id="avoice" style="flex:1">
-          <optgroup label="Google (best for English)">
-            <option value="Charon">Charon (male, calm)</option>
-            <option value="Kore">Kore (female, clear)</option>
-            <option value="Aoede">Aoede (female, light)</option>
-            <option value="Orus">Orus (male, firm)</option>
-            <option value="Puck">Puck (male, lively)</option>
-            <option value="Leda">Leda (female, youthful)</option>
-          </optgroup>
           <optgroup label="Microsoft (best for Chinese)" id="azVoices" class="hidden" disabled>
             <option value="az:zh-CN-YunxiNeural">云希 Yunxi (男, 叙述)</option>
             <option value="az:zh-CN-YunjianNeural">云健 Yunjian (男, 浑厚)</option>
@@ -326,6 +321,14 @@
             <option value="az:ja-JP-KeitaNeural">圭太 Keita (日本語, 男)</option>
             <option value="az:en-US-AndrewMultilingualNeural">Andrew (English, male)</option>
             <option value="az:en-US-AvaMultilingualNeural">Ava (English, female)</option>
+          </optgroup>
+          <optgroup label="Google (best for English)">
+            <option value="Charon" selected>Charon (male, calm)</option>
+            <option value="Kore">Kore (female, clear)</option>
+            <option value="Aoede">Aoede (female, light)</option>
+            <option value="Orus">Orus (male, firm)</option>
+            <option value="Puck">Puck (male, lively)</option>
+            <option value="Leda">Leda (female, youthful)</option>
           </optgroup>
         </select>
         <button class="ghost" id="previewBtn" type="button" data-net="1" title="Hear the first sentences of the selected text in this voice (uses about 0.1k characters of the allowance)">试听 Preview</button>
@@ -352,6 +355,10 @@
       <h2>Your audio library <span class="status" id="libUsage" style="font-weight:normal;font-size:13px;margin-left:8px"></span></h2>
       <div id="libNote" class="status"></div>
       <div id="library"><div class="status">Loading...</div></div>
+      <div id="sharedCard" class="hidden">
+        <h2 style="margin-top:22px">Shared library <span class="status" style="font-weight:normal;font-size:13px;margin-left:8px">Shared by accounts of this site; listen only</span></h2>
+        <div id="sharedLib"></div>
+      </div>
       <div id="offlineInfo" class="notice" style="margin-top:12px"></div>
     </section>
   </div>
@@ -472,7 +479,7 @@ setTheme(document.documentElement.getAttribute('data-theme') || 'day');
 // ---------------------------------------------------------------------------
 function showApp() {
   $('loginView').classList.add('hidden'); $('appView').classList.remove('hidden');
-  $('who').classList.remove('hidden'); $('whoName').textContent = username;
+  $('who').classList.remove('hidden'); $('brand').textContent = username + '@Wako205';
   renderChat();
   switchTab('audio');
 }
@@ -490,12 +497,12 @@ function logout() {
     pending.forEach((p) => api(Object.assign({ action: 'audio_progress', token: old }, p)).catch(() => {}));
     setTimeout(() => { api({ action: 'logout', token: old }).catch(() => {}); }, 2000);
   }
-  // Offline copies, the saved library and unsent positions of this user are deleted from this browser.
-  const ids = libItems.map((x) => x.id).concat((libSnapshot(user) || { items: [] }).items.map((x) => x.id));
-  offWipe(user, ids).then(renderNet);
+  // Offline copies, the saved library, unsent positions and the positions of this user are deleted from this browser.
+  offWipe(user).then(renderNet);
   offlineMode = false;
-  token = username = null; store('mp_token', null); store('mp_user', null);
-  clearTimeout(libTimer); libItems = []; $('library').textContent = ''; $('libUsage').textContent = '';
+  token = username = null; store('mp_token', null); store('mp_user', null); $('brand').textContent = 'Wako205';
+  clearTimeout(libTimer); libItems = []; sharedItems = []; $('library').textContent = ''; $('libUsage').textContent = '';
+  $('sharedLib').textContent = ''; $('sharedCard').classList.add('hidden');
   chat = { convId: null, messages: [] }; pendingDoc = null; currentFile = null; store('mp_chat', null);
   Object.keys(fileOutputs).forEach((k) => delete fileOutputs[k]);
   lastResult = lastDocx = null; $('resultView').classList.add('hidden'); $('resultBody').textContent = '';
@@ -1002,14 +1009,23 @@ $('audioBtn').onclick = async () => {
 // ---------------------------------------------------------------------------
 // 9. Audio: library
 // ---------------------------------------------------------------------------
-const libUsage = { used: 0, cap: 0, azUsed: 0, azCap: 0, azReady: false };
+const libUsage = { used: 0, cap: 0, azUsed: 0, azCap: 0, azReady: false, s0Used: 0, s0Cap: 0, s0Until: 0 };
 /** Short display name of a voice value. */
 function voiceLabel(v) { const o = Array.from($('avoice').options).find((x) => x.value === v); return o ? o.textContent.replace(/\s*\(.*\)$/, '') : v; }
 $('avoice').addEventListener('change', () => bookSummary());
-/** Allowance of the engine a voice belongs to ('az:...' voices are Microsoft, the others Google). */
+/**
+ * Allowance of the engine a voice belongs to ('az:...' voices are Microsoft, the others Google).
+ * Microsoft: the free monthly tier is used first, then the trial credit while it lasts (`trial` = its rest).
+ */
 function allowance(voice) {
-  return /^az:/.test(voice || '') ? { used: libUsage.azUsed, cap: libUsage.azCap } : { used: libUsage.used, cap: libUsage.cap };
+  if (!/^az:/.test(voice || '')) return { used: libUsage.used, cap: libUsage.cap, trial: 0 };
+  const trial = libUsage.s0Until ? Math.max(0, libUsage.s0Cap - libUsage.s0Used) : 0;
+  return { used: libUsage.azUsed, cap: libUsage.azCap, trial };
 }
+/** Characters left for a voice, free tier and trial together. */
+function allowanceLeft(al) { return Math.max(0, al.cap - al.used) + al.trial; }
+/** Unambiguous date, for example "7 Nov 2026". */
+function fmtDay(ms) { const d = new Date(ms); return d.getDate() + ' ' + d.toLocaleString('en', { month: 'short' }) + ' ' + d.getFullYear(); }
 function libSnapshot(user) { try { return JSON.parse(lsGet('mp_lib_' + user) || 'null'); } catch (e) { return null; } }
 async function loadLibrary() {
   renderStorage();
@@ -1033,14 +1049,49 @@ async function loadLibrary() {
   }
   libItems = (d.items || []).filter((x) => x && x.id); libUsage.used = d.ttsUsed || 0; libUsage.cap = d.ttsCap || 0;
   libUsage.azUsed = d.azUsed || 0; libUsage.azCap = d.azCap || 0; libUsage.azReady = !!d.azReady;
+  libUsage.s0Used = d.s0Used || 0; libUsage.s0Cap = d.s0Cap || 0; libUsage.s0Until = d.azTier === 's0' && d.azUntil ? d.azUntil : 0;
   const az = $('azVoices'); az.disabled = !libUsage.azReady; az.classList.toggle('hidden', !libUsage.azReady);
   if (!libUsage.azReady && /^az:/.test($('avoice').value)) $('avoice').value = 'Charon';
   $('libUsage').textContent = 'Speech used this month: ' + (libUsage.azReady ? 'Google ' : '') + fmtK(libUsage.used, true) + ' of ' + fmtK(libUsage.cap) +
-    (libUsage.azReady ? ' · Microsoft' + (d.azTier === 's0' && d.azUntil ? ' (trial tier until ' + new Date(d.azUntil - 1).toLocaleDateString() + ')' : '') + ' ' +
-      fmtK(libUsage.azUsed, true) + ' of ' + fmtK(libUsage.azCap) : '');
+    (libUsage.azReady ? ' · Microsoft ' + (libUsage.s0Until ? 'free ' : '') + fmtK(libUsage.azUsed, true) + ' of ' + fmtK(libUsage.azCap, !!libUsage.s0Until) +
+      (libUsage.s0Until ? ', then trial credit ' + fmtK(libUsage.s0Used, true) + ' of ' + fmtK(libUsage.s0Cap) +
+        ' (through ' + fmtDay(libUsage.s0Until - 1) + ')' : '') : '');
   renderLibrary(); bookSummary(); renderNet();
-  if (isOnline() && token) pollLibrary();
+  if (isOnline() && token) { loadShared(); pollLibrary(); }
 }
+
+/** Items other accounts have shared (audio_public). A failure leaves the section hidden. */
+let sharedItems = [];
+async function loadShared() {
+  try {
+    const d = await api({ action: 'audio_public', token });
+    sharedItems = (d.items || []).filter((x) => x && x.id && !x.mine);
+  } catch (e) { sharedItems = []; }
+  renderShared();
+}
+function renderShared() {
+  const box = $('sharedLib'); box.textContent = '';
+  $('sharedCard').classList.toggle('hidden', !sharedItems.length);
+  sharedItems.forEach((it) => {
+    const row = el('div', 'libitem');
+    const g = el('div', 'grow');
+    const t = el('div', 't', it.title); t.onclick = () => openItem(it.id, it.owner);
+    g.appendChild(t);
+    const meta = ['Shared by ' + it.owner, it.kind === 'book' ? 'Book' : 'Paper'];
+    if (it.kind === 'book') meta.push(chaptersDone(it) + ' of ' + it.chapters.length + ' chapters converted');
+    if (it.chars) meta.push('about ' + fmtDur(itemMinutes(it)));
+    if (it.voice) meta.push('voice ' + voiceLabel(it.voice));
+    if (it.pos && it.chapters && it.chapters[it.pos.c]) meta.push('resume at ' + (it.chapters.length > 1 ? it.chapters[it.pos.c].title + ' ' : '') + fmtTime(it.pos.t));
+    g.appendChild(el('div', 'm', meta.join(' · ')));
+    row.appendChild(g);
+    const open = el('button', 'small', it.pos ? 'Resume' : 'Listen'); open.onclick = () => openItem(it.id, it.owner);
+    open.disabled = !(it.chapters || []).some((ch, i) => chapterReadyCount(it, i) > 0);
+    row.appendChild(open);
+    box.appendChild(row);
+  });
+}
+/** Extra request field for an item another account shared: whose library it is in. */
+function ownerOf(it) { return it && it.owner && !it.mine ? { owner: it.owner } : {}; }
 
 function itemMinutes(it) {
   if (!it.chars) return 0;
@@ -1062,6 +1113,7 @@ function renderLibrary() {
     else if (it.chapters && it.chapters.length > 1) meta.push(it.chapters.length + ' chapters');
     if (it.chars) meta.push('about ' + fmtDur(itemMinutes(it)));
     if (it.voice) meta.push('voice ' + voiceLabel(it.voice));
+    if (it.shared) meta.push('shared');
     if (it.pos && it.chapters && it.chapters[it.pos.c]) meta.push('resume at ' + (it.chapters.length > 1 ? it.chapters[it.pos.c].title + ' ' : '') + fmtTime(it.pos.t));
     const nOff = offCount(it);
     if (nOff) meta.push(nOff === savableChapters(it).length ? '✓ saved offline' : '✓ ' + nOff + ' of ' + savableChapters(it).length + ' chapters saved offline');
@@ -1081,10 +1133,19 @@ function renderLibrary() {
       const off = el('button', 'ghost small', nOff ? 'Offline ✓' : 'Offline'); off.title = 'Save for offline listening, or remove the offline copy';
       off.onclick = () => toggleOfflinePanel(it, row); row.appendChild(off);
     }
-    if (it.kind === 'book' && it.state !== 'processing' && chaptersDone(it) < it.chapters.length) {
-      const add = el('button', 'ghost small', 'Add chapters'); add.dataset.net = '1'; add.onclick = () => toggleAddPanel(it, row); row.appendChild(add);
+    if (it.kind === 'book' && it.state !== 'processing') {
+      const add = el('button', 'ghost small', chaptersDone(it) < it.chapters.length ? 'Add chapters' : 'Chapters'); add.dataset.net = '1';
+      add.onclick = () => toggleAddPanel(it, row); row.appendChild(add);
     }
     if (it.state !== 'processing') {
+      const sh = el('button', 'ghost small', it.shared ? 'Unshare' : 'Share'); sh.dataset.net = '1';
+      sh.title = it.shared ? 'Shared with every account of this site; click to stop sharing' : 'Let every account of this site listen to this';
+      sh.onclick = async () => {
+        sh.disabled = true;
+        try { await api({ action: 'audio_share', token, id: it.id, shared: !it.shared }); await loadLibrary(); }
+        catch (e) { setStatus($('audioStatus'), e.message, true); sh.disabled = false; }
+      };
+      row.appendChild(sh);
       const del = el('button', 'ghost small', 'Delete'); del.dataset.net = '1';
       del.onclick = async () => {
         if (!window.confirm('Delete "' + it.title + '" and its audio from Drive?')) return;
@@ -1113,14 +1174,16 @@ function toggleAddPanel(it, row) {
   const old = row.nextSibling && row.nextSibling.classList && row.nextSibling.classList.contains('addpanel') ? row.nextSibling : null;
   if (old) { old.remove(); return; }
   const box = el('div', 'card addpanel'); box.style.margin = '-4px 0 12px';
-  box.appendChild(el('div', 'm', 'Choose chapters of "' + it.title + '" to convert. Converted chapters are ticked and kept.'));
+  box.appendChild(el('div', 'm', 'Choose chapters of "' + it.title + '" to convert. Converted chapters are ticked and kept; ' +
+    'use Delete audio to remove one (it can be converted again later).'));
   const list = el('div', 'chlist'); const picks = [];
   it.chapters.forEach((ch, i) => {
     const lab = el('label'); const cb = el('input'); cb.type = 'checkbox';
     const done = ch.status === 'done' || ch.status === 'queued';
     cb.checked = done; cb.disabled = done; cb.onchange = () => { picks[i] = cb.checked; sum(); };
-    lab.appendChild(cb); lab.appendChild(el('span', null, ch.title + (done ? ' (converted)' : '')));
+    lab.appendChild(cb); lab.appendChild(el('span', null, ch.title + (done ? ' (converted' + (ch.voice ? ', ' + voiceLabel(ch.voice) : '') + ')' : '')));
     lab.appendChild(el('span', 'n', fmtK(ch.chars || 0) + ' · ' + fmtDur((ch.chars || 0) / (it.lang && it.lang !== 'en-US' ? 270 : 900))));
+    if (ch.status === 'done') lab.appendChild(chapterDeleteButton(it, i, box));
     list.appendChild(lab);
   });
   box.appendChild(list);
@@ -1132,8 +1195,10 @@ function toggleAddPanel(it, row) {
   const go = el('button', null, 'Convert selected'); const st = el('span', 'status');
   const sum = () => {
     const chars = it.chapters.reduce((n, ch, i) => n + (picks[i] ? ch.chars || 0 : 0), 0);
-    const al = allowance(voice.value), left = Math.max(0, al.cap - al.used);
-    st.textContent = chars ? fmtK(chars) + ' of speech; allowance left for this voice ' + fmtK(left, true) + ' of ' + fmtK(al.cap) + (chars > left ? ' (not enough)' : '') : 'Tick chapters to convert.';
+    const al = allowance(voice.value), free = Math.max(0, al.cap - al.used), left = allowanceLeft(al);
+    st.textContent = chars ? fmtK(chars) + ' of speech; allowance left for this voice ' + fmtK(free, true) + ' of ' + fmtK(al.cap, !!al.trial) +
+      (al.trial ? ' free, then ' + fmtK(al.trial, true) + ' trial credit' + (chars > free ? ' (the trial credit will be used for ' + fmtK(chars - free, true) + ')' : '') : '') +
+      (chars > left ? ' (not enough)' : '') : 'Tick chapters to convert.';
     go.disabled = !chars;
   };
   go.onclick = async () => {
@@ -1145,6 +1210,32 @@ function toggleAddPanel(it, row) {
   };
   row2.appendChild(el('span', 'm', 'Voice')); row2.appendChild(voice); row2.appendChild(go); row2.appendChild(st);
   box.appendChild(row2); row.after(box); sum();
+}
+
+/** "Delete audio" for one converted chapter, confirmed inline (no browser dialog). */
+function chapterDeleteButton(it, c, panel) {
+  const wrap = el('span', 'chdel');
+  const b = el('button', 'ghost small', 'Delete audio');
+  b.setAttribute('aria-label', 'Delete audio of ' + it.chapters[c].title);
+  const ask = () => {
+    wrap.textContent = '';
+    const yes = el('button', 'small danger', 'Confirm delete'), no = el('button', 'ghost small', 'Cancel');
+    no.onclick = (e) => { e.preventDefault(); wrap.textContent = ''; wrap.appendChild(b); };
+    yes.onclick = async (e) => {
+      e.preventDefault(); yes.disabled = no.disabled = true; yes.textContent = 'Deleting...';
+      try {
+        await api({ action: 'audio_chapter_delete', token, id: it.id, chapter: c });
+        if (P && P.item.id === it.id) closePlayer();
+        panel.remove(); await loadLibrary();
+      } catch (err) {
+        wrap.textContent = ''; wrap.appendChild(b); wrap.appendChild(el('span', 'status err', err.message));
+      }
+    };
+    wrap.appendChild(yes); wrap.appendChild(no);
+  };
+  b.onclick = (e) => { e.preventDefault(); ask(); };
+  wrap.appendChild(b);
+  return wrap;
 }
 
 // Polls conversions in progress; the server also uses these polls to restart a stalled job.
@@ -1239,15 +1330,18 @@ async function offRemove(keys) {
   keys.forEach((k) => { tx.objectStore('meta').delete(k); tx.objectStore('audio').delete(k); offIndex.delete(k); });
   await idbDone(tx);
 }
-/** Deletes everything this browser keeps for a user: offline audio, the library copy and unsent positions. */
-async function offWipe(user, itemIds) {
+/** Deletes everything this browser keeps for a user: offline audio, the library copy, unsent and saved positions. */
+async function offWipe(user) {
   if (!user) return;
   try {
     const db = await offDb();
     const keys = await idbReq(db.transaction('meta').objectStore('meta').index('user').getAllKeys(user));
     await offRemove(keys);
   } catch (e) {}
-  (itemIds || []).forEach((id) => { ['mp_pos_', 'mp_mark_b1_', 'mp_mark_b2_'].forEach((p) => { try { localStorage.removeItem(p + id); } catch (e) {} }); });
+  try {
+    const own = ['mp_pos_' + user + '_', 'mp_mark_b1_' + user + '_', 'mp_mark_b2_' + user + '_'];
+    Object.keys(localStorage).filter((k) => own.some((p) => k.startsWith(p))).forEach((k) => localStorage.removeItem(k));
+  } catch (e) {}
   ['mp_lib_' + user, 'mp_outbox_' + user].forEach((k) => { try { localStorage.removeItem(k); } catch (e) {} });
   if (lsGet('mp_last_user') === user) { try { localStorage.removeItem('mp_last_user'); } catch (e) {} }
   offIndex.clear();
@@ -1365,6 +1459,7 @@ function renderPlayerOffline() {
   const box = $('pOffline'); box.textContent = '';
   if (!P || P.c < 0) return;
   const it = P.item;
+  if (it.owner && !it.mine) return;                  // items other accounts shared are listened to online only
   if (savableChapters(it).includes(P.c) && it.chapters.length > 1) box.appendChild(offlineControls(it, P.c));
   if (savableChapters(it).length) box.appendChild(offlineControls(it, null, true));
 }
@@ -1480,15 +1575,15 @@ function speakWeight(s) {
   return cjk + other * 0.3 + pauses * 0.8 + 1.5;
 }
 
-function openItem(id) {
-  const it = libItems.find((x) => x.id === id);
+function openItem(id, owner) {
+  const it = owner ? sharedItems.find((x) => x.id === id && x.owner === owner) : libItems.find((x) => x.id === id);
   if (!it) return;
-  const local = (() => { try { return JSON.parse(lsGet('mp_pos_' + id) || 'null'); } catch (e) { return null; } })();
+  const local = (() => { try { return JSON.parse(lsGet('mp_pos_' + username + '_' + id) || 'null'); } catch (e) { return null; } })();
   const pos = [it.pos, local].filter(Boolean).sort((a, b) => (b.at || 0) - (a.at || 0))[0] || { c: 0, t: 0 };
   P = { item: it, c: -1, cache: {}, loading: {} };
   it.marks = it.marks || {};
   ['b1', 'b2'].forEach((slot) => {                      // a bookmark saved while offline is kept if newer
-    try { const m = JSON.parse(lsGet('mp_mark_' + slot + '_' + id) || 'null'); if (m && (!it.marks[slot] || m.at > it.marks[slot].at)) it.marks[slot] = m; } catch (e) {}
+    try { const m = JSON.parse(lsGet('mp_mark_' + slot + '_' + username + '_' + id) || 'null'); if (m && (!it.marks[slot] || m.at > it.marks[slot].at)) it.marks[slot] = m; } catch (e) {}
   });
   if (pos && pos.at && (!it.pos || pos.at > (it.pos.at || 0))) it.pos = pos;
   renderMarks();
@@ -1503,7 +1598,7 @@ function openItem(id) {
 
 function refreshChapterSelect() {
   if (!P) return;
-  const sel = $('pChapter'), it = libItems.find((x) => x.id === P.item.id) || P.item;
+  const sel = $('pChapter'), it = (P.item.owner ? null : libItems.find((x) => x.id === P.item.id)) || P.item;
   P.item = it;
   const chs = it.chapters || [];
   sel.textContent = '';
@@ -1555,13 +1650,13 @@ const EARLY_PARTS = 2;   // playback starts once this many parts (several minute
  * parts, so playback can start while the rest is still loading.
  */
 function fetchChapter(c, onStatus, onEarly) {
-  const id = P.item.id, ch = P.item.chapters[c], cache = P.cache, loading = P.loading;
+  const id = P.item.id, ch = P.item.chapters[c], cache = P.cache, loading = P.loading, from = ownerOf(P.item);
   if (cache[c] && cache[c].parts >= ch.n) return Promise.resolve(cache[c]);
   if (loading[c]) { if (onEarly) loading[c].early = onEarly; return loading[c]; }
   const say = onStatus || (() => {});
   let earlyDone = false;
   const job = (async () => {
-    const used = pronUsed(id), saved = await offGet(id, c).catch(() => null);
+    const used = pronUsed(id), saved = from.owner ? null : await offGet(id, c).catch(() => null);
     let texts, bufs, stop = ch.n;
     if (saved) {                                         // saved for offline listening: no request at all
       texts = saved.texts.map((t) => unrespell(t, used));
@@ -1570,14 +1665,14 @@ function fetchChapter(c, onStatus, onEarly) {
     } else {
       if (!isOnline()) throw new Error('This chapter is not saved for offline listening.');
       say('Loading audio...');
-      texts = (await api({ action: 'audio_text', token, id, chapter: c })).texts.map((t) => unrespell(t, used));
+      texts = (await api({ action: 'audio_text', token, id, chapter: c, ...from })).texts.map((t) => unrespell(t, used));
       bufs = new Array(ch.n);
     }
     let next = 0;
     const worker = async () => {
       while (next < stop) {
         const k = next++;
-        try { bufs[k] = unb64((await api({ action: 'audio_part', token, id, chapter: c, index: k })).data); }
+        try { bufs[k] = unb64((await api({ action: 'audio_part', token, id, chapter: c, index: k, ...from })).data); }
         catch (e) { if (/not ready/i.test(e.message)) { stop = Math.min(stop, k); continue; } throw e; }
         say('Loading audio: ' + bufs.filter(Boolean).length + ' of ' + ch.n);
         const cb = job.early;
@@ -2035,10 +2130,10 @@ function saveProgress(force) {
   if (!force && Date.now() - lastSave < 20000) return;
   lastSave = Date.now();
   const pos = { c: P.c, t, at: Date.now(), label: currentLabel() };
-  lsSet('mp_pos_' + P.item.id, JSON.stringify(pos));
+  lsSet('mp_pos_' + username + '_' + P.item.id, JSON.stringify(pos));
   P.item.pos = pos;
   renderMarks();
-  sendProgress({ id: P.item.id, chapter: P.c, time: t, label: pos.label, at: pos.at }).catch(() => {});
+  sendProgress({ id: P.item.id, chapter: P.c, time: t, label: pos.label, at: pos.at, ...ownerOf(P.item) }).catch(() => {});
 }
 
 // ---------------------------------------------------------------------------
@@ -2063,9 +2158,9 @@ function saveMark(slot) {
   if (!P || P.c < 0 || !player.src) return;
   const m = { c: P.c, t: player.currentTime || 0, at: Date.now(), label: currentLabel() };
   P.item.marks = P.item.marks || {}; P.item.marks[slot] = m;
-  lsSet('mp_mark_' + slot + '_' + P.item.id, JSON.stringify(m));
+  lsSet('mp_mark_' + slot + '_' + username + '_' + P.item.id, JSON.stringify(m));
   renderMarks();
-  sendProgress({ id: P.item.id, slot, chapter: m.c, time: m.t, label: m.label, at: m.at })
+  sendProgress({ id: P.item.id, slot, chapter: m.c, time: m.t, label: m.label, at: m.at, ...ownerOf(P.item) })
     .then((sent) => { if (!sent) setStatus($('pStatus'), 'Bookmark saved on this device; it is sent to your account when the connection returns.'); })
     .catch((e) => setStatus($('pStatus'), 'Bookmark saved on this device only: ' + e.message, true));
 }
@@ -2085,8 +2180,8 @@ function renderMarks() {
 }
 window.addEventListener('pagehide', () => {
   if (!P || P.c < 0) return;
-  if (!token || !isOnline()) { outboxQueue({ id: P.item.id, chapter: P.c, time: player.currentTime || 0, at: Date.now() }); return; }
-  try { navigator.sendBeacon(BACKEND_URL, JSON.stringify({ action: 'audio_progress', token, id: P.item.id, chapter: P.c, time: player.currentTime || 0 })); } catch (e) {}
+  if (!token || !isOnline()) { outboxQueue({ id: P.item.id, chapter: P.c, time: player.currentTime || 0, at: Date.now(), ...ownerOf(P.item) }); return; }
+  try { navigator.sendBeacon(BACKEND_URL, JSON.stringify({ action: 'audio_progress', token, id: P.item.id, chapter: P.c, time: player.currentTime || 0, ...ownerOf(P.item) })); } catch (e) {}
 });
 
 $('dlAudioBtn').onclick = async () => {

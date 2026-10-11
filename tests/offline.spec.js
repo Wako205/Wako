@@ -223,7 +223,7 @@ test('logout deletes the offline copies and cached data of the user', async ({ p
   await book(page).getByRole('button', { name: /Listen|Resume/ }).click();
   await expect(page.locator('#pText span.s').first()).toBeVisible();
   await page.click('#pClose');
-  expect(await page.evaluate(() => ['mp_lib_tester', 'mp_last_user', 'mp_pos_book1'].map((k) => localStorage.getItem(k) !== null))).toEqual([true, true, true]);
+  expect(await page.evaluate(() => ['mp_lib_tester', 'mp_last_user', 'mp_pos_tester_book1'].map((k) => localStorage.getItem(k) !== null))).toEqual([true, true, true]);
   await page.click('#logoutBtn');
   await expect.poll(async () => (await stored(page)).meta).toEqual([]);
   expect((await stored(page)).audio).toEqual([]);
@@ -266,3 +266,24 @@ for (const theme of ['night', 'eye']) {
     await expect(page.locator('#netBanner')).toBeVisible();
   });
 }
+
+test('items other accounts shared are not saved offline; their bookmarks keep the owner when queued', async ({ page, context, site, backend }) => {
+  backend.shared = [{
+    id: 'shared1', owner: 'bob', mine: false, kind: 'book', title: 'Bob\'s Book', created: '2026-09-02T10:00:00Z', state: 'done',
+    voice: 'Kore', lang: 'en-US', chars: 2800, pos: null, marks: {},
+    chapters: [{ title: 'Part 1', n: 2, chars: 1400, status: 'done' }, { title: 'Part 2', n: 2, chars: 1400, status: 'done' }],
+  }];
+  backend.on('audio_text', () => ({ texts: ['Shared text one.', 'Shared text two.'] }));
+  backend.on('audio_progress', () => ({}));
+  await login(page, site);
+  await openAudio(page);
+  await page.locator('#sharedLib .libitem').first().getByRole('button', { name: 'Listen' }).click();
+  await expect(page.locator('#pText span.s').first()).toBeVisible();
+  await expect(page.locator('#pOffline button')).toHaveCount(0);
+  await context.setOffline(true);
+  await page.evaluate(() => { player.currentTime = 4.8; });
+  await page.locator('#pMarks .mark').nth(1).getByRole('button', { name: 'Save here' }).click();
+  const before = backend.callsOf('audio_progress').length;
+  await context.setOffline(false);
+  await expect.poll(() => backend.callsOf('audio_progress').slice(before).find((p) => p.slot === 'b1')).toMatchObject({ id: 'shared1', owner: 'bob', token: 'tok-test' });
+});
