@@ -30,6 +30,7 @@
   button { padding:9px 16px; border:0; border-radius:8px; background:var(--accent); color:var(--on-accent); font:inherit; cursor:pointer; }
   button.ghost { background:transparent; color:var(--accent); border:1px solid var(--accent); }
   button.small { padding:5px 10px; font-size:13px; }
+  button.danger { background:var(--err); border-color:var(--err); color:#fff; }
   button.chip { background:var(--soft); color:var(--ink); border:1px solid var(--line); font-size:13px; padding:5px 10px; }
   button:disabled { opacity:.5; cursor:default; }
   .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
@@ -76,6 +77,8 @@
   .chlist { max-height: 260px; overflow-y:auto; border:1px solid var(--line); border-radius:8px; margin-top:8px; padding:4px 10px; font-size:14px; }
   .chlist label { display:flex; gap:8px; align-items:center; margin:4px 0; color:var(--ink); font-size:14px; }
   .chlist .n { margin-left:auto; color:var(--muted); font-size:12px; white-space:nowrap; }
+  .chlist .chdel { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .chlist .chdel .status { font-size:12px; }
   .libitem { border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin:10px 0; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
   .libitem .t { font-weight:600; cursor:pointer; color:var(--accent); }
   .libitem .m { font-size:13px; color:var(--muted); }
@@ -975,24 +978,35 @@ $('audioBtn').onclick = async () => {
 // ---------------------------------------------------------------------------
 // 9. Audio: library
 // ---------------------------------------------------------------------------
-const libUsage = { used: 0, cap: 0, azUsed: 0, azCap: 0, azReady: false };
+const libUsage = { used: 0, cap: 0, azUsed: 0, azCap: 0, azReady: false, s0Used: 0, s0Cap: 0, s0Until: 0 };
 /** Short display name of a voice value. */
 function voiceLabel(v) { const o = Array.from($('avoice').options).find((x) => x.value === v); return o ? o.textContent.replace(/\s*\(.*\)$/, '') : v; }
 $('avoice').addEventListener('change', () => bookSummary());
-/** Allowance of the engine a voice belongs to ('az:...' voices are Microsoft, the others Google). */
+/**
+ * Allowance of the engine a voice belongs to ('az:...' voices are Microsoft, the others Google).
+ * Microsoft: the free monthly tier is used first, then the trial credit while it lasts (`trial` = its rest).
+ */
 function allowance(voice) {
-  return /^az:/.test(voice || '') ? { used: libUsage.azUsed, cap: libUsage.azCap } : { used: libUsage.used, cap: libUsage.cap };
+  if (!/^az:/.test(voice || '')) return { used: libUsage.used, cap: libUsage.cap, trial: 0 };
+  const trial = libUsage.s0Until ? Math.max(0, libUsage.s0Cap - libUsage.s0Used) : 0;
+  return { used: libUsage.azUsed, cap: libUsage.azCap, trial };
 }
+/** Characters left for a voice, free tier and trial together. */
+function allowanceLeft(al) { return Math.max(0, al.cap - al.used) + al.trial; }
+/** Unambiguous date, for example "7 Nov 2026". */
+function fmtDay(ms) { const d = new Date(ms); return d.getDate() + ' ' + d.toLocaleString('en', { month: 'short' }) + ' ' + d.getFullYear(); }
 async function loadLibrary() {
   try {
     const d = await api({ action: 'audio_library', token });
     libItems = (d.items || []).filter((x) => x && x.id); libUsage.used = d.ttsUsed || 0; libUsage.cap = d.ttsCap || 0;
     libUsage.azUsed = d.azUsed || 0; libUsage.azCap = d.azCap || 0; libUsage.azReady = !!d.azReady;
+    libUsage.s0Used = d.s0Used || 0; libUsage.s0Cap = d.s0Cap || 0; libUsage.s0Until = d.azTier === 's0' && d.azUntil ? d.azUntil : 0;
     const az = $('azVoices'); az.disabled = !libUsage.azReady; az.classList.toggle('hidden', !libUsage.azReady);
     if (!libUsage.azReady && /^az:/.test($('avoice').value)) $('avoice').value = 'Charon';
     $('libUsage').textContent = 'Speech used this month: ' + (libUsage.azReady ? 'Google ' : '') + fmtK(libUsage.used, true) + ' of ' + fmtK(libUsage.cap) +
-      (libUsage.azReady ? ' · Microsoft' + (d.azTier === 's0' && d.azUntil ? ' (trial tier until ' + new Date(d.azUntil - 1).toLocaleDateString() + ')' : '') + ' ' +
-        fmtK(libUsage.azUsed, true) + ' of ' + fmtK(libUsage.azCap) : '');
+      (libUsage.azReady ? ' · Microsoft ' + (libUsage.s0Until ? 'free ' : '') + fmtK(libUsage.azUsed, true) + ' of ' + fmtK(libUsage.azCap, !!libUsage.s0Until) +
+        (libUsage.s0Until ? ', then trial credit ' + fmtK(libUsage.s0Used, true) + ' of ' + fmtK(libUsage.s0Cap) +
+          ' (through ' + fmtDay(libUsage.s0Until - 1) + ')' : '') : '');
     renderLibrary(); bookSummary();
     pollLibrary();
   } catch (e) {
@@ -1031,8 +1045,9 @@ function renderLibrary() {
     const open = el('button', 'small', it.pos ? 'Resume' : 'Listen'); open.onclick = () => openItem(it.id);
     open.disabled = !(it.chapters || []).some((ch, i) => chapterReadyCount(it, i) > 0);
     row.appendChild(open);
-    if (it.kind === 'book' && it.state !== 'processing' && chaptersDone(it) < it.chapters.length) {
-      const add = el('button', 'ghost small', 'Add chapters'); add.onclick = () => toggleAddPanel(it, row); row.appendChild(add);
+    if (it.kind === 'book' && it.state !== 'processing') {
+      const add = el('button', 'ghost small', chaptersDone(it) < it.chapters.length ? 'Add chapters' : 'Chapters');
+      add.onclick = () => toggleAddPanel(it, row); row.appendChild(add);
     }
     if (it.state !== 'processing') {
       const del = el('button', 'ghost small', 'Delete');
@@ -1062,14 +1077,16 @@ function toggleAddPanel(it, row) {
   const old = row.nextSibling && row.nextSibling.classList && row.nextSibling.classList.contains('addpanel') ? row.nextSibling : null;
   if (old) { old.remove(); return; }
   const box = el('div', 'card addpanel'); box.style.margin = '-4px 0 12px';
-  box.appendChild(el('div', 'm', 'Choose chapters of "' + it.title + '" to convert. Converted chapters are ticked and kept.'));
+  box.appendChild(el('div', 'm', 'Choose chapters of "' + it.title + '" to convert. Converted chapters are ticked and kept; ' +
+    'use Delete audio to remove one (it can be converted again later).'));
   const list = el('div', 'chlist'); const picks = [];
   it.chapters.forEach((ch, i) => {
     const lab = el('label'); const cb = el('input'); cb.type = 'checkbox';
     const done = ch.status === 'done' || ch.status === 'queued';
     cb.checked = done; cb.disabled = done; cb.onchange = () => { picks[i] = cb.checked; sum(); };
-    lab.appendChild(cb); lab.appendChild(el('span', null, ch.title + (done ? ' (converted)' : '')));
+    lab.appendChild(cb); lab.appendChild(el('span', null, ch.title + (done ? ' (converted' + (ch.voice ? ', ' + voiceLabel(ch.voice) : '') + ')' : '')));
     lab.appendChild(el('span', 'n', fmtK(ch.chars || 0) + ' · ' + fmtDur((ch.chars || 0) / (it.lang && it.lang !== 'en-US' ? 270 : 900))));
+    if (ch.status === 'done') lab.appendChild(chapterDeleteButton(it, i, box));
     list.appendChild(lab);
   });
   box.appendChild(list);
@@ -1081,8 +1098,10 @@ function toggleAddPanel(it, row) {
   const go = el('button', null, 'Convert selected'); const st = el('span', 'status');
   const sum = () => {
     const chars = it.chapters.reduce((n, ch, i) => n + (picks[i] ? ch.chars || 0 : 0), 0);
-    const al = allowance(voice.value), left = Math.max(0, al.cap - al.used);
-    st.textContent = chars ? fmtK(chars) + ' of speech; allowance left for this voice ' + fmtK(left, true) + ' of ' + fmtK(al.cap) + (chars > left ? ' (not enough)' : '') : 'Tick chapters to convert.';
+    const al = allowance(voice.value), free = Math.max(0, al.cap - al.used), left = allowanceLeft(al);
+    st.textContent = chars ? fmtK(chars) + ' of speech; allowance left for this voice ' + fmtK(free, true) + ' of ' + fmtK(al.cap, !!al.trial) +
+      (al.trial ? ' free, then ' + fmtK(al.trial, true) + ' trial credit' + (chars > free ? ' (the trial credit will be used for ' + fmtK(chars - free, true) + ')' : '') : '') +
+      (chars > left ? ' (not enough)' : '') : 'Tick chapters to convert.';
     go.disabled = !chars;
   };
   go.onclick = async () => {
@@ -1094,6 +1113,32 @@ function toggleAddPanel(it, row) {
   };
   row2.appendChild(el('span', 'm', 'Voice')); row2.appendChild(voice); row2.appendChild(go); row2.appendChild(st);
   box.appendChild(row2); row.after(box); sum();
+}
+
+/** "Delete audio" for one converted chapter, confirmed inline (no browser dialog). */
+function chapterDeleteButton(it, c, panel) {
+  const wrap = el('span', 'chdel');
+  const b = el('button', 'ghost small', 'Delete audio');
+  b.setAttribute('aria-label', 'Delete audio of ' + it.chapters[c].title);
+  const ask = () => {
+    wrap.textContent = '';
+    const yes = el('button', 'small danger', 'Confirm delete'), no = el('button', 'ghost small', 'Cancel');
+    no.onclick = (e) => { e.preventDefault(); wrap.textContent = ''; wrap.appendChild(b); };
+    yes.onclick = async (e) => {
+      e.preventDefault(); yes.disabled = no.disabled = true; yes.textContent = 'Deleting...';
+      try {
+        await api({ action: 'audio_chapter_delete', token, id: it.id, chapter: c });
+        if (P && P.item.id === it.id) closePlayer();
+        panel.remove(); await loadLibrary();
+      } catch (err) {
+        wrap.textContent = ''; wrap.appendChild(b); wrap.appendChild(el('span', 'status err', err.message));
+      }
+    };
+    wrap.appendChild(yes); wrap.appendChild(no);
+  };
+  b.onclick = (e) => { e.preventDefault(); ask(); };
+  wrap.appendChild(b);
+  return wrap;
 }
 
 // Polls conversions in progress; the server also uses these polls to restart a stalled job.

@@ -7,7 +7,7 @@ Every call is `POST` with a JSON body `{action, token, ...}` (sent as `text/plai
 ## Account
 | action | request | reply |
 |---|---|---|
-| `login` | `username, password` | `token, username` (at most 5 failed attempts per user name per day, Japan time) |
+| `login` | `username, password` | `token, username` (at most 10 failed attempts per user name per day, Japan time) |
 | `logout` | | `ok`; every token of this user issued so far stops working |
 
 ## Polish / review (async jobs)
