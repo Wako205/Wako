@@ -93,6 +93,14 @@
   .mark button { padding:3px 8px; font-size:12px; }
   .readtext span.s.pend { color:var(--pend); cursor:default; }
   h2 { font-size: 18px; margin: 24px 0 12px; }
+  .banner { font-size:14px; background:var(--soft); border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:8px; padding:8px 12px; margin-bottom:12px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  body.offline [data-net] { opacity:.45; pointer-events:none; }
+  .offctl { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:6px; font-size:13px; }
+  .offmark { color:var(--accent); font-weight:600; }
+  .offlist { margin-top:8px; border-top:1px solid var(--line); }
+  .offrow { padding:6px 0; border-bottom:1px solid var(--line); font-size:14px; }
+  .offrow .otitle { font-weight:600; }
+  .poffline { margin-top:6px; }
   details.pron { margin-top:14px; border:1px solid var(--line); border-radius:8px; padding:8px 12px; font-size:14px; }
   details.pron summary { cursor:pointer; color:var(--accent); }
   .pron table { width:100%; border-collapse:collapse; margin-top:8px; }
@@ -143,6 +151,7 @@
 </head>
 <body>
 <main>
+  <div id="netBanner" class="banner hidden" role="status"></div>
   <div class="top">
     <h1>Wako205</h1>
     <div class="themes" id="themes" role="group" aria-label="Color theme">
@@ -158,6 +167,10 @@
     <label for="pass">Password</label>
     <input type="password" id="pass" autocomplete="current-password">
     <div class="row" style="margin-top:16px"><button id="loginBtn">Log in</button><span class="status" id="loginStatus"></span></div>
+    <div id="offlineEntry" class="hidden" style="margin-top:14px">
+      <div class="notice" id="offlineEntryNote"></div>
+      <button class="ghost" id="offlineBtn" style="margin-top:8px">Listen offline</button>
+    </div>
   </section>
 
   <div id="appView" class="hidden" style="display:flex;flex-direction:column;flex:1">
@@ -192,7 +205,7 @@
         </div>
         <textarea id="prompt" placeholder="Ask anything about your manuscript, or attach a file and choose a task above. Enter to send, Shift+Enter for a new line."></textarea>
         <div class="row" style="margin-top:8px">
-          <button id="sendBtn">Send</button>
+          <button data-net="1" id="sendBtn">Send</button>
           <span class="status" id="chatStatus"></span>
         </div>
         <div class="notice" style="margin-top:10px">Attached text and the conversation are stored in the administrator's Google Drive and sent to the Anthropic API. Replies take 20 s to 3 min. Keep this page open.</div>
@@ -209,7 +222,7 @@
           <option value="polish">Polish language (returns revised file with changes written into the .docx, plus a change list)</option>
           <option value="review">Review (returns a referee-style report)</option>
         </select>
-        <div class="row" style="margin-top:16px"><button id="runBtn">Submit</button><span class="status" id="runStatus"></span></div>
+        <div class="row" style="margin-top:16px"><button data-net="1" id="runBtn">Submit</button><span class="status" id="runStatus"></span></div>
         <div class="notice" style="margin-top:14px">Sentence-level edits are applied automatically. For Word files the edits are written back into the original document with formatting preserved. Processing takes 1 to 5 minutes.</div>
       </div>
       <section class="hidden" id="resultView">
@@ -257,6 +270,7 @@
           <button class="ghost small" id="dlAudioBtn">Download MP3</button>
           <button class="ghost small" id="dlScriptBtn">Download text</button>
         </div>
+        <div id="pOffline" class="poffline"></div>
       </section>
 
       <!-- New conversion -->
@@ -282,7 +296,7 @@
           <option value="Puck">Puck (male, lively)</option>
           <option value="Leda">Leda (female, youthful)</option>
         </select>
-        <button class="ghost" id="previewBtn" type="button" title="Hear the first sentences of the selected text in this voice (uses about 0.1k characters of the allowance)">试听 Preview</button>
+        <button class="ghost" id="previewBtn" type="button" data-net="1" title="Hear the first sentences of the selected text in this voice (uses about 0.1k characters of the allowance)">试听 Preview</button>
         </div>
         <details class="pron" id="pronBox">
           <summary id="pronSummary">Pronunciation of terms</summary>
@@ -298,13 +312,15 @@
           </table>
           <div class="status" id="pronStatus"></div>
         </details>
-        <div class="row" style="margin-top:16px"><button id="audioBtn">Generate audio</button><span class="status" id="audioStatus"></span></div>
+        <div class="row" style="margin-top:16px"><button data-net="1" id="audioBtn">Generate audio</button><span class="status" id="audioStatus"></span></div>
         <div class="notice" style="margin-top:14px">The type of document is detected automatically. Papers: Claude rewrites the PDF into a listening script (references and citation numbers skipped; equations and units read in words), then Google Chirp 3 HD reads it. Books and other text: read as written, chapter by chapter, with running headers and page numbers removed. English, Japanese and Chinese are detected automatically. Every conversion is saved to your library below, together with your listening position, so it never has to be converted twice. You can close this page while a conversion runs.</div>
       </div>
 
       <!-- Library -->
       <h2>Your audio library <span class="status" id="libUsage" style="font-weight:normal;font-size:13px;margin-left:8px"></span></h2>
+      <div id="libNote" class="status"></div>
       <div id="library"><div class="status">Loading...</div></div>
+      <div id="offlineInfo" class="notice" style="margin-top:12px"></div>
     </section>
   </div>
 </main>
@@ -384,6 +400,7 @@ let token = null, username = null;     // the token is kept in memory and in thi
 
 // text/plain body keeps this a "simple" request, which Apps Script requires (no CORS preflight).
 async function api(payload) {
+  if (!isOnline()) throw new Error(OFFLINE_MSG);
   const r = await fetch(BACKEND_URL, { method: 'POST', body: JSON.stringify(payload) });
   if (!r.ok) throw new Error('Server error (HTTP ' + r.status + ')');
   const data = await r.json();
@@ -435,8 +452,15 @@ function logout() {
   if (P) closePlayer();                                   // saves the position while the token is still valid
   // End the session on the server too (every token of this user stops working). Sent a moment later,
   // so the position saved just above is not refused.
-  const old = token;
-  if (old) setTimeout(() => { api({ action: 'logout', token: old }).catch(() => {}); }, 2000);
+  const old = token, user = offUser(), pending = outboxRead();
+  if (old) {
+    pending.forEach((p) => api(Object.assign({ action: 'audio_progress', token: old }, p)).catch(() => {}));
+    setTimeout(() => { api({ action: 'logout', token: old }).catch(() => {}); }, 2000);
+  }
+  // Offline copies, the saved library and unsent positions of this user are deleted from this browser.
+  const ids = libItems.map((x) => x.id).concat((libSnapshot(user) || { items: [] }).items.map((x) => x.id));
+  offWipe(user, ids).then(renderNet);
+  offlineMode = false;
   token = username = null; store('mp_token', null); store('mp_user', null);
   clearTimeout(libTimer); libItems = []; $('library').textContent = ''; $('libUsage').textContent = '';
   chat = { convId: null, messages: [] }; pendingDoc = null; currentFile = null; store('mp_chat', null);
@@ -454,7 +478,9 @@ $('loginBtn').onclick = async () => {
   try {
     const d = await api({ action: 'login', username: $('user').value.trim(), password: $('pass').value });
     token = d.token; username = d.username; store('mp_token', token); store('mp_user', username);
-    $('pass').value = ''; setStatus(st, ''); showApp();
+    lsSet('mp_last_user', username); offlineMode = false;
+    $('pass').value = ''; setStatus(st, '');
+    await offLoadIndex(); showApp(); renderNet(); flushOutbox();
   } catch (e) { setStatus(st, e.message, true); }
   $('loginBtn').disabled = false;
 };
@@ -469,6 +495,7 @@ function switchTab(t) {
     $(tab).classList.toggle('active', t === k); $(view).classList.toggle('hidden', t !== k);
   });
   if (t === 'audio') { renderPron(); loadLibrary(); } else clearTimeout(libTimer);
+  renderNet();
 }
 
 // ---------------------------------------------------------------------------
@@ -943,17 +970,31 @@ $('audioBtn').onclick = async () => {
 // 9. Audio: library
 // ---------------------------------------------------------------------------
 const libUsage = { used: 0, cap: 0 };
+function libSnapshot(user) { try { return JSON.parse(lsGet('mp_lib_' + user) || 'null'); } catch (e) { return null; } }
 async function loadLibrary() {
-  try {
-    const d = await api({ action: 'audio_library', token });
-    libItems = d.items || []; libUsage.used = d.ttsUsed || 0; libUsage.cap = d.ttsCap || 0;
-    $('libUsage').textContent = 'Speech used this month: ' + fmtK(libUsage.used, true) + ' of ' + fmtK(libUsage.cap);
-    renderLibrary(); bookSummary();
-    pollLibrary();
-  } catch (e) {
-    $('library').textContent = e.message;
-    if (/log in again/i.test(e.message)) logout();
+  renderStorage();
+  let d = null;
+  if (token && isOnline()) {
+    try {
+      d = await api({ action: 'audio_library', token });
+      lsSet('mp_lib_' + username, JSON.stringify({ at: Date.now(), items: d.items || [], ttsUsed: d.ttsUsed, ttsCap: d.ttsCap }));
+      setStatus($('libNote'), '');
+      flushOutbox();
+    } catch (e) {
+      if (/log in again/i.test(e.message)) return logout();
+      if (!isNetError(e)) { $('library').textContent = e.message; return; }
+    }
   }
+  if (!d) {                                  // offline: the library as last received
+    const snap = libSnapshot(offUser());
+    if (!snap) { $('library').textContent = token ? 'The library cannot be loaded without a connection.' : 'No library has been saved on this device.'; return; }
+    d = snap;
+    setStatus($('libNote'), 'Offline: the library as received on ' + new Date(snap.at).toLocaleString() + '.');
+  }
+  libItems = d.items || []; libUsage.used = d.ttsUsed || 0; libUsage.cap = d.ttsCap || 0;
+  $('libUsage').textContent = 'Speech used this month: ' + fmtK(libUsage.used, true) + ' of ' + fmtK(libUsage.cap);
+  renderLibrary(); bookSummary(); renderNet();
+  if (isOnline() && token) pollLibrary();
 }
 
 function itemMinutes(it) {
@@ -962,7 +1003,9 @@ function itemMinutes(it) {
 }
 
 function renderLibrary() {
-  const box = $('library'); box.textContent = '';
+  const box = $('library');
+  const openPanels = Array.from(box.querySelectorAll('.offpanel')).map((p) => p.dataset.id);
+  box.textContent = '';
   if (!libItems.length) { box.appendChild(el('div', 'status', 'Nothing yet. Converted PDFs will be listed here.')); return; }
   libItems.forEach((it) => {
     const row = el('div', 'libitem');
@@ -975,6 +1018,8 @@ function renderLibrary() {
     if (it.chars) meta.push('about ' + fmtDur(itemMinutes(it)));
     if (it.voice) meta.push('voice ' + it.voice);
     if (it.pos && it.chapters && it.chapters[it.pos.c]) meta.push('resume at ' + (it.chapters.length > 1 ? it.chapters[it.pos.c].title + ' ' : '') + fmtTime(it.pos.t));
+    const nOff = offCount(it);
+    if (nOff) meta.push(nOff === savableChapters(it).length ? '✓ saved offline' : '✓ ' + nOff + ' of ' + savableChapters(it).length + ' chapters saved offline');
     g.appendChild(el('div', 'm', meta.join(' · ')));
     if (it.state === 'processing') {
       const ready = (it._ready || []).reduce((a, b) => a + b, 0), total = (it.chapters || []).reduce((a, c) => a + c.n, 0);
@@ -984,13 +1029,18 @@ function renderLibrary() {
     if (it.state === 'error') g.appendChild(el('div', 'm', 'Failed: ' + (it.error || 'unknown error')));
     row.appendChild(g);
     const open = el('button', 'small', it.pos ? 'Resume' : 'Listen'); open.onclick = () => openItem(it.id);
-    open.disabled = !(it.chapters || []).some((ch, i) => chapterReadyCount(it, i) > 0);
+    open.disabled = !(it.chapters || []).some((ch, i) => chapterReadyCount(it, i) > 0) || (!isOnline() && !nOff);
+    if (open.disabled && !isOnline()) open.title = 'Not saved for offline listening';
     row.appendChild(open);
+    if (savableChapters(it).length && (isOnline() || nOff)) {
+      const off = el('button', 'ghost small', nOff ? 'Offline ✓' : 'Offline'); off.title = 'Save for offline listening, or remove the offline copy';
+      off.onclick = () => toggleOfflinePanel(it, row); row.appendChild(off);
+    }
     if (it.kind === 'book' && it.state !== 'processing' && chaptersDone(it) < it.chapters.length) {
-      const add = el('button', 'ghost small', 'Add chapters'); add.onclick = () => toggleAddPanel(it, row); row.appendChild(add);
+      const add = el('button', 'ghost small', 'Add chapters'); add.dataset.net = '1'; add.onclick = () => toggleAddPanel(it, row); row.appendChild(add);
     }
     if (it.state !== 'processing') {
-      const del = el('button', 'ghost small', 'Delete');
+      const del = el('button', 'ghost small', 'Delete'); del.dataset.net = '1';
       del.onclick = async () => {
         if (!window.confirm('Delete "' + it.title + '" and its audio from Drive?')) return;
         try { await api({ action: 'audio_delete', token, id: it.id }); if (P && P.item.id === it.id) closePlayer(); loadLibrary(); }
@@ -999,6 +1049,7 @@ function renderLibrary() {
       row.appendChild(del);
     }
     box.appendChild(row);
+    if (openPanels.includes(it.id)) toggleOfflinePanel(it, row);
   });
 }
 
@@ -1069,6 +1120,284 @@ function pollLibrary() {
 }
 
 // ---------------------------------------------------------------------------
+// 9b. Offline listening. Chapters saved for offline listening (audio segments and their
+// texts) are kept in IndexedDB, per user; the player then reads them from there and
+// makes no request. The page itself opens without a connection through the service
+// worker (sw.js). The last library received is kept, and listening positions saved
+// while offline wait in an outbox until the connection returns. Logout deletes all of it.
+// ---------------------------------------------------------------------------
+const OFFLINE_MSG = 'You are offline. This needs a connection.';
+let offlineMode = false;              // using saved chapters without being logged in
+const offIndex = new Map();           // key 'user|id|c' -> { user, id, c, bytes, at } for the chapters saved here
+const offBusy = new Set();            // item ids being saved
+let offDbP = null;
+
+function isOnline() { return navigator.onLine !== false; }
+function isNetError(e) { return /failed to fetch|load failed|networkerror|network request failed|offline/i.test(e && e.message || ''); }
+function offUser() { return username || lsGet('mp_last_user') || ''; }
+function offKey(id, c, user) { return (user || offUser()) + '|' + id + '|' + c; }
+function offHas(id, c) { return offIndex.has(offKey(id, c)); }
+function offCount(it) { return (it.chapters || []).filter((ch, c) => offHas(it.id, c)).length; }
+function fmtBytes(n) { return n >= 1e9 ? (n / 1e9).toFixed(1) + ' GB' : n >= 1e6 ? (n / 1e6).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1e3)) + ' kB'; }
+/** Size of a chapter: exact when saved, otherwise estimated from its length (48 kbit/s speech). */
+function chapterBytes(it, c) {
+  const rec = offIndex.get(offKey(it.id, c));
+  if (rec) return rec.bytes;
+  const ch = it.chapters[c], perSec = it.lang && it.lang !== 'en-US' ? 4.5 : 15;
+  return Math.round((ch.chars || 0) / perSec * 6000);
+}
+/** Chapters that are fully converted, so they can be saved. */
+function savableChapters(it) {
+  return (it.chapters || []).map((ch, c) => c).filter((c) => it.chapters[c].status !== 'none' && it.chapters[c].n > 0 && chapterReadyCount(it, c) >= it.chapters[c].n);
+}
+
+function offDb() {
+  if (!offDbP) {
+    offDbP = new Promise((res, rej) => {
+      if (!window.indexedDB) return rej(new Error('This browser cannot store audio for offline listening.'));
+      const r = indexedDB.open('wako-offline', 1);
+      r.onupgradeneeded = () => {
+        r.result.createObjectStore('meta', { keyPath: 'key' }).createIndex('user', 'user');
+        r.result.createObjectStore('audio', { keyPath: 'key' });
+      };
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error || new Error('Offline storage is not available.'));
+    });
+    offDbP.catch(() => { offDbP = null; });
+  }
+  return offDbP;
+}
+function idbDone(tx) { return new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = tx.onabort = () => rej(tx.error || new Error('Offline storage failed.')); }); }
+function idbReq(r) { return new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); }
+/** Loads the list of saved chapters of the current user into offIndex. */
+async function offLoadIndex() {
+  offIndex.clear();
+  const user = offUser();
+  if (!user) return;
+  try {
+    const db = await offDb();
+    const all = await idbReq(db.transaction('meta').objectStore('meta').index('user').getAll(user));
+    all.forEach((m) => offIndex.set(m.key, m));
+  } catch (e) {}
+}
+async function offGet(id, c) {
+  if (!offHas(id, c)) return null;
+  const db = await offDb();
+  return idbReq(db.transaction('audio').objectStore('audio').get(offKey(id, c)));
+}
+async function offRemove(keys) {
+  if (!keys.length) return;
+  const db = await offDb(), tx = db.transaction(['meta', 'audio'], 'readwrite');
+  keys.forEach((k) => { tx.objectStore('meta').delete(k); tx.objectStore('audio').delete(k); offIndex.delete(k); });
+  await idbDone(tx);
+}
+/** Deletes everything this browser keeps for a user: offline audio, the library copy and unsent positions. */
+async function offWipe(user, itemIds) {
+  if (!user) return;
+  try {
+    const db = await offDb();
+    const keys = await idbReq(db.transaction('meta').objectStore('meta').index('user').getAllKeys(user));
+    await offRemove(keys);
+  } catch (e) {}
+  (itemIds || []).forEach((id) => { ['mp_pos_', 'mp_mark_b1_', 'mp_mark_b2_'].forEach((p) => { try { localStorage.removeItem(p + id); } catch (e) {} }); });
+  ['mp_lib_' + user, 'mp_outbox_' + user].forEach((k) => { try { localStorage.removeItem(k); } catch (e) {} });
+  if (lsGet('mp_last_user') === user) { try { localStorage.removeItem('mp_last_user'); } catch (e) {} }
+  offIndex.clear();
+}
+
+/** Downloads chapters of an item and stores them for offline listening. */
+async function saveOffline(it, chapters, say) {
+  chapters = chapters.filter((c) => !offHas(it.id, c));
+  if (!chapters.length) return;
+  if (!isOnline() || !token) throw new Error(OFFLINE_MSG);
+  const need = chapters.reduce((n, c) => n + chapterBytes(it, c), 0);
+  if (navigator.storage && navigator.storage.estimate) {
+    const est = await navigator.storage.estimate();
+    if (est.quota && need > (est.quota - est.usage) * 0.9) throw new Error('Not enough storage space: about ' + fmtBytes(need) + ' needed, ' + fmtBytes(Math.max(0, est.quota - est.usage)) + ' free.');
+  }
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+  const user = offUser(), db = await offDb();
+  offBusy.add(it.id);
+  try {
+    for (let j = 0; j < chapters.length; j++) {
+      const c = chapters[j], ch = it.chapters[c];
+      const pre = chapters.length > 1 ? 'Saving chapter ' + (j + 1) + ' of ' + chapters.length + ': ' : 'Saving: ';
+      say(pre + 'text');
+      const texts = (await api({ action: 'audio_text', token, id: it.id, chapter: c })).texts;
+      const bufs = new Array(ch.n);
+      let next = 0, got = 0;
+      const worker = async () => {
+        while (next < ch.n) {
+          const k = next++;
+          bufs[k] = unb64((await api({ action: 'audio_part', token, id: it.id, chapter: c, index: k })).data).buffer;
+          say(pre + 'part ' + (++got) + ' of ' + ch.n);
+        }
+      };
+      await Promise.all([worker(), worker()]);
+      const key = offKey(it.id, c, user), bytes = bufs.reduce((n, b) => n + b.byteLength, 0);
+      const meta = { key, user, id: it.id, c, bytes, at: Date.now() };
+      const tx = db.transaction(['meta', 'audio'], 'readwrite');
+      tx.objectStore('audio').put({ key, texts, bufs });
+      tx.objectStore('meta').put(meta);
+      await idbDone(tx);
+      offIndex.set(key, meta);
+    }
+  } finally { offBusy.delete(it.id); }
+}
+
+/** Controls for saving an item's chapters, used in the library panel and the player. */
+function offlineControls(it, onlyChapter, inPlayer) {
+  const box = el('div', 'offctl');
+  const chs = onlyChapter != null ? [onlyChapter] : savableChapters(it);
+  const st = el('span', 'status');
+  const run = async (fn) => {
+    box.querySelectorAll('button').forEach((b) => { b.disabled = true; });
+    try { await fn(); setStatus(st, ''); }
+    catch (e) { setStatus(st, e.message, true); if (/log in again/i.test(e.message)) logout(); }
+    renderOfflineEverywhere();
+  };
+  const say = (m) => setStatus(st, m);
+  const missing = chs.filter((c) => !offHas(it.id, c)), saved = chs.filter((c) => offHas(it.id, c));
+  const sum = (list) => list.reduce((n, c) => n + chapterBytes(it, c), 0);
+  if (missing.length) {
+    const what = onlyChapter != null ? 'Save chapter for offline' : chs.length === 1 ? 'Save for offline'
+      : saved.length ? 'Save the other chapters for offline' : inPlayer ? 'Save whole book for offline' : 'Save all for offline';
+    const b = el('button', 'small', what + ' (about ' + fmtBytes(sum(missing)) + ')');
+    b.dataset.net = '1';
+    b.onclick = () => run(() => saveOffline(it, missing, say));
+    box.appendChild(b);
+  }
+  if (saved.length) {
+    box.appendChild(el('span', 'offmark', '✓ ' + (onlyChapter != null || chs.length === 1 ? 'Saved offline' : saved.length + ' of ' + chs.length + ' saved offline') + ' (' + fmtBytes(sum(saved)) + ')'));
+    const r = el('button', 'ghost small', onlyChapter != null || chs.length === 1 ? 'Remove offline copy' : inPlayer ? 'Remove offline copies of this book' : 'Remove offline copies');
+    r.onclick = () => run(() => offRemove(saved.map((c) => offKey(it.id, c))));
+    box.appendChild(r);
+  }
+  if (offBusy.has(it.id)) { box.querySelectorAll('button').forEach((b) => { b.disabled = true; }); setStatus(st, 'Saving...'); }
+  box.appendChild(st);
+  return box;
+}
+
+/** Panel under a library item: every converted chapter with its size, saved or not. */
+function toggleOfflinePanel(it, row) {
+  const old = row.parentNode.querySelector('.offpanel[data-id="' + CSS.escape(it.id) + '"]');
+  if (old) { old.remove(); return; }
+  const box = el('div', 'card offpanel'); box.dataset.id = it.id; box.style.margin = '-4px 0 12px';
+  fillOfflinePanel(box, it);
+  row.after(box);
+}
+function fillOfflinePanel(box, it) {
+  box.textContent = '';
+  box.appendChild(el('div', 'm', 'Keep "' + it.title + '" on this device to listen without a connection.'));
+  box.appendChild(offlineControls(it));
+  const chs = savableChapters(it);
+  if (chs.length > 1) {
+    const list = el('div', 'offlist');
+    chs.forEach((c) => {
+      const r = el('div', 'offrow');
+      r.appendChild(el('span', 'otitle', it.chapters[c].title));
+      r.appendChild(offlineControls(it, c));
+      list.appendChild(r);
+    });
+    box.appendChild(list);
+  }
+  if (!chs.length) box.appendChild(el('div', 'm', 'No chapter of this item is fully converted yet.'));
+}
+
+/** Updates every place that shows offline state. */
+function renderOfflineEverywhere() {
+  if (!$('appView').classList.contains('hidden')) {
+    renderLibrary();
+    if (P) { refreshChapterSelect(); renderPlayerOffline(); }
+  }
+  renderStorage();
+  renderNet();
+}
+function renderPlayerOffline() {
+  const box = $('pOffline'); box.textContent = '';
+  if (!P || P.c < 0) return;
+  const it = P.item;
+  if (savableChapters(it).includes(P.c) && it.chapters.length > 1) box.appendChild(offlineControls(it, P.c));
+  if (savableChapters(it).length) box.appendChild(offlineControls(it, null, true));
+}
+async function renderStorage() {
+  const box = $('offlineInfo');
+  const parts = [];
+  if (navigator.storage && navigator.storage.estimate) {
+    try {
+      const est = await navigator.storage.estimate();
+      parts.push('Offline storage: ' + fmtBytes(est.usage || 0) + ' used, about ' + fmtBytes(Math.max(0, (est.quota || 0) - (est.usage || 0))) + ' free.');
+    } catch (e) {}
+  }
+  let kept = false;
+  try { kept = !!(navigator.storage && navigator.storage.persisted && await navigator.storage.persisted()); } catch (e) {}
+  if (offIndex.size) parts.push(kept ? 'The browser keeps saved chapters until you remove them.' : 'The browser may delete saved chapters when space runs low.');
+  parts.push('On iPhone, Safari may delete offline data of websites that are not on the Home Screen. To keep it, tap Share, then "Add to Home Screen", and open Wako205 from there.');
+  box.textContent = parts.join(' ');
+}
+
+// Listening positions and bookmarks are sent with audio_progress; while offline they wait here.
+function outboxKey() { return 'mp_outbox_' + offUser(); }
+function outboxRead() { try { const l = JSON.parse(lsGet(outboxKey()) || '[]'); return Array.isArray(l) ? l : []; } catch (e) { return []; } }
+function outboxQueue(p) {
+  const l = outboxRead().filter((x) => !(x.id === p.id && (x.slot || 'last') === (p.slot || 'last')));
+  l.push(p); lsSet(outboxKey(), JSON.stringify(l));
+}
+/** Sends a position (or keeps it for later when offline). Resolves true if it was sent. */
+async function sendProgress(p) {
+  if (!token || !isOnline()) { outboxQueue(p); return false; }
+  try { await api(Object.assign({ action: 'audio_progress', token }, p)); return true; }
+  catch (e) { if (isNetError(e)) { outboxQueue(p); return false; } throw e; }
+}
+/** Sends the positions saved while offline, oldest first; one that the server refuses is dropped. */
+async function flushOutbox() {
+  const tok = token, key = outboxKey();
+  if (!tok || !isOnline() || flushOutbox.busy) return;
+  flushOutbox.busy = true;
+  try {
+    for (const p of outboxRead()) {
+      try { await api(Object.assign({ action: 'audio_progress', token: tok }, p)); }
+      catch (e) { if (isNetError(e) || /log in again/i.test(e.message)) break; }
+      let l = []; try { l = JSON.parse(lsGet(key) || '[]'); } catch (e) {}
+      lsSet(key, JSON.stringify(l.filter((x) => !(x.id === p.id && (x.slot || 'last') === (p.slot || 'last') && x.at === p.at))));
+    }
+  } finally { flushOutbox.busy = false; }
+}
+
+/** Online or offline: banner, controls that need the server, and the offline entry on the login form. */
+function renderNet() {
+  const on = isOnline();
+  document.body.classList.toggle('offline', !on);
+  document.querySelectorAll('[data-net]').forEach((b) => { if (on) b.removeAttribute('aria-disabled'); else b.setAttribute('aria-disabled', 'true'); });
+  const ban = $('netBanner');
+  ban.textContent = '';
+  if (!on) ban.appendChild(document.createTextNode('You are offline. Chapters saved for offline listening can be played; everything else needs a connection. Positions and bookmarks are sent when the connection returns.'));
+  else if (offlineMode) {
+    ban.appendChild(document.createTextNode('The connection is back. Log in to send the positions saved while offline and to use the other functions. '));
+    const b = el('button', 'small', 'Log in'); b.onclick = () => { $('appView').classList.add('hidden'); $('who').classList.add('hidden'); $('loginView').classList.remove('hidden'); if (P) closePlayer(); };
+    ban.appendChild(b);
+  }
+  ban.classList.toggle('hidden', !ban.childNodes.length);
+  const last = lsGet('mp_last_user'), entry = $('offlineEntry');
+  const canOffline = !on && !token && last && offIndex.size > 0;
+  entry.classList.toggle('hidden', !canOffline);
+  if (canOffline) $('offlineEntryNote').textContent = 'You are offline. The chapters ' + last + ' saved on this device can be played without logging in.';
+  if (!on && !token) setStatus($('loginStatus'), 'Logging in needs a connection.'); else if ($('loginStatus').textContent === 'Logging in needs a connection.') setStatus($('loginStatus'), '');
+}
+window.addEventListener('online', () => { renderNet(); flushOutbox(); if (token && !$('audioView').classList.contains('hidden')) loadLibrary(); else if (!$('appView').classList.contains('hidden')) renderOfflineEverywhere(); });
+window.addEventListener('offline', () => { renderNet(); if (!$('appView').classList.contains('hidden')) renderOfflineEverywhere(); });
+$('offlineBtn').onclick = async () => {
+  username = lsGet('mp_last_user'); offlineMode = true;
+  await offLoadIndex();
+  showApp(); switchTab('audio');
+};
+
+// The page opens without a connection once the service worker has cached it (not for file:// pages).
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+// ---------------------------------------------------------------------------
 // 10. Audio: player with synchronized text. Sentence times are estimated inside each audio
 // segment from character counts and pauses, scaled to the segment's exact length.
 // ---------------------------------------------------------------------------
@@ -1119,7 +1448,7 @@ function openItem(id) {
   $('pTitle').textContent = it.title;
   refreshChapterSelect();
   let startC = Math.min(pos.c || 0, (it.chapters || []).length - 1), startT = pos.t || 0;
-  if (!chapterReadyCount(it, startC)) { startC = Math.max(0, it.chapters.findIndex((ch, i) => chapterReadyCount(it, i) > 0)); startT = 0; }
+  if (!playable(it, startC)) { startC = Math.max(0, it.chapters.findIndex((ch, i) => playable(it, i))); startT = 0; }
   loadChapter(startC, startT, false);
   $('playerCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -1133,23 +1462,26 @@ function refreshChapterSelect() {
   chs.forEach((ch, i) => {
     const ready = chapterReadyCount(it, i);
     const label = ch.status === 'none' ? ' (not converted)' : ready < ch.n ? (ready ? ' (partly ready)' : ' (converting)') : '';
-    const o = el('option', null, ch.title + label);
-    o.value = i; o.disabled = !ready; sel.appendChild(o);
+    const saved = offHas(it.id, i);
+    const o = el('option', null, ch.title + label + (saved ? ' ✓ offline' : !isOnline() && ready ? ' (not saved offline)' : ''));
+    o.value = i; o.disabled = !ready || (!isOnline() && !saved); sel.appendChild(o);
   });
   sel.value = Math.max(0, P.c);
   $('pChapter').style.display = chs.length > 1 ? '' : 'none';
   $('pPrev').style.display = $('pNext').style.display = chs.length > 1 ? '' : 'none';
 }
 $('pChapter').onchange = () => loadChapter(Number($('pChapter').value), 0, true);
+function playable(it, c) { return chapterReadyCount(it, c) > 0 && (isOnline() || offHas(it.id, c)); }
 function stepChapter(d) {
   if (!P) return;
-  for (let n = P.c + d; n >= 0 && n < P.item.chapters.length; n += d) if (chapterReadyCount(P.item, n)) return loadChapter(n, 0, true);
+  for (let n = P.c + d; n >= 0 && n < P.item.chapters.length; n += d) if (playable(P.item, n)) return loadChapter(n, 0, true);
 }
 $('pPrev').onclick = () => stepChapter(-1);
 $('pNext').onclick = () => stepChapter(1);
 $('pClose').onclick = () => closePlayer();
 function closePlayer() {
   saveProgress(true);
+  $('pOffline').textContent = '';
   player.pause(); player.removeAttribute('src'); player.load();
   if (P) Object.values(P.cache).forEach((x) => URL.revokeObjectURL(x.url));
   P = null; $('playerCard').classList.add('hidden');
@@ -1166,11 +1498,19 @@ function fetchChapter(c, onStatus) {
   if (loading[c]) return loading[c];
   const say = onStatus || (() => {});
   const job = (async () => {
-    say('Loading audio...');
-    const used = pronUsed(id);
-    const texts = (await api({ action: 'audio_text', token, id, chapter: c })).texts.map((t) => unrespell(t, used));
-    const bufs = new Array(ch.n);
-    let next = 0, stop = ch.n;
+    const used = pronUsed(id), saved = await offGet(id, c).catch(() => null);
+    let texts, bufs, stop = ch.n;
+    if (saved) {                                         // saved for offline listening: no request at all
+      texts = saved.texts.map((t) => unrespell(t, used));
+      bufs = saved.bufs.map((b) => new Uint8Array(b));
+      stop = 0;
+    } else {
+      if (!isOnline()) throw new Error('This chapter is not saved for offline listening.');
+      say('Loading audio...');
+      texts = (await api({ action: 'audio_text', token, id, chapter: c })).texts.map((t) => unrespell(t, used));
+      bufs = new Array(ch.n);
+    }
+    let next = 0;
     const worker = async () => {
       while (next < stop) {
         const k = next++;
@@ -1198,7 +1538,7 @@ function fetchChapter(c, onStatus) {
 /** Next chapter after c that has audio, or -1. */
 function nextReadyChapter(c) {
   const chs = P.item.chapters;
-  for (let n = c + 1; n < chs.length; n++) if (chs[n].status !== 'none' && chapterReadyCount(P.item, n)) return n;
+  for (let n = c + 1; n < chs.length; n++) if (chs[n].status !== 'none' && playable(P.item, n)) return n;
   return -1;
 }
 
@@ -1244,6 +1584,7 @@ async function loadChapter(c, startAt, autoplay) {
     setStatus(st, data.parts < ch.n ? 'Converted so far: ' + data.parts + ' of ' + ch.n + ' parts of this chapter.' : '');
     updateMediaSession();
     if (!data.refined) { data.refined = true; refineTimings(data).catch(() => {}); }
+    renderPlayerOffline();
     prefetchNext();
   } catch (e) { setStatus(st, e.message, true); if (/log in again/i.test(e.message)) logout(); }
 }
@@ -1562,7 +1903,7 @@ function saveProgress(force) {
   lsSet('mp_pos_' + P.item.id, JSON.stringify(pos));
   P.item.pos = pos;
   renderMarks();
-  api({ action: 'audio_progress', token, id: P.item.id, chapter: P.c, time: t, label: pos.label }).catch(() => {});
+  sendProgress({ id: P.item.id, chapter: P.c, time: t, label: pos.label, at: pos.at }).catch(() => {});
 }
 
 // ---------------------------------------------------------------------------
@@ -1589,7 +1930,8 @@ function saveMark(slot) {
   P.item.marks = P.item.marks || {}; P.item.marks[slot] = m;
   lsSet('mp_mark_' + slot + '_' + P.item.id, JSON.stringify(m));
   renderMarks();
-  api({ action: 'audio_progress', token, id: P.item.id, slot, chapter: m.c, time: m.t, label: m.label })
+  sendProgress({ id: P.item.id, slot, chapter: m.c, time: m.t, label: m.label, at: m.at })
+    .then((sent) => { if (!sent) setStatus($('pStatus'), 'Bookmark saved on this device; it is sent to your account when the connection returns.'); })
     .catch((e) => setStatus($('pStatus'), 'Bookmark saved on this device only: ' + e.message, true));
 }
 function renderMarks() {
@@ -1607,7 +1949,8 @@ function renderMarks() {
   });
 }
 window.addEventListener('pagehide', () => {
-  if (!P || P.c < 0 || !token) return;
+  if (!P || P.c < 0) return;
+  if (!token || !isOnline()) { outboxQueue({ id: P.item.id, chapter: P.c, time: player.currentTime || 0, at: Date.now() }); return; }
   try { navigator.sendBeacon(BACKEND_URL, JSON.stringify({ action: 'audio_progress', token, id: P.item.id, chapter: P.c, time: player.currentTime || 0 })); } catch (e) {}
 });
 
@@ -2020,6 +2363,7 @@ $('dlReviewBtn').onclick = () => lastResult && download(lastName.replace(/(\.[^.
 // ---------------------------------------------------------------------------
 token = load('mp_token'); username = load('mp_user'); loadChat();
 if (token && username) showApp();
+offLoadIndex().then(renderNet);
 </script>
 </body>
 </html>
