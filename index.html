@@ -568,8 +568,9 @@ async function outlineWithClaude(d) {
 function defaultSelection() {
   if (!bookData) return;
   bookData.chapters.forEach((c) => {
-    // Front matter: off for books (title pages, copyright), on for theses (abstract).
-    c.sel = c.front ? docKind === 'thesis' : !/^(references|bibliography|参考文献|appendix|附录)/i.test(c.title);
+    // Books: nothing is preselected; the reader picks the chapters to convert.
+    // Theses: everything except references and appendices (front matter holds the abstract).
+    c.sel = docKind === 'book' ? false : !/^(references|bibliography|参考文献|appendix|附录)/i.test(c.title);
   });
 }
 
@@ -597,6 +598,8 @@ function bookSummary() {
   const sel = bookData.chapters.filter((c) => c.sel !== false);
   const chars = sel.reduce((n, c) => n + c.text.replace(/\n/g, '').length, 0) * (docKind === 'thesis' ? 0.9 : 1);
   const left = libUsage.cap ? Math.max(0, libUsage.cap - libUsage.used) : null;
+  if (!sel.length) { $('bookSummary').textContent = bookData.pages + ' pages, ' + bookData.chapters.length + ' parts. Tick the chapters you want converted to audio.'; $('audioBtn').disabled = true; return; }
+  if (!audioBusy) $('audioBtn').disabled = false;
   let t = bookData.pages + ' pages, ' + bookData.chapters.length + ' parts. Selected: ' + sel.length + ', about ' +
     fmtDur(sel.reduce((n, c) => n + estMinutes(c.text), 0)) + ', ' + Math.round(chars).toLocaleString() + ' characters of speech';
   if (docKind === 'thesis') {
@@ -634,9 +637,10 @@ async function prepareBook() {
     delete d.lines;
     bookData = d;
     if (docKind === 'book' && d.chapters.reduce((n, x) => n + x.text.length, 0) < 50) throw new Error('No text found. The PDF may be a scanned image without a text layer.');
-    defaultSelection(); renderKind(); renderBookPanel();
+    defaultSelection(); renderKind();
   } catch (e) { setStatus($('audioStatus'), e.message, true); }
   $('audioBtn').disabled = false;
+  renderBookPanel();
 }
 $('apdf').onchange = prepareBook;
 
