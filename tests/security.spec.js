@@ -52,6 +52,7 @@ test('chat replies are sanitized', async ({ page, backend }) => {
   backend.on('chat_start', (b) => ({ jobId: 'j1', convId: b.convId }));
   backend.on('chat_run', () => ({ state: 'done', reply: EVIL, cost: 0.001, model: 'claude-test' }));
   await login(page);
+  await page.click('#tabChat');
   await page.fill('#prompt', 'Check this');
   await page.click('#sendBtn');
   const md = page.locator('.msg.assistant .md');
@@ -82,6 +83,7 @@ test('logout forgets the token and everything shown for the account', async ({ p
   backend.on('chat_start', (b) => ({ jobId: 'j1', convId: b.convId }));
   backend.on('chat_run', () => ({ state: 'done', reply: 'Private reply about the manuscript.', cost: 0.001 }));
   await login(page, 'alice');
+  await page.click('#tabChat');
   await page.fill('#prompt', 'My unpublished result');
   await page.click('#sendBtn');
   await expect(page.locator('.msg.assistant')).toContainText('Private reply');
@@ -97,8 +99,7 @@ test('logout forgets the token and everything shown for the account', async ({ p
   await login(page, 'bob');
   await expect(page.locator('#messages')).not.toContainText('Private reply');
   await expect(page.locator('#messages')).not.toContainText('unpublished');
-  await expect(page.locator('#chatView')).toBeVisible();
-  await page.click('#tabAudio');
+  await expect(page.locator('#audioView')).toBeVisible();      // the first tab after login
   await expect(page.locator('#playerCard')).toBeHidden();
   expect(backend.calls.filter((c) => c.action !== 'login' && c.action !== 'audio_progress' && c.token !== 'tok-test')).toEqual([]);
 });

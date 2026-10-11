@@ -36,3 +36,11 @@ test('an expired token returns to the login form', async ({ page, backend }) => 
   await page.click('#tabAudio');
   await expect(page.locator('#loginView')).toBeVisible();
 });
+
+test('PDF to audio is the first tab and opens after login; Chat is last', async ({ page, backend }) => {
+  await login(page);
+  expect(await page.locator('.tabs button').allTextContents()).toEqual(['PDF to audio', 'Polish / Review (Word & LaTeX)', 'Chat']);
+  await expect(page.locator('#audioView')).toBeVisible();
+  await expect(page.locator('#chatView')).toBeHidden();
+  await expect(page.locator('#library .libitem').first()).toBeVisible();
+});

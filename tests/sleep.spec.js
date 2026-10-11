@@ -126,3 +126,28 @@ test.describe('360 px', () => {
     expect(r.chapterWidth).toBeGreaterThan(100);
   });
 });
+
+test('"End of chapter" waits for the rest of a chapter that is still loading', async ({ page, backend }) => {
+  backend.library[0].chapters[0].n = 6;
+  backend.on('audio_text', () => ({ texts: Array.from({ length: 6 }, (_, k) => 'Part ' + k + ' first sentence. Part ' + k + ' second sentence.') }));
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  backend.on('audio_part', (b) => (b.chapter !== 0 || b.index < 2 ? { data: backend.mp3.toString('base64') } : gate.then(() => ({ data: backend.mp3.toString('base64') }))));
+  await login(page);
+  await openAudio(page);
+  await page.locator('#library .libitem').first().getByRole('button', { name: 'Listen' }).click();
+  await expect.poll(() => page.evaluate(() => P && P.partial && P.partial.parts)).toBe(2);
+  await choose(page, 'End of chapter');
+  // The end of the first parts is not the end of the chapter: no fade, and the timer stays set.
+  await page.evaluate(() => { player.currentTime = player.duration - 2; player.play(); });
+  await expect.poll(() => page.evaluate(() => P.waitFull)).toBe(true);
+  expect(await page.evaluate(() => sleepFade)).toBe(1);
+  await expect(page.locator('#pSleepBtn')).toHaveText('☾ End');
+  // The rest arrives and playback continues within the same chapter.
+  release();
+  await expect.poll(() => page.evaluate(() => P.partial)).toBeNull();
+  await expect.poll(() => page.evaluate(() => !player.paused)).toBe(true);
+  await expect(page.locator('#pChapter')).toHaveValue('0');
+  await expect(page.locator('#pSleepBtn')).toHaveText('☾ End');
+  await page.evaluate(() => player.pause());
+});
