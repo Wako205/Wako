@@ -3,6 +3,9 @@
 // from node_modules, and the browser cannot resolve any host name at all.
 const { defineConfig, devices } = require('@playwright/test');
 
+// Lets context.route() also answer requests made by the service worker (tests/offline.spec.js).
+process.env.PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS = '1';
+
 module.exports = defineConfig({
   testDir: 'tests',
   // Chromium runs everything; WebKit (the engine of Safari) runs the tests in tests/webkit.
@@ -22,7 +25,7 @@ module.exports = defineConfig({
     launchOptions: {
       args: [
         '--no-proxy-server',
-        '--host-resolver-rules=MAP * ~NOTFOUND',          // a request that escapes the mocks fails instead of reaching a server
+        '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1',   // a request that escapes the mocks fails (except the local test server)
         '--autoplay-policy=no-user-gesture-required',
       ],
     },

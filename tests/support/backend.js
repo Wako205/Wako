@@ -105,11 +105,12 @@ class MockBackend {
     }
   }
 
+  /** Installs the mocks on a page, or on a browser context (needed to answer a service worker too). */
   async attach(page) {
     // Anything not handled below: CDN files from node_modules, the page itself from disk, everything else aborted.
     await page.route('**/*', async (route) => {
       const url = route.request().url();
-      if (url.startsWith('file:') || url.startsWith('data:') || url.startsWith('blob:')) return route.continue();
+      if (/^(file|data|blob):|^http:\/\/127\.0\.0\.1[:/]/.test(url)) return route.continue();      // the page, and the local test server
       const file = cdnFile(url);
       if (file && fs.existsSync(file)) {
         return route.fulfill({ status: 200, path: file, headers: { 'content-type': 'application/javascript; charset=utf-8', 'access-control-allow-origin': '*' } });
