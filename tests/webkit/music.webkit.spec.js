@@ -25,7 +25,7 @@ test('WebKit renders the generated music at the chosen level', async ({ page, ba
 /** Media state of the test elements, for a readable failure. */
 const media = (page) => page.evaluate(() => ['__a', '__b'].filter((k) => window[k]).map((k) => {
   const e = window[k];
-  return { el: k, t: +e.currentTime.toFixed(2), paused: e.paused, readyState: e.readyState, networkState: e.networkState, duration: e.duration, error: e.error && e.error.code };
+  return { el: k, t: +e.currentTime.toFixed(2), paused: e.paused, readyState: e.readyState, networkState: e.networkState, duration: e.duration, error: e.error && e.error.code, retried: !!e.retried };
 }));
 async function setUp(page, a, b) {
   await page.goto(INDEX_URL);
@@ -34,8 +34,14 @@ async function setUp(page, a, b) {
       if (x === 'music') { const y = await renderGeneratedSamples('rain', 1); setLevel(y, -30); return wavBlob(y, MUSIC_RATE); }
       return new Blob([Uint8Array.from(atob(x), (c) => c.charCodeAt(0))], { type: 'audio/wav' });
     };
-    window.__a = new Audio(URL.createObjectURL(await blob(a64)));
-    if (b64) window.__b = new Audio(URL.createObjectURL(await blob(b64)));
+    // As in the app: after a media error (seen in WebKit under load) one more try under a new address.
+    const audio = (b) => {
+      const e = new Audio(URL.createObjectURL(b));
+      e.addEventListener('error', () => { if (e.retried) return; e.retried = true; e.src = URL.createObjectURL(b); e.play().catch(() => {}); });
+      return e;
+    };
+    window.__a = audio(await blob(a64));
+    if (b64) window.__b = audio(await blob(b64));
     const btn = document.createElement('button'); btn.id = 'go'; btn.textContent = 'Play';
     btn.onclick = () => { window.__a.play(); if (window.__b) window.__b.play(); };
     document.body.prepend(btn);
