@@ -1208,11 +1208,25 @@ function closePlayer() {
  * Audio and text of chapter c: all its segments, fetched four at a time and joined
  * into one MP3. Concurrent calls for the same chapter share one download.
  */
-function fetchChapter(c, onStatus) {
+/** Chapter data (texts, segment timings, one MP3 blob) from the first `parts` downloaded segments. */
+function chapterData(texts, bufs, parts) {
+  const segs = []; let t = 0;
+  for (let k = 0; k < parts; k++) { const d = mp3Duration(bufs[k]); segs.push({ t0: t, dur: d }); t += d; }
+  const blob = new Blob(bufs.slice(0, parts), { type: 'audio/mpeg' });
+  return { texts, segs, parts, blob, bufs: bufs.slice(0, parts), url: URL.createObjectURL(blob) };
+}
+const EARLY_PARTS = 2;   // playback starts once this many parts (several minutes of speech) are in
+
+/**
+ * Downloads chapter c. onEarly(data), if given, is called once with the first EARLY_PARTS
+ * parts, so playback can start while the rest is still loading.
+ */
+function fetchChapter(c, onStatus, onEarly) {
   const id = P.item.id, ch = P.item.chapters[c], cache = P.cache, loading = P.loading;
   if (cache[c] && cache[c].parts >= ch.n) return Promise.resolve(cache[c]);
-  if (loading[c]) return loading[c];
+  if (loading[c]) { if (onEarly) loading[c].early = onEarly; return loading[c]; }
   const say = onStatus || (() => {});
+  let earlyDone = false;
   const job = (async () => {
     say('Loading audio...');
     const used = pronUsed(id);
@@ -1225,19 +1239,22 @@ function fetchChapter(c, onStatus) {
         try { bufs[k] = unb64((await api({ action: 'audio_part', token, id, chapter: c, index: k })).data); }
         catch (e) { if (/not ready/i.test(e.message)) { stop = Math.min(stop, k); continue; } throw e; }
         say('Loading audio: ' + bufs.filter(Boolean).length + ' of ' + ch.n);
+        const cb = job.early;
+        if (cb && !earlyDone) {
+          let pre = 0; while (pre < ch.n && bufs[pre]) pre++;
+          if (pre >= EARLY_PARTS && pre < ch.n) { earlyDone = true; cb(chapterData(texts, bufs, pre)); }
+        }
       }
     };
     await Promise.all([worker(), worker(), worker(), worker()]);
     let parts = 0; while (parts < ch.n && bufs[parts]) parts++;
     if (!parts) throw new Error('This chapter has not been converted yet.');
-    const segs = []; let t = 0;
-    for (let k = 0; k < parts; k++) { const d = mp3Duration(bufs[k]); segs.push({ t0: t, dur: d }); t += d; }
-    const blob = new Blob(bufs.slice(0, parts), { type: 'audio/mpeg' });
     if (cache[c]) URL.revokeObjectURL(cache[c].url);
-    cache[c] = { texts, segs, parts, blob, bufs: bufs.slice(0, parts), url: URL.createObjectURL(blob) };
+    cache[c] = chapterData(texts, bufs, parts);
     if (!P || P.cache !== cache) URL.revokeObjectURL(cache[c].url);   // the player was closed meanwhile
     return cache[c];
   })();
+  job.early = onEarly || null;
   loading[c] = job;
   job.then(() => { delete loading[c]; }, () => { delete loading[c]; });
   return job;
@@ -1276,24 +1293,45 @@ async function loadChapter(c, startAt, autoplay) {
   // the previous one: browsers then allow play() in the background.
   const ready = P.cache[c] && P.cache[c].parts >= ch.n;
   if (!ready) player.pause();
+  P.partial = null; P.waitFull = false;
+  const here = () => P && P.c === c && P.item.id === id;
   try {
-    const data = ready ? P.cache[c] : await fetchChapter(c, (m) => setStatus(st, m));
-    if (!P || P.c !== c || P.item.id !== id) return;          // the user moved on meanwhile
-    renderReadText(data);
-    P.sents = data.sents; P.cur = -1;
-    player.src = data.url;
-    player.playbackRate = Number($('arate').value);
-    player.onloadedmetadata = () => {
-      player.playbackRate = Number($('arate').value);
-      if (startAt) player.currentTime = Math.min(startAt, player.duration - 1);
-      highlight(); updatePositionState();
-    };
-    if (autoplay) player.play().catch(() => {});
+    // Playback starts with the first parts; the full chapter replaces them when it is in.
+    const data = ready ? P.cache[c] : await fetchChapter(c, (m) => { if (here()) setStatus(st, m); }, (part) => {
+      if (!here()) { URL.revokeObjectURL(part.url); return; }
+      P.partial = part;
+      startChapter(part, startAt, autoplay);
+    });
+    if (!here()) return;                                       // the user moved on meanwhile
+    const part = P.partial;
+    if (part) {
+      P.partial = null;
+      const t = player.currentTime, resume = P.waitFull || (!player.paused && !player.ended);
+      P.waitFull = false;
+      const box = $('pText'), top = box.scrollTop;
+      startChapter(data, t, resume, true);
+      box.scrollTop = top;
+      URL.revokeObjectURL(part.url);
+    } else startChapter(data, startAt, autoplay);
     setStatus(st, data.parts < ch.n ? 'Converted so far: ' + data.parts + ' of ' + ch.n + ' parts of this chapter.' : '');
-    updateMediaSession();
     if (!data.refined) { data.refined = true; refineTimings(data).catch(() => {}); }
     prefetchNext();
   } catch (e) { setStatus(st, e.message, true); if (/log in again/i.test(e.message)) logout(); }
+}
+
+/** Shows the text of `data` and plays its audio from startAt (seconds). */
+function startChapter(data, startAt, autoplay, keepPlace) {
+  renderReadText(data);
+  P.sents = data.sents; if (!keepPlace) P.cur = -1;
+  player.src = data.url;
+  player.playbackRate = Number($('arate').value);
+  player.onloadedmetadata = () => {
+    player.playbackRate = Number($('arate').value);
+    if (startAt) player.currentTime = Math.min(startAt, Math.max(0, player.duration - 1));
+    highlight(); updatePositionState();
+  };
+  if (autoplay) player.play().catch(() => {});
+  updateMediaSession();
 }
 
 function renderReadText(data) {
@@ -1544,6 +1582,8 @@ function frame() { if (!rafOn) return; highlight(); requestAnimationFrame(frame)
 function chapterEnded() {
   rafOn = false;
   if (!P) return;
+  // Only the first parts are loaded: wait for the rest, which then continues from here.
+  if (P.partial) { P.waitFull = true; setStatus($('pStatus'), 'Loading the rest of this chapter...'); return; }
   const n = nextReadyChapter(P.c);
   if (n >= 0) loadChapter(n, 0, true);
   else saveProgress(true);
