@@ -85,6 +85,7 @@
     <div class="tabs">
       <button id="tabChat" class="active">Chat</button>
       <button id="tabTools">Polish / Review (Word &amp; LaTeX)</button>
+      <button id="tabAudio">PDF to audio</button>
     </div>
 
     <!-- Chat -->
@@ -142,12 +143,48 @@
         <div id="resultBody" style="margin-top:16px"></div>
       </section>
     </section>
+
+    <!-- PDF to audio -->
+    <section id="audioView" class="hidden">
+      <div class="card">
+        <label for="apdf">Paper (.pdf)</label>
+        <input type="file" id="apdf" accept=".pdf,application/pdf">
+        <label for="avoice">Voice</label>
+        <select id="avoice">
+          <option value="Charon">Charon (male, calm)</option>
+          <option value="Kore">Kore (female, clear)</option>
+          <option value="Aoede">Aoede (female, light)</option>
+          <option value="Orus">Orus (male, firm)</option>
+          <option value="Puck">Puck (male, lively)</option>
+          <option value="Leda">Leda (female, youthful)</option>
+        </select>
+        <div class="row" style="margin-top:16px"><button id="audioBtn">Generate audio</button><span class="status" id="audioStatus"></span></div>
+        <div class="notice" style="margin-top:14px">Claude first rewrites the PDF into a listening script (body text and figure captions in full; references, affiliations and citation numbers skipped; equations and units read in words), then Google Chirp 3 HD reads it. English, Japanese and Chinese papers are detected automatically. A 10-page paper takes about 3 to 6 minutes. You can leave this tab open and use other tabs meanwhile.</div>
+      </div>
+      <section class="hidden" id="audioResult">
+        <h2 id="audioTitle"></h2>
+        <audio id="player" controls preload="metadata" style="width:100%"></audio>
+        <div class="row" style="margin-top:10px">
+          <label for="arate" style="margin:0">Speed</label>
+          <select id="arate" style="width:auto;padding:5px 8px">
+            <option value="0.85">0.85×</option><option value="1" selected>1×</option><option value="1.15">1.15×</option>
+            <option value="1.3">1.3×</option><option value="1.5">1.5×</option><option value="1.75">1.75×</option>
+          </select>
+          <button id="dlAudioBtn">Download MP3</button>
+          <button id="dlScriptBtn" class="ghost">Download script (.txt)</button>
+        </div>
+        <div class="status" id="audioInfo" style="margin-top:8px"></div>
+        <details style="margin-top:10px"><summary style="cursor:pointer;color:var(--muted);font-size:14px">Show reading script</summary>
+          <pre class="review" id="audioScript" style="font-size:14px;margin-top:8px"></pre></details>
+      </section>
+    </section>
   </div>
 </main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <script>
 // Paste the Apps Script web app URL here (it ends with /exec).
 const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbyMPCW8XBoolVwUI_SpiViT3k5KojULj4TwmyOAR4ElwjXdMODygcsof8hxQUJyo9ew/exec';
@@ -179,7 +216,7 @@ async function waitForJob(jobId, onTick) {
     let d;
     try { d = await api({ action: 'status', token, jobId }); failures = 0; }
     catch (e) { if (/Server error/.test(e.message) && ++failures < 6) continue; throw e; }
-    if (onTick) onTick(d.state);
+    if (onTick) onTick(d.state, d);
     if (d.state === 'done') return d;
   }
 }
@@ -213,10 +250,123 @@ $('logoutBtn').onclick = logout;
 // Tabs
 $('tabChat').onclick = () => switchTab('chat');
 $('tabTools').onclick = () => switchTab('tools');
+$('tabAudio').onclick = () => switchTab('audio');
 function switchTab(t) {
-  $('tabChat').classList.toggle('active', t === 'chat'); $('tabTools').classList.toggle('active', t === 'tools');
-  $('chatView').classList.toggle('hidden', t !== 'chat'); $('toolsView').classList.toggle('hidden', t !== 'tools');
+  [['chat', 'tabChat', 'chatView'], ['tools', 'tabTools', 'toolsView'], ['audio', 'tabAudio', 'audioView']].forEach(([k, tab, view]) => {
+    $(tab).classList.toggle('active', t === k); $(view).classList.toggle('hidden', t !== k);
+  });
+  if (t === 'audio') resumeAudioJob();
 }
+
+// ---------------------------------------------------------------------------
+// PDF to audio. The PDF is split here into parts of AUDIO_PAGES pages plus one
+// look-ahead page, so sentences that cross a part boundary are read once and whole.
+// ---------------------------------------------------------------------------
+const AUDIO_PAGES = 4;
+let audioOut = null, audioRunning = false;
+
+function b64(bytes) {
+  let s = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+function unb64(str) { const bin = atob(str); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
+
+async function splitPdf(bytes) {
+  const src = await PDFLib.PDFDocument.load(bytes, { ignoreEncryption: true });
+  const total = src.getPageCount();
+  const parts = [];
+  for (let from = 0; from < total; from += AUDIO_PAGES) {
+    const to = Math.min(from + AUDIO_PAGES, total) - 1;
+    const last = Math.min(to + 1, total - 1);           // one page of context after the part
+    const doc = await PDFLib.PDFDocument.create();
+    const idx = []; for (let i = from; i <= last; i++) idx.push(i);
+    (await doc.copyPages(src, idx)).forEach((pg) => doc.addPage(pg));
+    parts.push({ b64: b64(await doc.save()), from: from + 1, to: to + 1, n: idx.length, ctx: last > to });
+  }
+  return { parts, total };
+}
+
+$('arate').onchange = () => { $('player').playbackRate = Number($('arate').value); };
+$('player').onloadedmetadata = () => { $('player').playbackRate = Number($('arate').value); showAudioInfo(); };
+
+$('audioBtn').onclick = async () => {
+  const f = $('apdf').files[0], st = $('audioStatus');
+  if (!f) return setStatus(st, 'Choose a PDF first.', true);
+  if (f.size > 30e6) return setStatus(st, 'PDF too large (limit 30 MB).', true);
+  $('audioBtn').disabled = true; audioRunning = true; setStatus(st, 'Reading the PDF...');
+  try {
+    const bytes = new Uint8Array(await f.arrayBuffer());
+    const { parts, total } = await splitPdf(bytes);
+    setStatus(st, 'Uploading ' + total + ' pages...');
+    const size = parts.reduce((n, p) => n + p.b64.length, 0);
+    const payload = { action: 'audio_start', token, filename: f.name, voice: $('avoice').value, pages: total, parts };
+    if (size + bytes.length * 1.4 < 45e6) payload.pdf = b64(bytes);   // keep a copy of the original in Drive
+    const { jobId } = await api(payload);
+    store('mp_audio_job', JSON.stringify({ jobId, name: f.name, pages: total }));
+    await finishAudioJob(jobId, f.name, total);
+  } catch (e) {
+    setStatus(st, e.message, true);
+    if (/log in again/i.test(e.message)) logout();
+  }
+  $('audioBtn').disabled = false; audioRunning = false;
+};
+
+// Re-attaches to a job started before the page was reloaded.
+function resumeAudioJob() {
+  if (audioRunning || audioOut) return;
+  let j = null; try { j = JSON.parse(load('mp_audio_job') || 'null'); } catch (e) {}
+  if (!j || !j.jobId) return;
+  audioRunning = true; $('audioBtn').disabled = true;
+  finishAudioJob(j.jobId, j.name, j.pages)
+    .catch((e) => { setStatus($('audioStatus'), e.message, true); store('mp_audio_job', null); })
+    .finally(() => { audioRunning = false; $('audioBtn').disabled = false; });
+}
+
+async function finishAudioJob(jobId, name, pages) {
+  const st = $('audioStatus'), t0 = Date.now();
+  let progress = 'Queued';
+  const timer = setInterval(() => setStatus(st, progress + ' (' + Math.round((Date.now() - t0) / 1000) + ' s)'), 1000);
+  try {
+    const d = await waitForJob(jobId, (s, info) => { if (info && info.progress) progress = info.progress; });
+    progress = 'Downloading audio: 0 of ' + d.segments;
+    const segs = new Array(d.segments);
+    let next = 0, got = 0;
+    const worker = async () => {
+      while (next < d.segments) {
+        const i = next++;
+        for (let a = 0; ; a++) {
+          try { segs[i] = unb64((await api({ action: 'audio_part', token, jobId, index: i })).data); break; }
+          catch (e) { if (a >= 3) throw e; await sleep(2000); }
+        }
+        progress = 'Downloading audio: ' + (++got) + ' of ' + d.segments;
+      }
+    };
+    await Promise.all([worker(), worker(), worker()]);
+    const blob = new Blob(segs, { type: 'audio/mpeg' });
+    const base = name.replace(/\.pdf$/i, '');
+    audioOut = { blob, url: URL.createObjectURL(blob), script: d.script, base, d, pages };
+    $('player').src = audioOut.url;
+    $('audioTitle').textContent = base;
+    $('audioScript').textContent = d.script;
+    $('audioResult').classList.remove('hidden');
+    showAudioInfo(); showUsage(d);
+    store('mp_audio_job', null);
+    clearInterval(timer); setStatus(st, 'Done.');
+  } catch (e) { clearInterval(timer); throw e; }
+}
+
+function showAudioInfo() {
+  if (!audioOut) return;
+  const d = audioOut.d, dur = $('player').duration;
+  const parts = [audioOut.pages + ' pages', d.chars.toLocaleString() + ' characters read', 'voice ' + d.voice + ' (' + d.lang + ')'];
+  if (isFinite(dur)) parts.push(Math.round(dur / 60) + ' min at 1×');
+  parts.push('Claude cost $' + d.cost.toFixed(3) + ' (speech is within the free Google allowance)');
+  $('audioInfo').textContent = parts.join(' · ');
+}
+
+$('dlAudioBtn').onclick = () => audioOut && downloadBlob(audioOut.base + '.mp3', audioOut.blob);
+$('dlScriptBtn').onclick = () => audioOut && download(audioOut.base + '_script.txt', audioOut.script);
 
 // ---------------------------------------------------------------------------
 // File reading (shared): .docx text is extracted in the browser
