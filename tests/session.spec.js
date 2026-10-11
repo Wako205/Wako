@@ -4,7 +4,7 @@ test('logs in, keeps the session on reload and clears it on logout', async ({ pa
   await login(page, 'alice');
   const call = backend.callsOf('login')[0];
   expect(call).toMatchObject({ action: 'login', username: 'alice', password: 'secret' });
-  await expect(page.locator('#whoName')).toHaveText('alice');
+  await expect(page.locator('#brand')).toHaveText('alice@Wako205');
   await expect(page.locator('#pass')).toHaveValue('');
   expect(await page.evaluate(() => sessionStorage.getItem('mp_token'))).toBe('tok-test');
 
@@ -14,6 +14,7 @@ test('logs in, keeps the session on reload and clears it on logout', async ({ pa
 
   await page.click('#logoutBtn');
   await expect(page.locator('#loginView')).toBeVisible();
+  await expect(page.locator('#brand')).toHaveText('Wako205');
   expect(await page.evaluate(() => sessionStorage.getItem('mp_token'))).toBeNull();
   await page.reload();
   await expect(page.locator('#loginView')).toBeVisible();
