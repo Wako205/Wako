@@ -114,3 +114,22 @@ test.describe('iOS', () => {
     await page.evaluate(() => player.pause());
   });
 });
+
+test.describe('iOS volume', () => {
+  test.use({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1' });
+
+  test('Original is the default on iPhone, and choosing it leaves Web Audio while playing', async ({ page, backend }) => {
+    await openBook(page);
+    await expect(page.locator('#pVol')).toHaveValue('normal');
+    expect(await page.evaluate(() => typeof AG === 'undefined' || !AG)).toBe(true);
+    await page.selectOption('#pVol', 'loud');
+    await expect(page.locator('#pStatus')).toContainText('use Original');
+    await page.locator('#pText span.s').nth(1).click();           // plays through the loudness chain
+    await expect.poll(() => page.evaluate(() => !!AG && AG.el === player && !player.paused)).toBe(true);
+    await page.selectOption('#pVol', 'normal');
+    await expect.poll(() => page.evaluate(() => AG.el !== player && document.getElementById('player') === player)).toBe(true);
+    await expect.poll(async () => (await state(page)).paused).toBe(false);
+    expect(await page.locator('audio').count()).toBe(1);
+    await page.evaluate(() => player.pause());
+  });
+});

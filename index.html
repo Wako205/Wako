@@ -389,6 +389,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // sessionStorage: this tab only (token, chat). localStorage: this browser (theme, settings, listening positions).
 function store(k, v) { try { v === null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v); } catch (e) {} }
 function load(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } }
+const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
 function setStatus(el, msg, isErr) { el.textContent = msg || ''; el.classList.toggle('err', !!isErr); }
@@ -1575,8 +1576,16 @@ function applyVolume() {
   const on = mode !== 'normal';
   AG.comp.ratio.value = on ? 4 : 1; AG.lim.ratio.value = on ? 20 : 1;
 }
-$('pVol').onchange = () => { lsSet('mp_vol', $('pVol').value); applyVolume(); };
-try { const v = lsGet('mp_vol'); if (v && VOL_TARGET.hasOwnProperty(v)) $('pVol').value = v; } catch (e) {}
+$('pVol').onchange = () => {
+  lsSet('mp_vol', $('pVol').value);
+  // iPhone: "Original" leaves Web Audio completely (a new plain element, created during this tap),
+  // so playback is not stopped when the screen locks.
+  if (IOS && volumeMode() === 'normal' && AG && AG.el === player) { useSpareAudio(new Audio()); return; }
+  applyVolume();
+  if (IOS && volumeMode() !== 'normal') setStatus($('pStatus'), 'On iPhone, Louder and Loudest can stop when the screen locks; use Original for listening with the screen off.');
+};
+// On iPhone the default is "Original" (no Web Audio), which keeps playing with the screen locked.
+try { const v = lsGet('mp_vol'); if (v && VOL_TARGET.hasOwnProperty(v)) $('pVol').value = v; else if (IOS) $('pVol').value = 'normal'; } catch (e) {}
 
 /** MP3 of the current chapter at the chosen loudness (decoded, processed and re-encoded here). */
 async function loudMp3(data, onProgress) {
@@ -1803,7 +1812,6 @@ if (MS) {
  * next play in the foreground. iOS only lets an element start playing after a tap, so a
  * spare element is unlocked with a short silent sound on the first tap of the page.
  */
-const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 let spareAudio = null;
 function silentWavUrl() {
   const n = 800, b = new DataView(new ArrayBuffer(44 + 2 * n));
@@ -1820,16 +1828,16 @@ function unlockSpare() {
   a.play().then(() => { a.pause(); spareAudio = a; }, () => {}).then(() => { unlockSpare.busy = false; });
 }
 ['touchend', 'click'].forEach((ev) => document.addEventListener(ev, unlockSpare, true));
-function useSpareAudio() {
-  const old = player, a = spareAudio, t = old.currentTime;
-  spareAudio = null;
+function useSpareAudio(fresh) {
+  const old = player, a = fresh || spareAudio, t = old.currentTime, playing = !old.paused;
+  if (!fresh) spareAudio = null;
   a.id = 'player'; a.controls = true; a.preload = 'auto'; a.style.cssText = old.style.cssText;
   a.src = old.src;
   a.addEventListener('loadedmetadata', () => { a.playbackRate = old.playbackRate; a.currentTime = t; updatePositionState(); }, { once: true });
   player = a; bindPlayer(a);               // from here on, events of the old element are ignored
   old.replaceWith(a);
   old.pause();
-  a.play().catch(() => {});
+  if (playing || !fresh) a.play().catch(() => {});
 }
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && IOS && AG && AG.el === player && !player.paused && spareAudio) useSpareAudio();
