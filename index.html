@@ -129,6 +129,14 @@
   .sleepmenu .sleepnote { flex-basis:100%; }
   .sleepmenu button.last { border-width:2px; font-weight:600; }
   #pSleepBtn.on { background:var(--accent); color:var(--on-accent); font-variant-numeric:tabular-nums; }
+  .musicpanel { margin-top:8px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--soft); font-size:13px; color:var(--muted); display:flex; flex-direction:column; gap:6px; }
+  .musicpanel label { margin:0; color:var(--ink); font-size:13px; }
+  .musicpanel .mon { display:flex; gap:6px; align-items:center; font-size:14px; min-height:32px; }
+  .musicpanel select { width:auto; padding:4px 8px; font-size:13px; }
+  .musicpanel .mfile { display:flex; gap:8px; align-items:center; padding:4px 0; border-bottom:1px solid var(--line); }
+  .musicpanel .mname { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ink); }
+  .musicpanel .mnote { font-size:12px; }
+  #pMusic.on { background:var(--accent); color:var(--on-accent); }
   details.pron { margin-top:14px; border:1px solid var(--line); border-radius:8px; padding:8px 12px; font-size:14px; }
   details.pron summary { cursor:pointer; color:var(--accent); }
   .pron table { width:100%; border-collapse:collapse; margin-top:8px; }
@@ -173,6 +181,8 @@
     .mark { flex-wrap: wrap; flex: 1 1 100%; }
     .mark .w { max-width: 100%; flex: 1 1 100%; order: 3; }
     .readtext { max-height: 60vh; font-size: 18px; }
+    .musicpanel .mon { min-height: 44px; }
+    .musicpanel .mon input { width: 22px; height: 22px; }
     details.pron summary { min-height: 44px; display: flex; align-items: center; }
     .pron td:last-child button { min-height: 44px; }
   }
@@ -291,8 +301,31 @@
             <option value="1.3">1.3×</option><option value="1.5">1.5×</option><option value="1.75">1.75×</option><option value="2">2×</option>
           </select>
           <label class="follow" style="margin:0;display:flex;gap:4px;align-items:center" title="Keep the screen on (no auto-lock) while audio plays"><input type="checkbox" id="pAwake" checked aria-label="Keep the screen on while audio plays"> <span aria-hidden="true">☀</span><span class="wide-only">Screen on</span></label>
+          <button class="ghost small" id="pMusic" title="Background music" aria-label="Background music" aria-expanded="false" aria-controls="pMusicPanel">♪<span class="wide-only"> Music</span></button>
           <button class="ghost small" id="pJump" style="margin-left:auto" title="Scroll the text to the sentence being read">Jump<span class="wide-only"> to current</span></button>
           <button class="ghost small" id="pRead" title="Show only the text, with a small progress bar">Full<span class="wide-only"> screen</span></button>
+        </div>
+        <div id="pMusicPanel" class="musicpanel hidden" role="group" aria-label="Background music">
+          <label class="mon"><input type="checkbox" id="mOn"> Music under the narration</label>
+          <div class="row">
+            <label for="mSource">Source</label>
+            <select id="mSource"><option value="gen">Generated</option><option value="mine">My music</option></select>
+            <span id="mGenRow" class="row"><label for="mPreset">Style</label>
+            <select id="mPreset"><option value="rain">Rain</option><option value="night">Night</option><option value="cafe">Café</option></select></span>
+            <label for="mLevel">Level</label>
+            <select id="mLevel"><option value="quiet">Quiet</option><option value="normal">Normal</option><option value="louder">Louder</option></select>
+          </div>
+          <div id="mMine" class="hidden">
+            <div id="mFiles"></div>
+            <div class="row">
+              <input type="file" id="mAdd" accept="audio/*" multiple class="hidden">
+              <button class="ghost small" type="button" id="mAddBtn">Add files</button>
+              <label for="mOrder">Order</label>
+              <select id="mOrder"><option value="order">In order</option><option value="shuffle">Shuffle</option></select>
+            </div>
+            <div class="mnote">Your files stay in this browser and are never uploaded.</div>
+          </div>
+          <div class="status" id="mStatus" aria-live="polite"></div>
         </div>
         <div id="pMarks" class="marks"></div>
         <div id="pText" class="readtext"></div>
@@ -381,6 +414,7 @@
     </section>
   </div>
 </main>
+<audio id="music" preload="auto" class="hidden" x-webkit-airplay="deny" disableremoteplayback></audio>
 
 <!-- Libraries: exact versions from jsDelivr, which serves the npm package files unchanged, so the
      Subresource Integrity hashes can be checked against the npm registry (versions in package.json). -->
@@ -497,6 +531,7 @@ function showApp() {
   $('loginView').classList.add('hidden'); $('appView').classList.remove('hidden');
   $('who').classList.remove('hidden'); $('brand').textContent = username + '@Wako205';
   renderChat();
+  loadMusicPrefs();
   switchTab('audio');
 }
 /**
@@ -511,6 +546,7 @@ function logout() {
   const old = token;
   if (old) setTimeout(() => { api({ action: 'logout', token: old }).catch(() => {}); }, 2000);
   token = username = null; store('mp_token', null); store('mp_user', null); $('brand').textContent = 'Wako205';
+  mPrefs.on = false; resetMusic(); $('pMusicPanel').classList.add('hidden');
   clearTimeout(libTimer); libItems = []; sharedItems = []; $('library').textContent = ''; $('libUsage').textContent = ''; $('usageCard').classList.add('hidden'); $('usageCard').parentElement.classList.add('nousage');
   $('sharedLib').textContent = ''; $('sharedCard').classList.add('hidden');
   chat = { convId: null, messages: [] }; pendingDoc = null; currentFile = null; store('mp_chat', null);
@@ -1355,6 +1391,7 @@ function closePlayer() {
   player.pause(); player.removeAttribute('src'); player.load();
   if (P) Object.values(P.cache).forEach((x) => URL.revokeObjectURL(x.url));
   P = null; $('playerCard').classList.add('hidden');
+  musicSync();
   if (MS) { try { MS.metadata = null; MS.playbackState = 'none'; } catch (e) {} }
 }
 
@@ -1721,6 +1758,9 @@ function bindPlayer(a) {
   on('ended', chapterEnded);
   on('play', keepAwake);
   on('pause', keepAwake);
+  on('play', musicSync);                                // background music follows the narration
+  on('pause', () => { if (!player.ended) musicSync(); });  // at a chapter end, 'ended' decides
+  on('ended', musicSync);
 }
 
 // Keeps the screen from locking while audio plays (Screen Wake Lock API; Safari 16.4+, Chrome).
@@ -1869,6 +1909,335 @@ if (MS) {
  * Playback uses the audio element alone, never Web Audio: iOS suspends Web Audio when the
  * screen locks, which would silence an element routed through it.
  */
+// ---------------------------------------------------------------------------
+// Background music under the narration. Nothing here uses Web Audio while playing
+// (iOS suspends it when the screen locks): the music is rendered ahead of time with an
+// OfflineAudioContext into a WAV file, at its final loudness, and played by a second
+// plain <audio> element that starts, pauses and resumes with the narration.
+//   Generated: lo-fi music synthesized here (chords, bass, a swung drum loop, vinyl
+//   crackle or rain, low-pass filtered). Each rendering is a few minutes long; the next
+//   one uses another seed, so the music keeps changing.
+//   My music: audio files chosen by the user, kept in this browser (IndexedDB) and
+//   rendered at the chosen level before they are played; never uploaded.
+// ---------------------------------------------------------------------------
+const MUSIC_RATE = 22050;                 // mono, enough for quiet background music
+const SPEECH_DB = -24;                    // speech level of the synthesized voices (RMS, dBFS)
+const MUSIC_LEVELS = { quiet: -26, normal: -20, louder: -14 };   // music below the speech, in dB
+const MUSIC_PRESETS = {
+  rain:  { name: 'Rain',  bpm: 68, root: 50, scale: [0, 3, 5, 7, 10], cutoff: 3200, rain: 1, crackle: 0.5, kit: 0.7, keys: 'ep',
+           a: [[0, 'm9'], [5, 'm7'], [-2, 'maj7'], [-5, 'dom7']], b: [[3, 'maj7'], [-2, 'maj7'], [0, 'm7'], [-5, 'dom7']] },
+  night: { name: 'Night', bpm: 60, root: 45, scale: [0, 3, 5, 7, 10], cutoff: 2200, rain: 0, crackle: 0.35, kit: 0.45, keys: 'pad',
+           a: [[0, 'm9'], [-4, 'maj7'], [-7, 'm7'], [-2, 'dom7']], b: [[5, 'm7'], [0, 'm9'], [-4, 'maj7'], [-5, 'dom7']] },
+  cafe:  { name: 'Café',  bpm: 82, root: 53, scale: [0, 2, 4, 7, 9], cutoff: 4200, rain: 0, crackle: 0.8, kit: 0.9, keys: 'ep',
+           a: [[2, 'm7'], [7, 'dom7'], [0, 'maj9'], [-3, 'm7']], b: [[5, 'maj7'], [4, 'dom7'], [2, 'm9'], [7, 'dom7']] },
+};
+const CHORD = { maj7: [0, 4, 7, 11], m7: [0, 3, 7, 10], dom7: [0, 4, 7, 10], m9: [0, 3, 7, 10, 14], maj9: [0, 4, 7, 11, 14] };
+// Sections of one rendering, in bars: progression, drums, melody.
+const MUSIC_FORM = [['a', 0, 0, 4], ['a', 1, 0, 8], ['b', 1, 1, 8], ['a', 1, 1, 8], ['b', 0.6, 0, 8], ['a', 1, 1, 8], ['b', 1, 0, 8], ['a', 0.5, 1, 8]];
+
+function seeded(seed) {                    // mulberry32
+  return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+}
+const midiHz = (m) => 440 * Math.pow(2, (m - 69) / 12);
+const OAC = () => window.OfflineAudioContext || window.webkitOfflineAudioContext;
+
+/**
+ * Renders a few minutes of generated music; returns the samples (mono, MUSIC_RATE). The
+ * voices are computed directly into the sample buffer (much faster than thousands of Web
+ * Audio nodes); an OfflineAudioContext then applies the final low-pass filter.
+ */
+async function renderGeneratedSamples(presetKey, seed) {
+  const p = MUSIC_PRESETS[presetKey] || MUSIC_PRESETS.rain, rnd = seeded(seed * 7919 + presetKey.length);
+  const sr = MUSIC_RATE, beat = 60 / p.bpm, bar = 4 * beat, bars = MUSIC_FORM.reduce((n, s) => n + s[3], 0);
+  const loop = bars * bar, tail = 3, N = Math.ceil((loop + tail) * sr), y = new Float32Array(N);
+  const TAU = 2 * Math.PI;
+  const at = (t) => Math.max(0, Math.round(t * sr));
+  // Soft FM electric piano: the brightness fades faster than the tone.
+  const epiano = (m, t, vel, len) => {
+    const f = midiHz(m), n0 = at(t), n = Math.min(N - n0, Math.round(Math.min(len, 2.2) * sr)), amp = 0.09 * vel;
+    const dTone = Math.exp(-1 / (0.9 * sr)), dMod = Math.exp(-1 / (0.18 * sr)), w = TAU * f / sr;
+    let e = 1, im = 1.6, ph = 0, pm = 0;
+    for (let i = 0; i < n; i++) {
+      const a = i < 180 ? i / 180 : 1;
+      y[n0 + i] += amp * a * e * Math.sin(ph + im * Math.sin(pm));
+      ph += w; pm += 2 * w; e *= dTone; im *= dMod;
+      if (e < 0.002) break;
+    }
+  };
+  // Pad: two detuned saws through a gentle one-pole low-pass, slow attack and release.
+  const pad = (m, t, len) => {
+    const f = midiHz(m), n0 = at(t), n = Math.min(N - n0, Math.round((len + 0.6) * sr)), atk = 0.7 * sr, rel = 0.6 * sr, hold = len * sr;
+    const w1 = f * 1.0035 / sr, w2 = f * 0.9965 / sr, k = 1 - Math.exp(-TAU * 900 / sr);
+    let p1 = rnd(), p2 = rnd(), lp = 0;
+    for (let i = 0; i < n; i++) {
+      const g = i < atk ? i / atk : i < hold ? 1 : Math.max(0, 1 - (i - hold) / rel);
+      p1 += w1; p1 -= Math.floor(p1); p2 += w2; p2 -= Math.floor(p2);
+      lp += k * ((p1 + p2 - 1) - lp);
+      y[n0 + i] += 0.035 * g * lp;
+    }
+  };
+  const bass = (m, t, len) => {
+    const f = midiHz(m), n0 = at(t), n = Math.min(N - n0, Math.round(len * sr)), w = f / sr, d = Math.exp(-1 / (0.5 * sr));
+    let ph = 0, e = 1;
+    for (let i = 0; i < n; i++) { const tri = 4 * Math.abs(ph - Math.floor(ph + 0.5)) - 1; y[n0 + i] += 0.16 * (i < 120 ? i / 120 : 1) * e * tri; ph += w; e *= d; }
+  };
+  const hit = (t, type, vel) => {
+    const n0 = at(t);
+    if (type === 'kick') {
+      const n = Math.min(N - n0, Math.round(0.35 * sr)); let ph = 0;
+      for (let i = 0; i < n; i++) { const tt = i / sr, f = 42 + 73 * Math.exp(-tt / 0.04); ph += TAU * f / sr; y[n0 + i] += 0.5 * vel * Math.exp(-tt / 0.09) * Math.sin(ph); }
+      return;
+    }
+    const snare = type === 'snare', n = Math.min(N - n0, Math.round((snare ? 0.2 : 0.05) * sr)), tau = (snare ? 0.05 : 0.012) * sr;
+    let lo = 0, prev = 0;
+    for (let i = 0; i < n; i++) {
+      const x = rnd() * 2 - 1;
+      let v;
+      if (snare) { lo += 0.35 * (x - lo); v = lo - prev * 0.6; prev = lo; v *= 0.22; }   // band-limited noise
+      else { v = (x - prev) * 0.5 * 0.06; prev = x; }                                     // high-passed noise
+      y[n0 + i] += vel * Math.exp(-i / tau) * v;
+    }
+  };
+  // Rain (slowly breathing filtered noise) or vinyl crackle (hiss and sparse clicks) underneath.
+  if (p.rain) {
+    let lo = 0, lo2 = 0;
+    for (let i = 0; i < N; i++) {
+      const x = rnd() * 2 - 1; lo += 0.25 * (x - lo); lo2 += 0.04 * (lo - lo2);
+      y[i] += 0.12 * p.rain * (lo - lo2) * (0.8 + 0.2 * Math.sin(TAU * 0.07 * i / sr));
+    }
+  }
+  if (p.crackle) {
+    for (let i = 0; i < N; i++) y[i] += (rnd() * 2 - 1) * 0.002;
+    const clicks = Math.round((loop + tail) * 9 * p.crackle);
+    for (let k = 0; k < clicks; k++) { const i = Math.floor(rnd() * (N - 3)), a = (rnd() * 0.25 + 0.1) * (rnd() < 0.5 ? -1 : 1); y[i] += a; y[i + 1] -= a * 0.5; }
+  }
+
+  let t = 0;
+  MUSIC_FORM.forEach(([prog, drums, melody, n]) => {
+    for (let b = 0; b < n; b++, t += bar) {
+      const [off, q] = p[prog][b % 4];
+      const base = p.root + off, inv = Math.floor(rnd() * 3);
+      const notes = CHORD[q].map((iv, i) => { let m = base + 12 + iv + (i < inv ? 12 : 0); while (m > 74) m -= 12; while (m < 55) m += 12; return m; });
+      if (p.keys === 'pad') { notes.forEach((m) => pad(m, t, bar)); if (rnd() < 0.5) notes.slice(0, 3).forEach((m, i) => epiano(m + 12, t + 2 * beat + i * 0.03, 0.5, bar / 2)); }
+      else {
+        const hits = rnd() < 0.5 ? [0, 2.5] : [0, 1.5, 3];
+        hits.forEach((h) => notes.forEach((m, i) => epiano(m, t + h * beat + i * 0.018 + rnd() * 0.01, 0.7 + rnd() * 0.3, (4 - h) * beat)));
+      }
+      const low = base - 12 * (base >= 50 ? 2 : 1);
+      bass(low, t, 2 * beat); bass(low + (rnd() < 0.3 ? 7 : 0), t + 2.5 * beat, 1.5 * beat);
+      if (drums && !(b === n - 1 && rnd() < 0.4)) {
+        for (let e = 0; e < 8; e++) {                                                    // eighths with swing
+          const ht = t + e * beat / 2 + (e % 2 ? 0.17 * beat : 0) + (rnd() - 0.5) * 0.008;
+          if (e === 0 || e === 4 || (e === 5 && rnd() < 0.3)) hit(ht, 'kick', p.kit * drums);
+          if (e === 2 || e === 6) hit(ht, 'snare', p.kit * drums * (0.8 + rnd() * 0.2));
+          if (rnd() < 0.9) hit(ht, 'hat', p.kit * drums * (e % 2 ? 0.6 : 1) * (0.7 + rnd() * 0.3));
+        }
+      }
+      if (melody) for (let e = 0; e < 8; e++) {
+        if (rnd() < 0.16) { const sc = p.scale[Math.floor(rnd() * p.scale.length)]; epiano(p.root + 24 + sc, t + e * beat / 2, 0.45, beat); }
+      }
+    }
+  });
+  // The final low-pass filter (the "lo-fi" darkness) in an OfflineAudioContext.
+  const ctx = new (OAC())(1, N, sr), buf = ctx.createBuffer(1, N, sr);
+  buf.getChannelData(0).set(y);
+  const src = ctx.createBufferSource(), lp = ctx.createBiquadFilter();
+  src.buffer = buf; lp.type = 'lowpass'; lp.frequency.value = p.cutoff; lp.Q.value = 0.6;
+  src.connect(lp); lp.connect(ctx.destination); src.start();
+  const out = (await ctx.startRendering()).getChannelData(0);
+  const len = Math.round(loop * sr), z = out.slice(0, len);
+  for (let i = 0; i < N - len; i++) z[i] += out[len + i];                                // the tail wraps round: seamless loop
+  return z;
+}
+
+/** Samples of an audio file, mono, MUSIC_RATE. */
+async function renderFileSamples(bytes) {
+  const probe = new (OAC())(1, 1, MUSIC_RATE);
+  const src = await probe.decodeAudioData(bytes.slice(0));
+  const ctx = new (OAC())(1, Math.max(1, Math.ceil(src.duration * MUSIC_RATE)), MUSIC_RATE);
+  const n = ctx.createBufferSource(); n.buffer = src; n.connect(ctx.destination); n.start();
+  return (await ctx.startRendering()).getChannelData(0);
+}
+
+/** Scales samples to the target RMS level (dBFS) without exceeding -1 dBFS peaks. */
+function setLevel(y, targetDb) {
+  let s = 0, peak = 0;
+  for (let i = 0; i < y.length; i++) { s += y[i] * y[i]; const a = Math.abs(y[i]); if (a > peak) peak = a; }
+  const rms = Math.sqrt(s / Math.max(1, y.length)) || 1e-9;
+  const k = Math.min(Math.pow(10, targetDb / 20) / rms, 0.89 / (peak || 1));
+  for (let i = 0; i < y.length; i++) y[i] *= k;
+  return { rmsDb: 20 * Math.log10(rms * k), peak: peak * k };
+}
+function wavBlob(y, sr) {
+  const b = new DataView(new ArrayBuffer(44 + 2 * y.length));
+  const s = (o, str) => { for (let i = 0; i < str.length; i++) b.setUint8(o + i, str.charCodeAt(i)); };
+  s(0, 'RIFF'); b.setUint32(4, 36 + 2 * y.length, true); s(8, 'WAVE'); s(12, 'fmt '); b.setUint32(16, 16, true); b.setUint16(20, 1, true);
+  b.setUint16(22, 1, true); b.setUint32(24, sr, true); b.setUint32(28, sr * 2, true); b.setUint16(32, 2, true); b.setUint16(34, 16, true);
+  s(36, 'data'); b.setUint32(40, 2 * y.length, true);
+  for (let i = 0; i < y.length; i++) b.setInt16(44 + 2 * i, Math.max(-32768, Math.min(32767, Math.round(y[i] * 32767))), true);
+  return new Blob([b.buffer], { type: 'audio/wav' });
+}
+
+// "My music": files kept in this browser, per user.
+let musicDbP = null;
+function musicDb() {
+  if (!musicDbP) {
+    musicDbP = new Promise((res, rej) => {
+      const r = indexedDB.open('wako-music', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('files', { keyPath: 'key' }).createIndex('user', 'user');
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    });
+    musicDbP.catch(() => { musicDbP = null; });
+  }
+  return musicDbP;
+}
+const musicReq = (r) => new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+async function myMusicList() {
+  const db = await musicDb();
+  const all = await musicReq(db.transaction('files').objectStore('files').index('user').getAll(username || ''));
+  return all.map((f) => ({ key: f.key, name: f.name, size: f.size, at: f.at })).sort((a, b) => a.at - b.at);
+}
+async function myMusicData(key) { const db = await musicDb(); const f = await musicReq(db.transaction('files').objectStore('files').get(key)); return f && f.data; }
+
+// State: the choices (per user, in this browser), and the track playing.
+const music = $('music');
+let mPrefs = { on: false, source: 'gen', preset: 'rain', level: 'normal', order: 'order' };
+let mTrack = null, mNext = null, mNextReady = null, mSeed = 1, mIndex = -1, mGen = 0, mUnlocked = false;
+function musicPrefsKey() { return 'mp_music_' + (username || ''); }
+function loadMusicPrefs() {
+  mPrefs = { on: false, source: 'gen', preset: 'rain', level: 'normal', order: 'order' };
+  try { Object.assign(mPrefs, JSON.parse(lsGet(musicPrefsKey()) || '{}')); } catch (e) {}
+  if (!MUSIC_PRESETS[mPrefs.preset]) mPrefs.preset = 'rain';
+  if (!(mPrefs.level in MUSIC_LEVELS)) mPrefs.level = 'normal';
+  renderMusicPanel();
+}
+function saveMusicPrefs() { lsSet(musicPrefsKey(), JSON.stringify(mPrefs)); }
+const musicTarget = () => SPEECH_DB + MUSIC_LEVELS[mPrefs.level];
+
+/** Renders the track after `prev`: the next seed of the preset, or the next (or a random) file. */
+async function makeTrack(gen) {
+  if (mPrefs.source === 'gen') {
+    const seed = mSeed++, y = await renderGeneratedSamples(mPrefs.preset, seed);
+    const lv = setLevel(y, musicTarget());
+    return { gen, url: URL.createObjectURL(wavBlob(y, MUSIC_RATE)), label: MUSIC_PRESETS[mPrefs.preset].name, seconds: y.length / MUSIC_RATE, ...lv };
+  }
+  const list = await myMusicList();
+  if (!list.length) throw new Error('Add audio files to play your own music.');
+  mIndex = mPrefs.order === 'shuffle' && list.length > 1 ? (mIndex + 1 + Math.floor(Math.random() * (list.length - 1))) % list.length : (mIndex + 1) % list.length;
+  const f = list[mIndex], y = await renderFileSamples(await myMusicData(f.key));
+  const lv = setLevel(y, musicTarget());
+  return { gen, url: URL.createObjectURL(wavBlob(y, MUSIC_RATE)), label: f.name, seconds: y.length / MUSIC_RATE, ...lv };
+}
+function dropTrack(t) { if (t && t.url) URL.revokeObjectURL(t.url); }
+/** Prepares the following track while the current one plays, so the switch needs no work in the background. */
+function prepareNext() {
+  if (mNext || mNextReady || !mTrack) return;
+  const gen = mGen;
+  mNext = makeTrack(gen).then((t) => { if (t.gen === mGen) mNextReady = t; else dropTrack(t); }, () => {}).then(() => { mNext = null; });
+}
+/** Forgets the tracks after a change of the choices; the music starts again with the new ones. */
+function resetMusic() {
+  mGen++; music.pause(); music.removeAttribute('src'); music.load();
+  dropTrack(mTrack); mTrack = null;
+  dropTrack(mNextReady); mNextReady = null;
+  mIndex = -1;
+  musicSync();
+}
+/** The music plays while the narration plays, if it is switched on. */
+function musicWanted() { return mPrefs.on && !!P && !player.paused; }
+async function musicSync() {
+  if (!musicWanted()) { if (!music.paused) music.pause(); return; }
+  if (mTrack) { if (music.paused) music.play().catch(() => {}); return; }
+  if (musicSync.busy) return;
+  musicSync.busy = true;
+  const gen = mGen;
+  setStatus($('mStatus'), 'Preparing the music...');
+  try {
+    const t = await makeTrack(gen);
+    if (gen !== mGen) dropTrack(t);                       // the choices changed meanwhile: rendered again below
+    else {
+      mTrack = t; music.src = t.url; music.loop = false;
+      setStatus($('mStatus'), 'Playing: ' + t.label + '.');
+      if (musicWanted()) music.play().catch(() => {});
+      prepareNext();
+    }
+  } catch (e) { if (gen === mGen) setStatus($('mStatus'), e.message, true); }
+  musicSync.busy = false;
+  if (gen !== mGen) musicSync();
+}
+// At the end of a track the prepared one starts at once (inside the event, so also in the background);
+// if it is not ready, the current one plays again.
+music.addEventListener('ended', () => {
+  const t = mNextReady; mNextReady = null;
+  if (t && t.gen === mGen) { dropTrack(mTrack); mTrack = t; music.src = t.url; setStatus($('mStatus'), 'Playing: ' + t.label + '.'); }
+  else music.currentTime = 0;
+  if (musicWanted()) music.play().catch(() => {});
+  prepareNext();
+});
+// iOS lets an element play by itself only after it has played once in a tap.
+function unlockMusic() {
+  if (mUnlocked || !mPrefs.on) return;
+  mUnlocked = true;
+  if (!music.src) { music.src = URL.createObjectURL(wavBlob(new Float32Array(800), 8000)); music.play().then(() => music.pause(), () => { mUnlocked = false; }); }
+}
+['touchend', 'click'].forEach((ev) => document.addEventListener(ev, unlockMusic, true));
+
+function renderMusicPanel() {
+  $('mOn').checked = mPrefs.on; $('mSource').value = mPrefs.source; $('mPreset').value = mPrefs.preset;
+  $('mLevel').value = mPrefs.level; $('mOrder').value = mPrefs.order;
+  $('mGenRow').classList.toggle('hidden', mPrefs.source !== 'gen');
+  $('mMine').classList.toggle('hidden', mPrefs.source !== 'mine');
+  $('pMusic').classList.toggle('on', mPrefs.on);
+  if (!mPrefs.on) setStatus($('mStatus'), '');
+  if (mPrefs.source === 'mine') renderMyMusic();
+}
+async function renderMyMusic() {
+  const box = $('mFiles');
+  let list = [];
+  try { list = await myMusicList(); } catch (e) {}
+  box.textContent = '';
+  if (!list.length) box.appendChild(el('div', 'status', 'No files yet.'));
+  list.forEach((f) => {
+    const r = el('div', 'mfile');
+    r.appendChild(el('span', 'mname', f.name));
+    r.appendChild(el('span', 'm', fmtMB(f.size)));
+    const x = el('button', 'ghost small', 'Remove'); x.setAttribute('aria-label', 'Remove ' + f.name);
+    x.onclick = async () => {
+      const db = await musicDb(), tx = db.transaction('files', 'readwrite'); tx.objectStore('files').delete(f.key);
+      await new Promise((res) => { tx.oncomplete = res; tx.onerror = res; });
+      renderMyMusic(); resetMusic();
+    };
+    r.appendChild(x); box.appendChild(r);
+  });
+}
+function fmtMB(n) { return n >= 1e6 ? (n / 1e6).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1e3)) + ' kB'; }
+$('pMusic').onclick = () => {
+  const open = $('pMusicPanel').classList.toggle('hidden') === false;
+  $('pMusic').setAttribute('aria-expanded', String(open));
+  if (open) renderMusicPanel();
+};
+$('mOn').onchange = () => { mPrefs.on = $('mOn').checked; saveMusicPrefs(); unlockMusic(); renderMusicPanel(); resetMusic(); };
+[['mSource', 'source'], ['mPreset', 'preset'], ['mLevel', 'level'], ['mOrder', 'order']].forEach(([id, k]) => {
+  $(id).onchange = () => { mPrefs[k] = $(id).value; saveMusicPrefs(); renderMusicPanel(); if (k !== 'order') resetMusic(); };
+});
+$('mAddBtn').onclick = () => $('mAdd').click();
+$('mAdd').onchange = async () => {
+  const files = Array.from($('mAdd').files || []);
+  $('mAdd').value = '';
+  if (!files.length) return;
+  try {
+    const db = await musicDb();
+    for (const f of files) {
+      const data = await f.arrayBuffer(), tx = db.transaction('files', 'readwrite');
+      tx.objectStore('files').put({ key: (username || '') + '|' + Date.now() + Math.random().toString(36).slice(2, 6), user: username || '', name: f.name, type: f.type, size: f.size, data, at: Date.now() });
+      await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
+    }
+    setStatus($('mStatus'), files.length === 1 ? 'Added "' + files[0].name + '".' : 'Added ' + files.length + ' files.');
+  } catch (e) { setStatus($('mStatus'), 'The files could not be stored in this browser: ' + e.message, true); }
+  renderMyMusic();
+  if (!mTrack) musicSync();
+};
+
 ['wheel', 'touchmove', 'keydown'].forEach((ev) => $('pText').addEventListener(ev, () => { lastUserScroll = Date.now(); }, { passive: true }));
 $('arate').onchange = () => { player.playbackRate = Number($('arate').value); lsSet('mp_rate', $('arate').value); };
 try { const r = lsGet('mp_rate'); if (r) $('arate').value = r; } catch (e) {}
