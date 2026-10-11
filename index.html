@@ -1060,20 +1060,29 @@ async function loadLibrary() {
         ' (through ' + fmtDay(libUsage.s0Until - 1) + ')' : '') : '');
   renderLibrary(); bookSummary(); renderNet();
   if (P && !P.item.owner) { refreshChapterSelect(); resumeIfWaiting(); }
-  if (isOnline() && token) { loadShared(); pollLibrary(); }
+  loadShared();
+  if (isOnline() && token) pollLibrary();
 }
 
 /** Items other accounts have shared (audio_public). A failure leaves the section hidden. */
 let sharedItems = [];
 async function loadShared() {
+  if (!token || !isOnline()) {                         // offline: the shared items as last received
+    const snap = (() => { try { return JSON.parse(lsGet('mp_shared_' + offUser()) || 'null'); } catch (e) { return null; } })();
+    sharedItems = snap && Array.isArray(snap.items) ? snap.items : [];
+    return renderShared();
+  }
   try {
     const d = await api({ action: 'audio_public', token });
     sharedItems = (d.items || []).filter((x) => x && x.id && !x.mine);
-  } catch (e) { sharedItems = []; }
+    lsSet('mp_shared_' + username, JSON.stringify({ at: Date.now(), items: sharedItems }));
+  } catch (e) { if (!isNetError(e)) sharedItems = []; }
   renderShared();
 }
 function renderShared() {
-  const box = $('sharedLib'); box.textContent = '';
+  const box = $('sharedLib');
+  const openPanels = Array.from(box.querySelectorAll('.offpanel')).map((p) => p.dataset.id);
+  box.textContent = '';
   $('sharedCard').classList.toggle('hidden', !sharedItems.length);
   sharedItems.forEach((it) => {
     const row = el('div', 'libitem');
@@ -1087,10 +1096,17 @@ function renderShared() {
     if (it.pos && it.chapters && it.chapters[it.pos.c]) meta.push('resume at ' + (it.chapters.length > 1 ? it.chapters[it.pos.c].title + ' ' : '') + fmtTime(it.pos.t));
     g.appendChild(el('div', 'm', meta.join(' · ')));
     row.appendChild(g);
+    const nOff = offCount(it);
+    if (nOff) g.lastChild.textContent += ' · ' + (nOff === savableChapters(it).length ? '✓ saved offline' : '✓ ' + nOff + ' of ' + savableChapters(it).length + ' chapters saved offline');
     const open = el('button', 'small', it.pos ? 'Resume' : 'Listen'); open.onclick = () => openItem(it.id, it.owner);
-    open.disabled = !(it.chapters || []).some((ch, i) => chapterReadyCount(it, i) > 0);
+    open.disabled = !(it.chapters || []).some((ch, i) => chapterReadyCount(it, i) > 0) || (!isOnline() && !nOff);
     row.appendChild(open);
+    if (savableChapters(it).length && (isOnline() || nOff)) {
+      const off = el('button', 'ghost small', nOff ? 'Offline ✓' : 'Offline'); off.title = 'Save for offline listening, or remove the offline copy';
+      off.onclick = () => toggleOfflinePanel(it, row); row.appendChild(off);
+    }
     box.appendChild(row);
+    if (openPanels.includes(it.owner + '|' + it.id)) toggleOfflinePanel(it, row);
   });
 }
 /** Extra request field for an item another account shared: whose library it is in. */
@@ -1158,7 +1174,7 @@ function renderLibrary() {
       row.appendChild(del);
     }
     box.appendChild(row);
-    if (openPanels.includes(it.id)) toggleOfflinePanel(it, row);
+    if (openPanels.includes('|' + it.id)) toggleOfflinePanel(it, row);
   });
 }
 
@@ -1277,13 +1293,14 @@ let offDbP = null;
 function isOnline() { return navigator.onLine !== false; }
 function isNetError(e) { return /failed to fetch|load failed|networkerror|network request failed|offline/i.test(e && e.message || ''); }
 function offUser() { return username || lsGet('mp_last_user') || ''; }
-function offKey(id, c, user) { return (user || offUser()) + '|' + id + '|' + c; }
-function offHas(id, c) { return offIndex.has(offKey(id, c)); }
-function offCount(it) { return (it.chapters || []).filter((ch, c) => offHas(it.id, c)).length; }
+/** Key of a saved chapter: this user, the owner of a shared item (empty for an own item), the item and the chapter. */
+function offKey(it, c, user) { return (user || offUser()) + '|' + (ownerOf(it).owner || '') + '|' + it.id + '|' + c; }
+function offHas(it, c) { return offIndex.has(offKey(it, c)); }
+function offCount(it) { return (it.chapters || []).filter((ch, c) => offHas(it, c)).length; }
 function fmtBytes(n) { return n >= 1e9 ? (n / 1e9).toFixed(1) + ' GB' : n >= 1e6 ? (n / 1e6).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1e3)) + ' kB'; }
 /** Size of a chapter: exact when saved, otherwise estimated from its length (48 kbit/s speech). */
 function chapterBytes(it, c) {
-  const rec = offIndex.get(offKey(it.id, c));
+  const rec = offIndex.get(offKey(it, c));
   if (rec) return rec.bytes;
   const ch = it.chapters[c], perSec = it.lang && it.lang !== 'en-US' ? 4.5 : 15;
   return Math.round((ch.chars || 0) / perSec * 6000);
@@ -1322,10 +1339,10 @@ async function offLoadIndex() {
     all.forEach((m) => offIndex.set(m.key, m));
   } catch (e) {}
 }
-async function offGet(id, c) {
-  if (!offHas(id, c)) return null;
+async function offGet(it, c) {
+  if (!offHas(it, c)) return null;
   const db = await offDb();
-  return idbReq(db.transaction('audio').objectStore('audio').get(offKey(id, c)));
+  return idbReq(db.transaction('audio').objectStore('audio').get(offKey(it, c)));
 }
 async function offRemove(keys) {
   if (!keys.length) return;
@@ -1345,14 +1362,14 @@ async function offWipe(user) {
     const own = ['mp_pos_' + user + '_', 'mp_mark_b1_' + user + '_', 'mp_mark_b2_' + user + '_'];
     Object.keys(localStorage).filter((k) => own.some((p) => k.startsWith(p))).forEach((k) => localStorage.removeItem(k));
   } catch (e) {}
-  ['mp_lib_' + user, 'mp_outbox_' + user].forEach((k) => { try { localStorage.removeItem(k); } catch (e) {} });
+  ['mp_lib_' + user, 'mp_shared_' + user, 'mp_outbox_' + user].forEach((k) => { try { localStorage.removeItem(k); } catch (e) {} });
   if (lsGet('mp_last_user') === user) { try { localStorage.removeItem('mp_last_user'); } catch (e) {} }
   offIndex.clear();
 }
 
 /** Downloads chapters of an item and stores them for offline listening. */
 async function saveOffline(it, chapters, say) {
-  chapters = chapters.filter((c) => !offHas(it.id, c));
+  chapters = chapters.filter((c) => !offHas(it, c));
   if (!chapters.length) return;
   if (!isOnline() || !token) throw new Error(OFFLINE_MSG);
   const need = chapters.reduce((n, c) => n + chapterBytes(it, c), 0);
@@ -1368,19 +1385,19 @@ async function saveOffline(it, chapters, say) {
       const c = chapters[j], ch = it.chapters[c];
       const pre = chapters.length > 1 ? 'Saving chapter ' + (j + 1) + ' of ' + chapters.length + ': ' : 'Saving: ';
       say(pre + 'text');
-      const texts = (await api({ action: 'audio_text', token, id: it.id, chapter: c })).texts;
+      const texts = (await api({ action: 'audio_text', token, id: it.id, chapter: c, ...ownerOf(it) })).texts;
       const bufs = new Array(ch.n);
       let next = 0, got = 0;
       const worker = async () => {
         while (next < ch.n) {
           const k = next++;
-          bufs[k] = unb64((await api({ action: 'audio_part', token, id: it.id, chapter: c, index: k })).data).buffer;
+          bufs[k] = unb64((await api({ action: 'audio_part', token, id: it.id, chapter: c, index: k, ...ownerOf(it) })).data).buffer;
           say(pre + 'part ' + (++got) + ' of ' + ch.n);
         }
       };
       await Promise.all([worker(), worker()]);
-      const key = offKey(it.id, c, user), bytes = bufs.reduce((n, b) => n + b.byteLength, 0);
-      const meta = { key, user, id: it.id, c, bytes, at: Date.now() };
+      const key = offKey(it, c, user), bytes = bufs.reduce((n, b) => n + b.byteLength, 0);
+      const meta = { key, user, owner: ownerOf(it).owner || '', id: it.id, c, bytes, at: Date.now() };
       const tx = db.transaction(['meta', 'audio'], 'readwrite');
       tx.objectStore('audio').put({ key, texts, bufs });
       tx.objectStore('meta').put(meta);
@@ -1402,7 +1419,7 @@ function offlineControls(it, onlyChapter, inPlayer) {
     renderOfflineEverywhere();
   };
   const say = (m) => setStatus(st, m);
-  const missing = chs.filter((c) => !offHas(it.id, c)), saved = chs.filter((c) => offHas(it.id, c));
+  const missing = chs.filter((c) => !offHas(it, c)), saved = chs.filter((c) => offHas(it, c));
   const sum = (list) => list.reduce((n, c) => n + chapterBytes(it, c), 0);
   if (missing.length) {
     const what = onlyChapter != null ? 'Save chapter for offline' : chs.length === 1 ? 'Save for offline'
@@ -1415,7 +1432,7 @@ function offlineControls(it, onlyChapter, inPlayer) {
   if (saved.length) {
     box.appendChild(el('span', 'offmark', '✓ ' + (onlyChapter != null || chs.length === 1 ? 'Saved offline' : saved.length + ' of ' + chs.length + ' saved offline') + ' (' + fmtBytes(sum(saved)) + ')'));
     const r = el('button', 'ghost small', onlyChapter != null || chs.length === 1 ? 'Remove offline copy' : inPlayer ? 'Remove offline copies of this book' : 'Remove offline copies');
-    r.onclick = () => run(() => offRemove(saved.map((c) => offKey(it.id, c))));
+    r.onclick = () => run(() => offRemove(saved.map((c) => offKey(it, c))));
     box.appendChild(r);
   }
   if (offBusy.has(it.id)) { box.querySelectorAll('button').forEach((b) => { b.disabled = true; }); setStatus(st, 'Saving...'); }
@@ -1425,9 +1442,10 @@ function offlineControls(it, onlyChapter, inPlayer) {
 
 /** Panel under a library item: every converted chapter with its size, saved or not. */
 function toggleOfflinePanel(it, row) {
-  const old = row.parentNode.querySelector('.offpanel[data-id="' + CSS.escape(it.id) + '"]');
+  const pid = (ownerOf(it).owner || '') + '|' + it.id;
+  const old = row.parentNode.querySelector('.offpanel[data-id="' + CSS.escape(pid) + '"]');
   if (old) { old.remove(); return; }
-  const box = el('div', 'card offpanel'); box.dataset.id = it.id; box.style.margin = '-4px 0 12px';
+  const box = el('div', 'card offpanel'); box.dataset.id = pid; box.style.margin = '-4px 0 12px';
   fillOfflinePanel(box, it);
   row.after(box);
 }
@@ -1452,7 +1470,7 @@ function fillOfflinePanel(box, it) {
 /** Updates every place that shows offline state. */
 function renderOfflineEverywhere() {
   if (!$('appView').classList.contains('hidden')) {
-    renderLibrary();
+    renderLibrary(); renderShared();
     if (P) { refreshChapterSelect(); renderPlayerOffline(); }
   }
   renderStorage();
@@ -1462,7 +1480,6 @@ function renderPlayerOffline() {
   const box = $('pOffline'); box.textContent = '';
   if (!P || P.c < 0) return;
   const it = P.item;
-  if (it.owner && !it.mine) return;                  // items other accounts shared are listened to online only
   if (savableChapters(it).includes(P.c) && it.chapters.length > 1) box.appendChild(offlineControls(it, P.c));
   if (savableChapters(it).length) box.appendChild(offlineControls(it, null, true));
 }
@@ -1485,8 +1502,10 @@ async function renderStorage() {
 // Listening positions and bookmarks are sent with audio_progress; while offline they wait here.
 function outboxKey() { return 'mp_outbox_' + offUser(); }
 function outboxRead() { try { const l = JSON.parse(lsGet(outboxKey()) || '[]'); return Array.isArray(l) ? l : []; } catch (e) { return []; } }
+/** Same item (of the same owner) and the same slot. */
+function samePos(x, p) { return x.id === p.id && (x.owner || '') === (p.owner || '') && (x.slot || 'last') === (p.slot || 'last'); }
 function outboxQueue(p) {
-  const l = outboxRead().filter((x) => !(x.id === p.id && (x.slot || 'last') === (p.slot || 'last')));
+  const l = outboxRead().filter((x) => !samePos(x, p));
   l.push(p); lsSet(outboxKey(), JSON.stringify(l));
 }
 /** Sends a position (or keeps it for later when offline). Resolves true if it was sent. */
@@ -1505,7 +1524,7 @@ async function flushOutbox() {
       try { await api(Object.assign({ action: 'audio_progress', token: tok }, p)); }
       catch (e) { if (isNetError(e) || /log in again/i.test(e.message)) break; }
       let l = []; try { l = JSON.parse(lsGet(key) || '[]'); } catch (e) {}
-      lsSet(key, JSON.stringify(l.filter((x) => !(x.id === p.id && (x.slot || 'last') === (p.slot || 'last') && x.at === p.at))));
+      lsSet(key, JSON.stringify(l.filter((x) => !(samePos(x, p) && x.at === p.at))));
     }
   } finally { flushOutbox.busy = false; }
 }
@@ -1608,7 +1627,7 @@ function refreshChapterSelect() {
   chs.forEach((ch, i) => {
     const ready = chapterReadyCount(it, i);
     const label = ch.status === 'none' ? ' (not converted)' : ready < ch.n ? (ready ? ' (partly ready)' : ' (converting)') : '';
-    const saved = offHas(it.id, i);
+    const saved = offHas(it, i);
     const o = el('option', null, ch.title + label + (saved ? ' ✓ offline' : !isOnline() && ready ? ' (not saved offline)' : ''));
     o.value = i; o.disabled = !ready || (!isOnline() && !saved); sel.appendChild(o);
   });
@@ -1617,7 +1636,7 @@ function refreshChapterSelect() {
   $('pPrev').style.display = $('pNext').style.display = chs.length > 1 ? '' : 'none';
 }
 $('pChapter').onchange = () => loadChapter(Number($('pChapter').value), 0, true);
-function playable(it, c) { return chapterReadyCount(it, c) > 0 && (isOnline() || offHas(it.id, c)); }
+function playable(it, c) { return chapterReadyCount(it, c) > 0 && (isOnline() || offHas(it, c)); }
 function stepChapter(d) {
   if (!P) return;
   for (let n = P.c + d; n >= 0 && n < P.item.chapters.length; n += d) if (playable(P.item, n)) return loadChapter(n, 0, true);
@@ -1659,7 +1678,7 @@ function fetchChapter(c, onStatus, onEarly) {
   const say = onStatus || (() => {});
   let earlyDone = false;
   const job = (async () => {
-    const used = pronUsed(id), saved = from.owner ? null : await offGet(id, c).catch(() => null);
+    const used = pronUsed(id), saved = await offGet(P.item, c).catch(() => null);
     let texts, bufs, stop = ch.n;
     if (saved) {                                         // saved for offline listening: no request at all
       texts = saved.texts.map((t) => unrespell(t, used));

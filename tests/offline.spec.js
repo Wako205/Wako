@@ -92,7 +92,7 @@ test('a chapter saved from the player plays offline without any request', async 
   await expect(page.locator('#pOffline').getByRole('button', { name: /^Save the other chapters for offline \(about/ })).toBeVisible();
   await expect(page.locator('#pOffline .offctl').first()).toContainText('✓ Saved offline');
   await expect(page.locator('#pChapter option').first()).toHaveText('Chapter 1 ✓ offline');
-  expect((await stored(page)).audio).toEqual([['tester|book1|0', 2, 2]]);
+  expect((await stored(page)).audio).toEqual([['tester||book1|0', 2, 2]]);
 
   await context.setOffline(true);
   const before = backend.calls.length;
@@ -119,13 +119,13 @@ test('a whole book is saved from the library, with sizes, marks and removal', as
   await expect(panel.locator('.offctl').first()).toContainText('✓ 2 of 2 saved offline');
   await expect(book(page)).toContainText('✓ saved offline');
   await expect(book(page).getByRole('button', { name: 'Offline ✓' })).toBeVisible();
-  expect((await stored(page)).meta).toEqual(['tester|book1|0', 'tester|book1|1']);
+  expect((await stored(page)).meta).toEqual(['tester||book1|0', 'tester||book1|1']);
   expect(backend.callsOf('audio_part').length).toBe(4);
 
   await panel.locator('.offrow').nth(1).getByRole('button', { name: 'Remove offline copy' }).click();
   await expect(panel.getByRole('button', { name: /^Save the other chapters for offline \(about/ })).toBeVisible();
   await expect(book(page)).toContainText('✓ 1 of 2 chapters saved offline');
-  expect((await stored(page)).meta).toEqual(['tester|book1|0']);
+  expect((await stored(page)).meta).toEqual(['tester||book1|0']);
   await panel.locator('.offctl').first().getByRole('button', { name: 'Remove offline copies' }).click();
   await expect(book(page)).not.toContainText('saved offline');
   expect(await stored(page)).toEqual({ meta: [], audio: [] });
@@ -227,7 +227,7 @@ test('logout deletes the offline copies and cached data of the user', async ({ p
   await page.click('#logoutBtn');
   await expect.poll(async () => (await stored(page)).meta).toEqual([]);
   expect((await stored(page)).audio).toEqual([]);
-  expect(await page.evaluate(() => Object.keys(localStorage).filter((k) => /^mp_(lib_|outbox_|last_user|pos_|mark_)/.test(k)))).toEqual([]);
+  expect(await page.evaluate(() => Object.keys(localStorage).filter((k) => /^mp_(lib_|shared_|outbox_|last_user|pos_|mark_)/.test(k)))).toEqual([]);
 });
 
 test('storage use is shown, persistent storage is requested, and the iPhone note is there', async ({ page, site, backend }) => {
@@ -267,7 +267,7 @@ for (const theme of ['night', 'eye']) {
   });
 }
 
-test('items other accounts shared are not saved offline; their bookmarks keep the owner when queued', async ({ page, context, site, backend }) => {
+test('an item another account shared is saved and replayed offline with its owner', async ({ page, context, site, backend }) => {
   backend.shared = [{
     id: 'shared1', owner: 'bob', mine: false, kind: 'book', title: 'Bob\'s Book', created: '2026-09-02T10:00:00Z', state: 'done',
     voice: 'Kore', lang: 'en-US', chars: 2800, pos: null, marks: {},
@@ -276,16 +276,39 @@ test('items other accounts shared are not saved offline; their bookmarks keep th
   backend.on('audio_text', () => ({ texts: ['Shared text one.', 'Shared text two.'] }));
   backend.on('audio_progress', () => ({}));
   await login(page, site);
+  await page.evaluate(() => navigator.serviceWorker.ready);
   await openAudio(page);
-  await page.locator('#sharedLib .libitem').first().getByRole('button', { name: 'Listen' }).click();
-  await expect(page.locator('#pText span.s').first()).toBeVisible();
-  await expect(page.locator('#pOffline button')).toHaveCount(0);
+  const row = page.locator('#sharedLib .libitem').first();
+  await row.getByRole('button', { name: 'Offline' }).click();
+  await page.locator('#sharedLib .offpanel').getByRole('button', { name: /^Save all for offline/ }).click();
+  await expect(row).toContainText('✓ saved offline');
+  expect((await stored(page)).meta).toEqual(['tester|bob|shared1|0', 'tester|bob|shared1|1']);
+  backend.callsOf('audio_text').concat(backend.callsOf('audio_part')).forEach((c) => expect(c).toMatchObject({ id: 'shared1', owner: 'bob' }));
+
+  // A new visit without a connection: the shared item is listed from the copy and plays from storage.
+  const page2 = await context.newPage();
+  await page2.goto(site);
+  await expect.poll(() => page2.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
   await context.setOffline(true);
-  await page.evaluate(() => { player.currentTime = 4.8; });
-  await page.locator('#pMarks .mark').nth(1).getByRole('button', { name: 'Save here' }).click();
-  const before = backend.callsOf('audio_progress').length;
+  await page2.reload();
+  await page2.click('#offlineBtn');
+  const row2 = page2.locator('#sharedLib .libitem').first();
+  await expect(row2).toContainText('Shared by bob');
+  const before = backend.calls.length;
+  await row2.getByRole('button', { name: /Listen|Resume/ }).click();
+  await expect(page2.locator('#pText span.s').first()).toHaveText('Shared text one.');
+  await page2.evaluate(() => { player.currentTime = 4.8; });
+  await page2.locator('#pMarks .mark').nth(1).getByRole('button', { name: 'Save here' }).click();
+  expect(backend.calls.length).toBe(before);
+  expect(await page2.evaluate(() => JSON.parse(localStorage.getItem('mp_outbox_tester')).find((p) => p.slot === 'b1'))).toMatchObject({ id: 'shared1', owner: 'bob' });
+
+  // Back online and logged in: the bookmark is sent with the owner.
   await context.setOffline(false);
-  await expect.poll(() => backend.callsOf('audio_progress').slice(before).find((p) => p.slot === 'b1')).toMatchObject({ id: 'shared1', owner: 'bob', token: 'tok-test' });
+  await page2.locator('#netBanner').getByRole('button', { name: 'Log in' }).click();
+  await page2.fill('#user', 'tester');
+  await page2.fill('#pass', 'secret');
+  await page2.click('#loginBtn');
+  await expect.poll(() => backend.callsOf('audio_progress').find((p) => p.slot === 'b1')).toMatchObject({ id: 'shared1', owner: 'bob', token: 'tok-test' });
 });
 
 test('offline, the next chapter that plays is the next saved one', async ({ page, context, site, backend }) => {
