@@ -8,6 +8,11 @@ process.env.PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS = '1';
 
 module.exports = defineConfig({
   testDir: 'tests',
+  // Chromium runs everything; WebKit (the engine of Safari) runs the tests in tests/webkit.
+  projects: [
+    { name: 'chromium', testIgnore: 'webkit/**' },
+    { name: 'webkit', testMatch: 'webkit/**/*.spec.js', use: { ...devices['Desktop Safari'], launchOptions: { args: [] } } },
+  ],
   timeout: 60000,
   expect: { timeout: 10000 },
   fullyParallel: true,
