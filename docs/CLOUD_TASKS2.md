@@ -6,7 +6,7 @@ Ground rules (same as round 1)
 - Never call the real backend. Mock it in the Playwright tests (`tests/`, `npm test`), as the existing tests do.
 - No secrets, keys or passwords in the repository.
 - UI text: formal and concise English; never use em dashes.
-- The default theme stays white (白天); 黑夜 and 护眼 remain selectable. New UI must work in all three themes and at 360 to 430 px width with 44 px touch targets (see `tests/phone-layout.spec.js`).
+- The default theme is eye care (护眼), listed first; 白天 and 黑夜 remain selectable. New UI must work in all three themes and at 360 to 430 px width with 44 px touch targets (see `tests/phone-layout.spec.js`).
 - One branch and one pull request per task, each based on the current `main`. All existing tests must keep passing; add tests for every new behaviour.
 - If a task needs a backend change, describe it in the pull request instead of working around it.
 
