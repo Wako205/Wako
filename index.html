@@ -337,8 +337,9 @@ const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbyMPCW8XBoolVwUI_Sp
 const MAX_DOC_CHARS = 400000;
 // Loaded when first needed; pinned with Subresource Integrity like the scripts above.
 const LIB = {
-  pdfjs: { src: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js', integrity: 'sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e' },
-  pdfjsWorker: { src: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js', integrity: 'sha384-SnzOobpRMLXZ52iJvZm/C0fYw0OQemTXzTjIsdsfMcrCtCEe9qgzxTd3RSklO5x2' },
+  // pdf.js: the "legacy" build, which also runs on iPhones before iOS 17.4. ES modules, see getPdfjs().
+  pdfjs: { src: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/legacy/build/pdf.min.mjs', integrity: 'sha384-z/XbAtvhBXJoK+yvYimnFuTCF6/2wTCDSIFD09/HtIfwFtvDKOMdAe5Z3wOChkmW' },
+  pdfjsWorker: { src: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/legacy/build/pdf.worker.min.mjs', integrity: 'sha384-vbNBYP03jHFPlgtK4qSXtazEmGfmpTWlSsfq9OiU20MroW/Q9TbaEXiM7PpeWg+6' },
   lamejs: { src: 'https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js', integrity: 'sha384-xuasJXVcyv3hZq0eYpelEkBC8l4yufatZXDsKuyCU2rqfhDCb+ftuE/mSfZAteiK' },
 };
 
@@ -480,15 +481,43 @@ function switchTab(t) {
 const AUDIO_PAGES = 4;
 let libItems = [], libTimer = null, bookData = null, audioBusy = false;
 
-/** pdf.js, with its worker fetched under the same integrity check and started from a blob URL. */
-async function getPdfjs() {
-  if (!window.pdfjsLib) {
-    await loadScript(LIB.pdfjs);
-    const r = await fetch(LIB.pdfjsWorker.src, { integrity: LIB.pdfjsWorker.integrity, mode: 'cors' });
-    if (!r.ok) throw new Error('Could not load the PDF reader');
-    window.pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([await r.text()], { type: 'text/javascript' }));
+/**
+ * Fetches a script of LIB under its integrity check and returns a blob URL of it. Used for
+ * ES modules: import() and module workers cannot check an integrity hash themselves.
+ */
+async function verifiedBlobUrl(lib) {
+  let r;
+  try { r = await fetch(lib.src, { integrity: lib.integrity, mode: 'cors' }); } catch (e) { r = null; }
+  if (!r || !r.ok) throw new Error('Could not load the PDF reader. Check the connection and try again.');
+  return URL.createObjectURL(new Blob([await r.text()], { type: 'text/javascript' }));
+}
+/** pdf.js 4 (ES modules): the library is imported and the module worker started from verified blob URLs. */
+let pdfjsModule = null;
+function getPdfjs() {
+  if (!pdfjsModule) {
+    pdfjsModule = (async () => {
+      const [lib, worker] = await Promise.all([verifiedBlobUrl(LIB.pdfjs), verifiedBlobUrl(LIB.pdfjsWorker)]);
+      const m = await import(lib);
+      m.GlobalWorkerOptions.workerSrc = worker;
+      return m;
+    })();
+    pdfjsModule.catch(() => { pdfjsModule = null; });        // allow a retry after a failed download
   }
-  return window.pdfjsLib;
+  return pdfjsModule;
+}
+
+/** Text lines of every page (see pageLines), read with the given pdf.js library. */
+async function pdfLines(lib, data, onPage) {
+  const doc = await lib.getDocument({ data, isEvalSupported: false }).promise;   // never compile font data to code
+  const pages = [];
+  try {
+    for (let i = 1; i <= doc.numPages; i++) {
+      const page = await doc.getPage(i);
+      pages.push(pageLines((await page.getTextContent()).items));
+      if (onPage) onPage(i, doc.numPages);
+    }
+  } finally { doc.destroy(); }
+  return pages;
 }
 
 async function splitPdf(bytes) {
@@ -669,16 +698,10 @@ async function extractBook(file) {
   const st = $('audioStatus');
   setStatus(st, 'Reading the PDF text...');
   const lib = await getPdfjs();
-  // isEvalSupported: false closes CVE-2024-4367 (script in a crafted PDF font) in this pdf.js version.
-  const doc = await lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()), isEvalSupported: false }).promise;
-  const pages = [];
-  for (let i = 1; i <= doc.numPages; i++) {
-    const page = await doc.getPage(i);
-    pages.push(pageLines((await page.getTextContent()).items));
-    if (i % 40 === 0) setStatus(st, 'Reading the PDF text: page ' + i + ' of ' + doc.numPages);
-  }
+  const pages = await pdfLines(lib, new Uint8Array(await file.arrayBuffer()),
+    (i, n) => { if (i % 40 === 0) setStatus(st, 'Reading the PDF text: page ' + i + ' of ' + n); });
   setStatus(st, '');
-  return { chapters: splitChapters(pages), pages: doc.numPages, lines: pages };
+  return { chapters: splitChapters(pages), pages: pages.length, lines: pages };
 }
 
 /**

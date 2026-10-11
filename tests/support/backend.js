@@ -9,30 +9,29 @@ const { makeMp3, NM } = require('./media');
 const INDEX_URL = 'file://' + path.resolve(__dirname, '..', '..', 'index.html');
 const CHUNK = 4 * 1024 * 1024;
 
-// cdnjs paths used by index.html -> files in node_modules (same package versions, see package.json).
-const CDNJS = {
-  'jszip/3.10.1/jszip.min.js': 'jszip/dist/jszip.min.js',
-  'marked/12.0.2/marked.min.js': 'marked/marked.min.js',
-  'dompurify/3.1.6/purify.min.js': 'dompurify/dist/purify.min.js',
-  'pdf-lib/1.17.1/pdf-lib.min.js': 'pdf-lib/dist/pdf-lib.min.js',
-  'pdf.js/3.11.174/pdf.min.js': 'pdfjs-dist/build/pdf.min.js',
-  'pdf.js/3.11.174/pdf.worker.min.js': 'pdfjs-dist/build/pdf.worker.min.js',
-  'lamejs/1.2.1/lame.min.js': 'lamejs/lame.min.js',
-};
-
-/** Maps a CDN URL to a file in node_modules (cdnjs, or jsDelivr/unpkg npm URLs pinned to the installed version). */
+/** Maps a jsDelivr or unpkg npm URL (exact version) to the same file of the installed package. */
 function cdnFile(url) {
   const u = new URL(url);
-  if (u.hostname === 'cdnjs.cloudflare.com') {
-    const rel = CDNJS[u.pathname.replace(/^\/ajax\/libs\//, '')];
-    return rel ? path.join(NM, rel) : null;
-  }
   const m = (u.hostname === 'cdn.jsdelivr.net' ? u.pathname.replace(/^\/npm\//, '/') : u.hostname === 'unpkg.com' ? u.pathname : '')
     .match(/^\/((?:@[^/]+\/)?[^/@]+)@([^/]+)\/(.+)$/);
   if (!m) return null;
-  const pkgDir = path.join(NM, m[1]);
-  if (!fs.existsSync(pkgDir) || JSON.parse(fs.readFileSync(path.join(pkgDir, 'package.json'))).version !== m[2]) return null;
-  return path.join(pkgDir, m[3]);
+  const dir = installed()[m[1] + '@' + m[2]];
+  return dir ? path.join(dir, m[3]) : null;
+}
+
+/** name@version -> directory of every package in node_modules, including aliases such as pdfjs-dist-v3. */
+let pkgIndex = null;
+function installed() {
+  if (pkgIndex) return pkgIndex;
+  pkgIndex = {};
+  const add = (dir) => {
+    try { const p = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'))); pkgIndex[p.name + '@' + p.version] = pkgIndex[p.name + '@' + p.version] || dir; } catch (e) {}
+  };
+  for (const d of fs.readdirSync(NM)) {
+    if (d.startsWith('@')) fs.readdirSync(path.join(NM, d)).forEach((x) => add(path.join(NM, d, x)));
+    else add(path.join(NM, d));
+  }
+  return pkgIndex;
 }
 
 // Text of each audio segment, one sentence per tone burst of the test MP3.
