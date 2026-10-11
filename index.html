@@ -478,6 +478,8 @@ function estMinutes(text) {
   const cjk = (text.match(CJK_CHAR) || []).length;
   return cjk / 270 + (text.length - cjk) / 900;
 }
+/** Character counts are always shown in thousands, e.g. "1.4k characters", to match the monthly allowance. */
+function fmtK(n) { n = Math.max(0, n) / 1000; return (n < 10 ? n.toFixed(1) : Math.round(n).toLocaleString()) + 'k characters'; }
 function fmtDur(min) { return min >= 60 ? Math.floor(min / 60) + ' h ' + Math.round(min % 60) + ' min' : Math.max(1, Math.round(min)) + ' min'; }
 function fmtTime(s) { s = Math.max(0, Math.floor(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0'); }
 let docKind = null, docWhy = '', docPages = 0;
@@ -577,7 +579,7 @@ function defaultSelection() {
 function chapterNote(c) {
   const pages = c.endPage - c.startPage + 1;
   if (docKind === 'thesis') return 'pp. ' + c.startPage + '–' + c.endPage + ' · about ' + fmtDur(estMinutes(c.text) * 0.9) + ' · Claude about $' + (PAPER_COST_PER_PAGE * (pages + 0.25 * pages)).toFixed(2);
-  return c.text.length.toLocaleString() + ' chars · ' + fmtDur(estMinutes(c.text));
+  return fmtK(c.text.length) + ' · ' + fmtDur(estMinutes(c.text));
 }
 
 function renderBookPanel() {
@@ -601,12 +603,12 @@ function bookSummary() {
   if (!sel.length) { $('bookSummary').textContent = bookData.pages + ' pages, ' + bookData.chapters.length + ' parts. Tick the chapters you want converted to audio.'; $('audioBtn').disabled = true; return; }
   if (!audioBusy) $('audioBtn').disabled = false;
   let t = bookData.pages + ' pages, ' + bookData.chapters.length + ' parts. Selected: ' + sel.length + ', about ' +
-    fmtDur(sel.reduce((n, c) => n + estMinutes(c.text), 0)) + ', ' + Math.round(chars).toLocaleString() + ' characters of speech';
+    fmtDur(sel.reduce((n, c) => n + estMinutes(c.text), 0)) + ', ' + fmtK(chars) + ' of speech';
   if (docKind === 'thesis') {
     const pages = sel.reduce((n, c) => n + c.endPage - c.startPage + 1, 0);
     t += ', Claude about $' + (PAPER_COST_PER_PAGE * pages * 1.25).toFixed(2) + (pages > 320 ? ' (limit 320 pages per conversion: select fewer chapters)' : '');
   }
-  if (left != null) t += '. Speech allowance left this month: ' + left.toLocaleString() + (chars > left ? ' (not enough: deselect some chapters)' : '');
+  if (left != null) t += '. Speech allowance left this month: ' + fmtK(left) + ' of ' + fmtK(libUsage.cap) + (chars > left ? ' (not enough: deselect some chapters)' : '');
   $('bookSummary').textContent = t;
 }
 $('bookAll').onclick = () => { if (bookData) { bookData.chapters.forEach((c) => { c.sel = true; }); renderBookPanel(); } };
@@ -696,7 +698,8 @@ $('audioBtn').onclick = async () => {
     $('apdf').value = ''; bookData = null; docKind = null; renderKind(); renderBookPanel();
     await loadLibrary();
   } catch (e) {
-    setStatus(st, e.message, true);
+    // Server messages give raw character counts; show them in k characters like the rest of the page.
+    setStatus(st, e.message.replace(/(\d{4,}) characters/g, (m, n) => fmtK(Number(n))).replace(/only (\d{4,}) remain/, (m, n) => 'only ' + fmtK(Number(n)) + ' remain'), true);
     if (/log in again/i.test(e.message)) logout();
   }
   audioBusy = false; $('audioBtn').disabled = false;
@@ -710,7 +713,7 @@ async function loadLibrary() {
   try {
     const d = await api({ action: 'audio_library', token });
     libItems = d.items || []; libUsage.used = d.ttsUsed || 0; libUsage.cap = d.ttsCap || 0;
-    $('libUsage').textContent = 'Speech used this month: ' + Math.round(libUsage.used / 1000) + 'k of ' + Math.round(libUsage.cap / 1000) + 'k characters';
+    $('libUsage').textContent = 'Speech used this month: ' + fmtK(libUsage.used).replace(' characters', '') + ' of ' + fmtK(libUsage.cap);
     renderLibrary(); bookSummary();
     pollLibrary();
   } catch (e) {
@@ -1244,7 +1247,7 @@ function renderChat() {
     const row = el('div', 'msg ' + m.role);
     const b = el('div', 'bubble');
     if (m.role === 'user') {
-      if (m.doc) b.appendChild(el('div', 'doc', 'Attached: ' + m.doc.name + ' (' + m.doc.chars.toLocaleString() + ' characters)'));
+      if (m.doc) b.appendChild(el('div', 'doc', 'Attached: ' + m.doc.name + ' (' + fmtK(m.doc.chars) + ')'));
       b.appendChild(document.createTextNode(m.text));
     } else {
       b.appendChild(renderMarkdown(m.content));
@@ -1280,7 +1283,7 @@ function renderAttach() {
   if (!pendingDoc) return;
   const chip = el('span', 'chipfile');
   chip.appendChild(el('b', null, pendingDoc.name));
-  chip.appendChild(el('span', null, pendingDoc.text.length.toLocaleString() + ' characters'));
+  chip.appendChild(el('span', null, fmtK(pendingDoc.text.length)));
   const x = el('span', 'x', '✕'); x.title = 'Remove'; x.onclick = () => { pendingDoc = null; $('file').value = ''; renderAttach(); };
   chip.appendChild(x); info.appendChild(chip);
 }
