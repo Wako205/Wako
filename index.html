@@ -985,7 +985,7 @@ function allowance(voice) {
 async function loadLibrary() {
   try {
     const d = await api({ action: 'audio_library', token });
-    libItems = d.items || []; libUsage.used = d.ttsUsed || 0; libUsage.cap = d.ttsCap || 0;
+    libItems = (d.items || []).filter((x) => x && x.id); libUsage.used = d.ttsUsed || 0; libUsage.cap = d.ttsCap || 0;
     libUsage.azUsed = d.azUsed || 0; libUsage.azCap = d.azCap || 0; libUsage.azReady = !!d.azReady;
     const az = $('azVoices'); az.disabled = !libUsage.azReady; az.classList.toggle('hidden', !libUsage.azReady);
     if (!libUsage.azReady && /^az:/.test($('avoice').value)) $('avoice').value = 'Charon';
