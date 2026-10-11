@@ -154,7 +154,8 @@
     .pset > label[for] { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
     .pset select { flex: 1; min-width: 0; padding: 4px 6px !important; }
     .pset #arate { flex: none; }
-    .pset .follow { white-space: nowrap; min-height: 44px; gap: 3px !important; }
+    .pset .follow { white-space: nowrap; min-height: 44px; gap: 1px !important; }
+    .pset #pRead { flex: none; padding: 5px 8px; }
     .pset .follow input { width: 20px; height: 20px; }
     .mark { flex-wrap: wrap; flex: 1 1 100%; }
     .mark .w { max-width: 100%; flex: 1 1 100%; order: 3; }
@@ -272,8 +273,9 @@
             <option value="normal">Original</option><option value="loud" selected>Louder</option><option value="max">Loudest</option>
           </select>
           <label class="follow" style="margin:0;display:flex;gap:4px;align-items:center"><input type="checkbox" id="pFollow" checked> Follow<span class="wide-only"> text</span></label>
+          <label class="follow" style="margin:0;display:flex;gap:4px;align-items:center" title="Keep the screen on (no auto-lock) while audio plays"><input type="checkbox" id="pAwake" checked aria-label="Keep the screen on while audio plays"> <span aria-hidden="true">☀</span><span class="wide-only">Screen on</span></label>
           <button class="ghost small" id="pJump" style="margin-left:auto" title="Scroll the text to the sentence being read">Jump<span class="wide-only"> to current</span></button>
-          <button class="ghost small" id="pRead" title="Show only the text, with a small progress bar">Full screen</button>
+          <button class="ghost small" id="pRead" title="Show only the text, with a small progress bar">Full<span class="wide-only"> screen</span></button>
         </div>
         <div id="pMarks" class="marks"></div>
         <form class="row psearch" id="pSearchForm" role="search" style="margin-top:10px">
@@ -1028,6 +1030,7 @@ async function loadLibrary() {
         (libUsage.s0Until ? ', then trial credit ' + fmtK(libUsage.s0Used, true) + ' of ' + fmtK(libUsage.s0Cap) +
           ' (through ' + fmtDay(libUsage.s0Until - 1) + ')' : '') : '');
     renderLibrary(); bookSummary();
+    if (P && !P.item.owner) { refreshChapterSelect(); resumeIfWaiting(); }
     loadShared();
     pollLibrary();
   } catch (e) {
@@ -1220,7 +1223,7 @@ function pollLibrary() {
       } catch (e) { reload = true; }
     }
     if (reload) return loadLibrary();
-    renderLibrary(); if (P) refreshChapterSelect(); pollLibrary();
+    renderLibrary(); if (P) { refreshChapterSelect(); resumeIfWaiting(); } pollLibrary();
   }, 8000);
 }
 
@@ -1506,7 +1509,7 @@ async function loadChapter(c, startAt, autoplay) {
   saveProgress(true);
   const id = P.item.id, ch = P.item.chapters[c];
   if (!ch) return;
-  P.c = c; $('pChapter').value = c;
+  P.c = c; $('pChapter').value = c; P.waitConv = null;
   const st = $('pStatus');
   // A chapter already in memory starts synchronously, still inside the 'ended' event of
   // the previous one: browsers then allow play() in the background.
@@ -1805,9 +1808,45 @@ function chapterEnded() {
   if (!P) return;
   // Only the first parts are loaded: wait for the rest, which then continues from here.
   if (P.partial) { P.waitFull = true; setStatus($('pStatus'), 'Loading the rest of this chapter...'); return; }
-  const n = nextReadyChapter(P.c);
-  if (n >= 0) loadChapter(n, 0, true);
-  else saveProgress(true);
+  // This chapter is still being converted: wait for its next parts and continue where it stopped.
+  const c = P.c, have = P.cache[c] ? P.cache[c].parts : 0;
+  if (converting(P.item, c) && have < P.item.chapters[c].n) return waitConversion(c, player.duration || 0);
+  // The next chapter in order; one still being converted is waited for, not skipped.
+  const chs = P.item.chapters;
+  for (let n = c + 1; n < chs.length; n++) {
+    if (chapterReadyCount(P.item, n)) return loadChapter(n, 0, true);
+    if (converting(P.item, n)) return waitConversion(n, 0);
+  }
+  saveProgress(true);
+}
+
+/** Chapter c of an item of the own library is queued or being converted right now. */
+function converting(it, c) {
+  const ch = it.chapters[c];
+  return !it.owner && it.state === 'processing' && !!ch && (ch.status === 'queued' || (!ch.status && ch.n > 0));
+}
+/** Waits until more of chapter c is converted (the library poll calls resumeIfWaiting), then plays it from time t. */
+function waitConversion(c, t) {
+  P.waitConv = { c, t, have: P.cache[c] ? P.cache[c].parts : 0 };
+  saveProgress(true);
+  setStatus($('pStatus'), 'Waiting for "' + P.item.chapters[c].title + '" to be converted; playback continues by itself.');
+  pollLibrary();
+}
+function resumeIfWaiting() {
+  const w = P && P.waitConv;
+  if (!w) return;
+  const ready = chapterReadyCount(P.item, w.c);
+  if (ready > w.have) {
+    P.waitConv = null;
+    if (P.cache[w.c]) { URL.revokeObjectURL(P.cache[w.c].url); delete P.cache[w.c]; }
+    delete P.loading[w.c];
+    setStatus($('pStatus'), '');
+    loadChapter(w.c, w.t, true);
+  } else if (!converting(P.item, w.c)) {                    // conversion ended without more audio: go on
+    P.waitConv = null; setStatus($('pStatus'), '');
+    const n = nextReadyChapter(w.c);
+    if (n >= 0) loadChapter(n, 0, true);
+  }
 }
 
 /** Player events. Listeners of an element that has been replaced are ignored. */
@@ -1820,7 +1859,25 @@ function bindPlayer(a) {
   on('ratechange', updatePositionState);
   on('timeupdate', () => { if (Date.now() - lastSave > 20000) saveProgress(false); });
   on('ended', chapterEnded);
+  on('play', keepAwake);
+  on('pause', keepAwake);
 }
+
+// Keeps the screen from locking while audio plays (Screen Wake Lock API; Safari 16.4+, Chrome).
+// The browser drops the lock whenever the page is hidden, so it is requested again on return.
+let wakeLock = null;
+async function keepAwake() {
+  const want = !!P && !player.paused && $('pAwake').checked && document.visibilityState === 'visible';
+  try {
+    if (want && !wakeLock && navigator.wakeLock) {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    } else if (!want && wakeLock) { const w = wakeLock; wakeLock = null; await w.release(); }
+  } catch (e) { wakeLock = null; }
+}
+document.addEventListener('visibilitychange', keepAwake);
+try { $('pAwake').checked = lsGet('mp_awake') !== '0'; } catch (e) {}
+$('pAwake').onchange = () => { lsSet('mp_awake', $('pAwake').checked ? '1' : '0'); keepAwake(); };
 bindPlayer(player);
 
 // ---------------------------------------------------------------------------
