@@ -41,7 +41,7 @@
   .usage .un { font-size:11px; color:var(--muted); margin-top:10px; line-height:1.4; }
   @media (max-width: 760px) { .genrow { grid-template-columns: minmax(0,1fr); } .ubar .col { height:110px; } }
   label { display:block; font-size:14px; color:var(--muted); margin:14px 0 6px; }
-  input[type=text], input[type=password], select, textarea { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font:inherit; background:var(--field); color:var(--ink); }
+  input[type=text], input[type=password], input[type=search], select, textarea { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font:inherit; background:var(--field); color:var(--ink); }
   textarea { resize: vertical; min-height: 64px; max-height: 40vh; }
   button { padding:9px 16px; border:0; border-radius:8px; background:var(--accent); color:var(--on-accent); font:inherit; cursor:pointer; }
   button.ghost { background:transparent; color:var(--accent); border:1px solid var(--accent); }
@@ -125,14 +125,18 @@
   .mark button { padding:3px 8px; font-size:12px; }
   .readtext span.s.pend { color:var(--pend); cursor:default; }
   h2 { font-size: 18px; margin: 24px 0 12px; }
-  .banner { font-size:14px; background:var(--soft); border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:8px; padding:8px 12px; margin-bottom:12px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
-  body.offline [data-net] { opacity:.45; pointer-events:none; }
-  .offctl { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:6px; font-size:13px; }
-  .offmark { color:var(--accent); font-weight:600; }
-  .offlist { margin-top:8px; border-top:1px solid var(--line); }
-  .offrow { padding:6px 0; border-bottom:1px solid var(--line); font-size:14px; }
-  .offrow .otitle { font-weight:600; }
-  .poffline { margin-top:6px; }
+  .sleepmenu { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:8px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--soft); font-size:13px; color:var(--muted); }
+  .sleepmenu .sleepnote { flex-basis:100%; }
+  .sleepmenu button.last { border-width:2px; font-weight:600; }
+  #pSleepBtn.on { background:var(--accent); color:var(--on-accent); font-variant-numeric:tabular-nums; }
+  .psearch { flex-wrap: nowrap; }
+  .psearch input { flex: 1; min-width: 0; padding: 7px 10px; }
+  .results { max-height: 40vh; overflow-y: auto; }
+  .results:empty { display: none; }
+  .results button.hit { display: block; width: 100%; text-align: left; background: var(--field); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin: 6px 0; font-size: 14px; line-height: 1.45; }
+  .results button.hit:hover { background: var(--soft); }
+  .results .hit b { display: block; font-size: 12px; color: var(--muted); font-weight: 600; }
+  .results mark { background: var(--hl2); color: var(--ink); border-radius: 3px; padding: 0 1px; }
   .musicpanel { margin-top:8px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--soft); font-size:13px; color:var(--muted); display:flex; flex-direction:column; gap:6px; }
   .musicpanel label { margin:0; color:var(--ink); font-size:13px; }
   .musicpanel .mon { display:flex; gap:6px; align-items:center; font-size:14px; min-height:32px; }
@@ -141,6 +145,14 @@
   .musicpanel .mname { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ink); }
   .musicpanel .mnote { font-size:12px; }
   #pMusic.on { background:var(--accent); color:var(--on-accent); }
+  .banner { font-size:14px; background:var(--soft); border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:8px; padding:8px 12px; margin-bottom:12px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  body.offline [data-net] { opacity:.45; pointer-events:none; }
+  .offctl { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:6px; font-size:13px; }
+  .offmark { color:var(--accent); font-weight:600; }
+  .offlist { margin-top:8px; border-top:1px solid var(--line); }
+  .offrow { padding:6px 0; border-bottom:1px solid var(--line); font-size:14px; }
+  .offrow .otitle { font-weight:600; }
+  .poffline { margin-top:6px; }
   details.pron { margin-top:14px; border:1px solid var(--line); border-radius:8px; padding:8px 12px; font-size:14px; }
   details.pron summary { cursor:pointer; color:var(--accent); }
   .pron table { width:100%; border-collapse:collapse; margin-top:8px; }
@@ -159,8 +171,8 @@
     .card { padding: 12px; }
     .top { gap: 8px; }
     .who { flex-wrap: wrap; }
-    button, select, input[type=text], input[type=password] { min-height: 44px; }
-    select, input[type=text], input[type=password], textarea { font-size: 16px !important; }   /* below 16 px iOS zooms in on focus */
+    button, select, input[type=text], input[type=password], input[type=search] { min-height: 44px; }
+    select, input[type=text], input[type=password], input[type=search], textarea { font-size: 16px !important; }   /* below 16 px iOS zooms in on focus */
     .themes button { padding: 4px 12px; font-size: 14px; }
     .tabs button { flex: 1; padding: 8px 4px; }
     .wide-only { display: none; }
@@ -291,7 +303,16 @@
           <button class="ghost small" id="pPrev" title="Previous chapter" aria-label="Previous chapter">◀</button>
           <select id="pChapter" style="width:auto;max-width:60%;padding:5px 8px" aria-label="Chapter"></select>
           <button class="ghost small" id="pNext" title="Next chapter" aria-label="Next chapter">▶</button>
+          <button class="ghost small" id="pSleepBtn" title="Sleep timer" aria-label="Sleep timer" aria-haspopup="true" aria-expanded="false" aria-controls="pSleepMenu">☾</button>
           <span class="status" id="pStatus"></span>
+        </div>
+        <div id="pSleepMenu" class="sleepmenu hidden" role="group" aria-label="Sleep timer">
+          <span class="sleepnote" id="pSleepNote">Stop playback after:</span>
+          <button class="ghost small" data-sleep="15">15 min</button>
+          <button class="ghost small" data-sleep="30">30 min</button>
+          <button class="ghost small" data-sleep="60">60 min</button>
+          <button class="ghost small" data-sleep="end">End of chapter</button>
+          <button class="small" data-sleep="off" id="pSleepCancel">Cancel timer</button>
         </div>
         <audio id="player" controls preload="auto" style="width:100%;margin-top:10px"></audio>
         <div class="row pset" style="margin-top:6px;font-size:13px;color:var(--muted)">
@@ -328,6 +349,12 @@
           <div class="status" id="mStatus" aria-live="polite"></div>
         </div>
         <div id="pMarks" class="marks"></div>
+        <form class="row psearch" id="pSearchForm" role="search" style="margin-top:10px">
+          <input type="search" id="pSearch" placeholder="Search this book" aria-label="Search this book" autocomplete="off" enterkeyhint="search">
+          <button class="ghost small" type="submit" id="pSearchBtn">Search</button>
+        </form>
+        <div class="status" id="pSearchInfo" aria-live="polite"></div>
+        <div id="pResults" class="results"></div>
         <div id="pText" class="readtext"></div>
         <div id="pMini" class="pmini" role="group" aria-label="Playback">
           <button class="small" id="mPlay" aria-label="Play">▶</button>
@@ -447,8 +474,9 @@ const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbyMPCW8XBoolVwUI_Sp
 const MAX_DOC_CHARS = 400000;
 // Loaded when first needed; pinned with Subresource Integrity like the scripts above.
 const LIB = {
-  pdfjs: { src: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js', integrity: 'sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e' },
-  pdfjsWorker: { src: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js', integrity: 'sha384-SnzOobpRMLXZ52iJvZm/C0fYw0OQemTXzTjIsdsfMcrCtCEe9qgzxTd3RSklO5x2' },
+  // pdf.js: the "legacy" build, which also runs on iPhones before iOS 17.4. ES modules, see getPdfjs().
+  pdfjs: { src: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/legacy/build/pdf.min.mjs', integrity: 'sha384-z/XbAtvhBXJoK+yvYimnFuTCF6/2wTCDSIFD09/HtIfwFtvDKOMdAe5Z3wOChkmW' },
+  pdfjsWorker: { src: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/legacy/build/pdf.worker.min.mjs', integrity: 'sha384-vbNBYP03jHFPlgtK4qSXtazEmGfmpTWlSsfq9OiU20MroW/Q9TbaEXiM7PpeWg+6' },
 };
 
 const $ = (id) => document.getElementById(id);
@@ -564,6 +592,7 @@ function logout() {
   lastResult = lastDocx = null; $('resultView').classList.add('hidden'); $('resultBody').textContent = '';
   ['file', 'sfile', 'apdf', 'prompt'].forEach((id) => { $(id).value = ''; });
   bookData = null; docKind = null; renderKind(); renderBookPanel(); renderAttach();
+  textMemo.clear();
   ['chatStatus', 'runStatus', 'audioStatus'].forEach((id) => setStatus($(id), ''));
   $('whoUsage').textContent = '';
   $('appView').classList.add('hidden'); $('who').classList.add('hidden'); $('loginView').classList.remove('hidden');
@@ -603,15 +632,43 @@ function switchTab(t) {
 const AUDIO_PAGES = 4;
 let libItems = [], libTimer = null, bookData = null, audioBusy = false;
 
-/** pdf.js, with its worker fetched under the same integrity check and started from a blob URL. */
-async function getPdfjs() {
-  if (!window.pdfjsLib) {
-    await loadScript(LIB.pdfjs);
-    const r = await fetch(LIB.pdfjsWorker.src, { integrity: LIB.pdfjsWorker.integrity, mode: 'cors' });
-    if (!r.ok) throw new Error('Could not load the PDF reader');
-    window.pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([await r.text()], { type: 'text/javascript' }));
+/**
+ * Fetches a script of LIB under its integrity check and returns a blob URL of it. Used for
+ * ES modules: import() and module workers cannot check an integrity hash themselves.
+ */
+async function verifiedBlobUrl(lib) {
+  let r;
+  try { r = await fetch(lib.src, { integrity: lib.integrity, mode: 'cors' }); } catch (e) { r = null; }
+  if (!r || !r.ok) throw new Error('Could not load the PDF reader. Check the connection and try again.');
+  return URL.createObjectURL(new Blob([await r.text()], { type: 'text/javascript' }));
+}
+/** pdf.js 4 (ES modules): the library is imported and the module worker started from verified blob URLs. */
+let pdfjsModule = null;
+function getPdfjs() {
+  if (!pdfjsModule) {
+    pdfjsModule = (async () => {
+      const [lib, worker] = await Promise.all([verifiedBlobUrl(LIB.pdfjs), verifiedBlobUrl(LIB.pdfjsWorker)]);
+      const m = await import(lib);
+      m.GlobalWorkerOptions.workerSrc = worker;
+      return m;
+    })();
+    pdfjsModule.catch(() => { pdfjsModule = null; });        // allow a retry after a failed download
   }
-  return window.pdfjsLib;
+  return pdfjsModule;
+}
+
+/** Text lines of every page (see pageLines), read with the given pdf.js library. */
+async function pdfLines(lib, data, onPage) {
+  const doc = await lib.getDocument({ data, isEvalSupported: false }).promise;   // never compile font data to code
+  const pages = [];
+  try {
+    for (let i = 1; i <= doc.numPages; i++) {
+      const page = await doc.getPage(i);
+      pages.push(pageLines((await page.getTextContent()).items));
+      if (onPage) onPage(i, doc.numPages);
+    }
+  } finally { doc.destroy(); }
+  return pages;
 }
 
 async function splitPdf(bytes) {
@@ -792,16 +849,10 @@ async function extractBook(file) {
   const st = $('audioStatus');
   setStatus(st, 'Reading the PDF text...');
   const lib = await getPdfjs();
-  // isEvalSupported: false closes CVE-2024-4367 (script in a crafted PDF font) in this pdf.js version.
-  const doc = await lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()), isEvalSupported: false }).promise;
-  const pages = [];
-  for (let i = 1; i <= doc.numPages; i++) {
-    const page = await doc.getPage(i);
-    pages.push(pageLines((await page.getTextContent()).items));
-    if (i % 40 === 0) setStatus(st, 'Reading the PDF text: page ' + i + ' of ' + doc.numPages);
-  }
+  const pages = await pdfLines(lib, new Uint8Array(await file.arrayBuffer()),
+    (i, n) => { if (i % 40 === 0) setStatus(st, 'Reading the PDF text: page ' + i + ' of ' + n); });
   setStatus(st, '');
-  return { chapters: splitChapters(pages), pages: doc.numPages, lines: pages };
+  return { chapters: splitChapters(pages), pages: pages.length, lines: pages };
 }
 
 /**
@@ -1682,6 +1733,7 @@ function openItem(id, owner) {
   const local = (() => { try { return JSON.parse(lsGet('mp_pos_' + username + '_' + id) || 'null'); } catch (e) { return null; } })();
   const pos = [it.pos, local].filter(Boolean).sort((a, b) => (b.at || 0) - (a.at || 0))[0] || { c: 0, t: 0 };
   P = { item: it, c: -1, cache: {}, loading: {} };
+  clearSearch();
   it.marks = it.marks || {};
   ['b1', 'b2'].forEach((slot) => {                      // a bookmark saved while offline is kept if newer
     try { const m = JSON.parse(lsGet('mp_mark_' + slot + '_' + username + '_' + id) || 'null'); if (m && (!it.marks[slot] || m.at > it.marks[slot].at)) it.marks[slot] = m; } catch (e) {}
@@ -1724,6 +1776,8 @@ $('pPrev').onclick = () => stepChapter(-1);
 $('pNext').onclick = () => stepChapter(1);
 $('pClose').onclick = () => closePlayer();
 function closePlayer() {
+  setSleep('off');
+  clearSearch();
   leaveReading();
   saveProgress(true);
   $('pOffline').textContent = '';
@@ -1767,7 +1821,7 @@ function fetchChapter(c, onStatus, onEarly) {
     } else {
       if (!isOnline()) throw new Error('This chapter is not saved for offline listening.');
       say('Loading audio...');
-      texts = (await api({ action: 'audio_text', token, id, chapter: c, ...from })).texts.map((t) => unrespell(t, used));
+      texts = await chapterTexts(P.item, c);
       bufs = new Array(ch.n);
     }
     let next = 0;
@@ -1797,6 +1851,115 @@ function fetchChapter(c, onStatus, onEarly) {
   job.then(() => { delete loading[c]; }, () => { delete loading[c]; });
   return job;
 }
+
+/**
+ * Texts of the audio segments of chapter c, in the original spelling (see the pronunciation
+ * list). Kept in memory for the session once the chapter is complete, so search and playback
+ * share one request per chapter.
+ */
+const textMemo = new Map();
+async function chapterTexts(it, c) {
+  const key = (it.owner || '') + '|' + it.id + '|' + c;
+  if (textMemo.has(key)) return textMemo.get(key);
+  const used = pronUsed(it.id), saved = await offGet(it, c).catch(() => null);   // a copy saved for offline listening needs no request
+  const texts = (saved ? saved.texts : (await api({ action: 'audio_text', token, id: it.id, chapter: c, ...ownerOf(it) })).texts).map((t) => unrespell(t, used));
+  const ch = it.chapters[c];
+  if (ch && (ch.status === 'done' || (!ch.status && it.state === 'done'))) textMemo.set(key, texts);
+  return texts;
+}
+
+// ---------------------------------------------------------------------------
+// Search inside the open item. Every converted chapter is searched; matching ignores
+// letter case, white space and full-width versus half-width forms (NFKC), and works
+// character by character, so Chinese and Japanese text needs no spaces.
+// ---------------------------------------------------------------------------
+const SEARCH_MAX = 200;
+let searchRun = 0;
+/** Normalized text and, for each of its characters, the index of the original character. */
+function foldText(s) {
+  let out = '', map = [], i = 0;
+  for (const ch of s) {
+    if (!/\s/.test(ch)) {
+      for (const x of ch.normalize('NFKC').toLowerCase()) { if (!/\s/.test(x)) { out += x; map.push(i); } }
+    }
+    i += ch.length;
+  }
+  map.push(s.length);
+  return { s: out, map };
+}
+function clearSearch() {
+  searchRun++;
+  $('pResults').textContent = ''; setStatus($('pSearchInfo'), ''); $('pSearch').value = '';
+}
+async function runSearch() {
+  if (!P) return;
+  const q = foldText($('pSearch').value).s, it = P.item, run = ++searchRun, info = $('pSearchInfo'), box = $('pResults');
+  box.textContent = '';
+  if (!q) { setStatus(info, ''); return; }
+  const chs = (it.chapters || []).map((ch, c) => c).filter((c) => it.chapters[c].status !== 'none' && chapterReadyCount(it, c) > 0);
+  const hits = [];
+  let total = 0, done = 0;
+  try {
+    // Chapters are loaded three at a time and searched in order.
+    const texts = new Array(chs.length);
+    let next = 0;
+    const worker = async () => {
+      while (next < chs.length) {
+        const j = next++;
+        texts[j] = await chapterTexts(it, chs[j]);
+        if (run !== searchRun) return;
+        setStatus(info, 'Searching: ' + (++done) + ' of ' + chs.length + ' chapters loaded...');
+      }
+    };
+    await Promise.all([worker(), worker(), worker()]);
+    if (run !== searchRun) return;
+    chs.forEach((c, j) => texts[j].forEach((text, k) => {
+      const f = foldText(text);
+      for (let p = f.s.indexOf(q); p >= 0; p = f.s.indexOf(q, p + q.length)) {
+        total++;
+        if (hits.length < SEARCH_MAX) hits.push({ c, k, text, from: f.map[p], to: f.map[p + q.length - 1] + 1 });
+      }
+    }));
+  } catch (e) {
+    if (run === searchRun) { setStatus(info, e.message, true); if (/log in again/i.test(e.message)) logout(); }
+    return;
+  }
+  if (!total) { setStatus(info, 'No results.'); return; }
+  setStatus(info, total === 1 ? '1 match.' : total.toLocaleString() + ' matches' + (total > SEARCH_MAX ? ', showing the first ' + SEARCH_MAX : '') + '.');
+  const multi = (it.chapters || []).length > 1;
+  hits.forEach((h) => {
+    const b = el('button', 'hit'); b.type = 'button';
+    if (multi) b.appendChild(el('b', null, it.chapters[h.c].title));
+    const a = Math.max(0, h.from - 40), z = Math.min(h.text.length, h.to + 60);
+    const clean = (x) => x.replace(/\s+/g, ' ');
+    b.appendChild(document.createTextNode((a > 0 ? '…' : '') + clean(h.text.slice(a, h.from))));
+    b.appendChild(el('mark', null, clean(h.text.slice(h.from, h.to))));
+    b.appendChild(document.createTextNode(clean(h.text.slice(h.to, z)) + (z < h.text.length ? '…' : '')));
+    b.onclick = () => openHit(h);
+    box.appendChild(b);
+  });
+}
+/** Opens the chapter of a search hit and plays from the sentence that contains it. */
+async function openHit(h) {
+  if (!P) return;
+  if (P.c !== h.c || !P.sents) await loadChapter(h.c, 0, false);
+  if (!P || P.c !== h.c || !P.sents) return;
+  if (P.partial && P.loading[h.c]) {                   // only the first parts are in: wait for the whole chapter
+    setStatus($('pStatus'), 'Loading the rest of this chapter...');
+    await P.loading[h.c].catch(() => {});
+    await sleep(0);
+    if (!P || P.c !== h.c || P.partial) return;
+  }
+  const spans = Array.from($('pText').querySelectorAll('span.s'));
+  let sp = null;
+  spans.forEach((s) => { if (Number(s.dataset.k) === h.k && Number(s.dataset.off) <= h.from) sp = s; });
+  const entry = sp && P.sents.find((x) => x.el === sp);
+  if (!entry) { setStatus($('pStatus'), 'This part of the chapter has not been converted yet.', true); return; }
+  const go = () => { player.currentTime = entry.t0 + 0.02; player.play().catch(() => {}); lastUserScroll = 0; highlight(); jumpToCurrent(); };
+  if (player.readyState >= 1) go(); else player.addEventListener('loadedmetadata', go, { once: true });
+}
+$('pSearchForm').onsubmit = (e) => { e.preventDefault(); runSearch(); };
+$('pSearch').addEventListener('input', () => { if (!$('pSearch').value.trim()) { searchRun++; $('pResults').textContent = ''; setStatus($('pSearchInfo'), ''); } });
 
 /** Next chapter after c that has audio, or -1. */
 function nextReadyChapter(c) {
@@ -1881,12 +2044,14 @@ function renderReadText(data) {
     const paras = text.split(/\n+/).filter((p) => p.trim());
     const pieces = paras.map((p) => p.split(SENT_SPLIT).filter((s) => s.trim()));
     const total = pieces.flat().reduce((n, s) => n + speakWeight(s), 0) || 1;
-    let t = seg ? seg.t0 : null;
+    let t = seg ? seg.t0 : null, at = 0;
     const own = [];
     pieces.forEach((ps) => {
       const pEl = el('p');
       ps.forEach((s) => {
         const sp = el('span', 's' + (seg ? '' : ' pend'), s);
+        const off = text.indexOf(s, at); if (off >= 0) at = off + s.length;
+        sp.dataset.k = k; sp.dataset.off = off;
         pEl.appendChild(sp); pEl.appendChild(document.createTextNode(/[A-Za-z0-9.,;:!?"')]$/.test(s) ? ' ' : ''));
         if (seg) {
           const d = seg.dur * speakWeight(s) / total, entry = { t0: t, t1: t + d, el: sp };
@@ -2049,6 +2214,9 @@ function chapterEnded() {
   if (!P) return;
   // Only the first parts are loaded: wait for the rest, which then continues from here.
   if (P.partial) { P.waitFull = true; setStatus($('pStatus'), 'Loading the rest of this chapter...'); return; }
+  // The sleep timer stops here, also instead of waiting for a chapter that is still being converted
+  // (playback would otherwise start again by itself whenever the conversion finishes).
+  if (sleepAtChapterEnd()) return;
   // This chapter is still being converted: wait for its next parts and continue where it stopped.
   const c = P.c, have = P.cache[c] ? P.cache[c].parts : 0;
   if (converting(P.item, c) && have < P.item.chapters[c].n) return waitConversion(c, player.duration || 0);
@@ -2097,7 +2265,9 @@ function bindPlayer(a) {
   on('pause', () => { rafOn = false; saveProgress(true); setPlaybackState('paused'); });
   on('seeked', () => { highlight(); updatePositionState(); });
   on('ratechange', updatePositionState);
-  on('timeupdate', () => { if (Date.now() - lastSave > 20000) saveProgress(false); });
+  on('timeupdate', () => { sleepTick(); if (Date.now() - lastSave > 20000) saveProgress(false); });
+  on('play', sleepTick);
+  on('pause', sleepTick);
   on('ended', chapterEnded);
   on('play', keepAwake);
   on('pause', keepAwake);
@@ -2122,6 +2292,90 @@ document.addEventListener('visibilitychange', keepAwake);
 try { $('pAwake').checked = lsGet('mp_awake') !== '0'; } catch (e) {}
 $('pAwake').onchange = () => { lsSet('mp_awake', $('pAwake').checked ? '1' : '0'); keepAwake(); };
 bindPlayer(player);
+
+// ---------------------------------------------------------------------------
+// Sleep timer: stops playback after 15, 30 or 60 minutes of listening, or at the end of
+// the current chapter, fading out over the last 10 seconds. With the screen locked,
+// timers of a hidden page are throttled, so the countdown is driven by the audio
+// element's timeupdate and ended events and measured in wall-clock time; a one-second
+// interval only refreshes the display while the page is visible.
+// ---------------------------------------------------------------------------
+const SLEEP_FADE = 10;          // seconds
+let sleepT = null;              // { mode: 'time', left: ms, tick: wall-clock ms or 0 } or { mode: 'end' }
+let sleepFade = 1;              // volume factor during the fade
+function sleepLeft() {          // seconds of listening left
+  if (!sleepT) return Infinity;
+  if (sleepT.mode === 'time') return sleepT.left / 1000;
+  if (P && P.partial) return Infinity;                // only the first parts are loaded: the end is not known yet
+  return isFinite(player.duration) ? Math.max(0, (player.duration - player.currentTime) / (player.playbackRate || 1)) : Infinity;
+}
+function setFade(f) {
+  f = Math.max(0, Math.min(1, f));
+  if (f === sleepFade) return;
+  sleepFade = f;
+  try { player.volume = f; } catch (e) {}          // iOS ignores this, so there the timer stops without a fade
+}
+function sleepTick() {
+  if (!sleepT) return;
+  const now = Date.now();
+  if (sleepT.mode === 'time') {
+    if (!player.paused && sleepT.tick) sleepT.left -= now - sleepT.tick;
+    sleepT.tick = player.paused ? 0 : now;
+  }
+  const left = sleepLeft();
+  if (sleepT.mode === 'time' && left <= 0) return sleepStop();
+  setFade(left < SLEEP_FADE ? left / SLEEP_FADE : 1);
+  renderSleep();
+}
+/** Called at the end of a chapter: true when the timer stops playback there. */
+function sleepAtChapterEnd() {
+  if (!sleepT || sleepT.mode !== 'end') return false;
+  sleepStop();
+  return true;
+}
+function sleepStop() {
+  sleepT = null;
+  player.pause();                                     // the pause event saves the position
+  saveProgress(true);
+  setFade(1);
+  setStatus($('pStatus'), 'Sleep timer: playback stopped.');
+  renderSleep();
+}
+function setSleep(choice) {
+  if (choice === 'off') { if (sleepT) { sleepT = null; setFade(1); } }
+  else {
+    lsSet('mp_sleep', choice);
+    sleepT = choice === 'end' ? { mode: 'end' } : { mode: 'time', left: Number(choice) * 60000, tick: player.paused ? 0 : Date.now() };
+    setStatus($('pStatus'), '');
+  }
+  $('pSleepMenu').classList.add('hidden'); $('pSleepBtn').setAttribute('aria-expanded', 'false');
+  sleepTick(); renderSleep();
+}
+function renderSleep() {
+  const btn = $('pSleepBtn'), left = sleepLeft();
+  btn.classList.toggle('on', !!sleepT);
+  let label = 'Sleep timer';
+  if (!sleepT) btn.textContent = '☾';
+  else if (sleepT.mode === 'end') { btn.textContent = '☾ End'; label = 'Sleep timer: stops at the end of this chapter'; }
+  else { btn.textContent = '☾ ' + fmtTime(Math.ceil(left)); label = 'Sleep timer: stops in ' + fmtTime(Math.ceil(left)); }
+  btn.title = label; btn.setAttribute('aria-label', label);
+  $('pSleepNote').textContent = sleepT ? label + (player.paused && sleepT.mode === 'time' ? ' of listening (paused)' : '') + '.' : 'Stop playback after:';
+  $('pSleepCancel').classList.toggle('hidden', !sleepT);
+  const last = lsGet('mp_sleep');
+  document.querySelectorAll('#pSleepMenu [data-sleep]').forEach((b) => {
+    const on = b.dataset.sleep === last && b.dataset.sleep !== 'off';
+    b.classList.toggle('last', on);
+    if (on) b.title = 'Last used'; else b.removeAttribute('title');
+  });
+}
+$('pSleepBtn').onclick = () => {
+  const m = $('pSleepMenu'), open = m.classList.toggle('hidden') === false;
+  $('pSleepBtn').setAttribute('aria-expanded', String(open));
+  renderSleep();
+};
+document.querySelectorAll('#pSleepMenu [data-sleep]').forEach((b) => { b.onclick = () => setSleep(b.dataset.sleep); });
+setInterval(() => { if (sleepT && !document.hidden) sleepTick(); }, 1000);
+document.addEventListener('visibilitychange', sleepTick);
 
 // ---------------------------------------------------------------------------
 // Lock screen and background playback. The Media Session API shows the title and
