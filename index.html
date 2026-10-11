@@ -125,6 +125,10 @@
   .mark button { padding:3px 8px; font-size:12px; }
   .readtext span.s.pend { color:var(--pend); cursor:default; }
   h2 { font-size: 18px; margin: 24px 0 12px; }
+  .sleepmenu { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:8px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--soft); font-size:13px; color:var(--muted); }
+  .sleepmenu .sleepnote { flex-basis:100%; }
+  .sleepmenu button.last { border-width:2px; font-weight:600; }
+  #pSleepBtn.on { background:var(--accent); color:var(--on-accent); font-variant-numeric:tabular-nums; }
   .musicpanel { margin-top:8px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--soft); font-size:13px; color:var(--muted); display:flex; flex-direction:column; gap:6px; }
   .musicpanel label { margin:0; color:var(--ink); font-size:13px; }
   .musicpanel .mon { display:flex; gap:6px; align-items:center; font-size:14px; min-height:32px; }
@@ -278,7 +282,16 @@
           <button class="ghost small" id="pPrev" title="Previous chapter" aria-label="Previous chapter">◀</button>
           <select id="pChapter" style="width:auto;max-width:60%;padding:5px 8px" aria-label="Chapter"></select>
           <button class="ghost small" id="pNext" title="Next chapter" aria-label="Next chapter">▶</button>
+          <button class="ghost small" id="pSleepBtn" title="Sleep timer" aria-label="Sleep timer" aria-haspopup="true" aria-expanded="false" aria-controls="pSleepMenu">☾</button>
           <span class="status" id="pStatus"></span>
+        </div>
+        <div id="pSleepMenu" class="sleepmenu hidden" role="group" aria-label="Sleep timer">
+          <span class="sleepnote" id="pSleepNote">Stop playback after:</span>
+          <button class="ghost small" data-sleep="15">15 min</button>
+          <button class="ghost small" data-sleep="30">30 min</button>
+          <button class="ghost small" data-sleep="60">60 min</button>
+          <button class="ghost small" data-sleep="end">End of chapter</button>
+          <button class="small" data-sleep="off" id="pSleepCancel">Cancel timer</button>
         </div>
         <audio id="player" controls preload="auto" style="width:100%;margin-top:10px"></audio>
         <div class="row pset" style="margin-top:6px;font-size:13px;color:var(--muted)">
@@ -1395,6 +1408,7 @@ $('pPrev').onclick = () => stepChapter(-1);
 $('pNext').onclick = () => stepChapter(1);
 $('pClose').onclick = () => closePlayer();
 function closePlayer() {
+  setSleep('off');
   leaveReading();
   saveProgress(true);
   player.pause(); player.removeAttribute('src'); player.load();
@@ -1710,6 +1724,9 @@ function chapterEnded() {
   if (!P) return;
   // Only the first parts are loaded: wait for the rest, which then continues from here.
   if (P.partial) { P.waitFull = true; setStatus($('pStatus'), 'Loading the rest of this chapter...'); return; }
+  // The sleep timer stops here, also instead of waiting for a chapter that is still being converted
+  // (playback would otherwise start again by itself whenever the conversion finishes).
+  if (sleepAtChapterEnd()) return;
   // This chapter is still being converted: wait for its next parts and continue where it stopped.
   const c = P.c, have = P.cache[c] ? P.cache[c].parts : 0;
   if (converting(P.item, c) && have < P.item.chapters[c].n) return waitConversion(c, player.duration || 0);
@@ -1758,7 +1775,9 @@ function bindPlayer(a) {
   on('pause', () => { rafOn = false; saveProgress(true); setPlaybackState('paused'); });
   on('seeked', () => { highlight(); updatePositionState(); });
   on('ratechange', updatePositionState);
-  on('timeupdate', () => { if (Date.now() - lastSave > 20000) saveProgress(false); });
+  on('timeupdate', () => { sleepTick(); if (Date.now() - lastSave > 20000) saveProgress(false); });
+  on('play', sleepTick);
+  on('pause', sleepTick);
   on('ended', chapterEnded);
   on('play', keepAwake);
   on('pause', keepAwake);
@@ -1783,6 +1802,90 @@ document.addEventListener('visibilitychange', keepAwake);
 try { $('pAwake').checked = lsGet('mp_awake') !== '0'; } catch (e) {}
 $('pAwake').onchange = () => { lsSet('mp_awake', $('pAwake').checked ? '1' : '0'); keepAwake(); };
 bindPlayer(player);
+
+// ---------------------------------------------------------------------------
+// Sleep timer: stops playback after 15, 30 or 60 minutes of listening, or at the end of
+// the current chapter, fading out over the last 10 seconds. With the screen locked,
+// timers of a hidden page are throttled, so the countdown is driven by the audio
+// element's timeupdate and ended events and measured in wall-clock time; a one-second
+// interval only refreshes the display while the page is visible.
+// ---------------------------------------------------------------------------
+const SLEEP_FADE = 10;          // seconds
+let sleepT = null;              // { mode: 'time', left: ms, tick: wall-clock ms or 0 } or { mode: 'end' }
+let sleepFade = 1;              // volume factor during the fade
+function sleepLeft() {          // seconds of listening left
+  if (!sleepT) return Infinity;
+  if (sleepT.mode === 'time') return sleepT.left / 1000;
+  if (P && P.partial) return Infinity;                // only the first parts are loaded: the end is not known yet
+  return isFinite(player.duration) ? Math.max(0, (player.duration - player.currentTime) / (player.playbackRate || 1)) : Infinity;
+}
+function setFade(f) {
+  f = Math.max(0, Math.min(1, f));
+  if (f === sleepFade) return;
+  sleepFade = f;
+  try { player.volume = f; } catch (e) {}          // iOS ignores this, so there the timer stops without a fade
+}
+function sleepTick() {
+  if (!sleepT) return;
+  const now = Date.now();
+  if (sleepT.mode === 'time') {
+    if (!player.paused && sleepT.tick) sleepT.left -= now - sleepT.tick;
+    sleepT.tick = player.paused ? 0 : now;
+  }
+  const left = sleepLeft();
+  if (sleepT.mode === 'time' && left <= 0) return sleepStop();
+  setFade(left < SLEEP_FADE ? left / SLEEP_FADE : 1);
+  renderSleep();
+}
+/** Called at the end of a chapter: true when the timer stops playback there. */
+function sleepAtChapterEnd() {
+  if (!sleepT || sleepT.mode !== 'end') return false;
+  sleepStop();
+  return true;
+}
+function sleepStop() {
+  sleepT = null;
+  player.pause();                                     // the pause event saves the position
+  saveProgress(true);
+  setFade(1);
+  setStatus($('pStatus'), 'Sleep timer: playback stopped.');
+  renderSleep();
+}
+function setSleep(choice) {
+  if (choice === 'off') { if (sleepT) { sleepT = null; setFade(1); } }
+  else {
+    lsSet('mp_sleep', choice);
+    sleepT = choice === 'end' ? { mode: 'end' } : { mode: 'time', left: Number(choice) * 60000, tick: player.paused ? 0 : Date.now() };
+    setStatus($('pStatus'), '');
+  }
+  $('pSleepMenu').classList.add('hidden'); $('pSleepBtn').setAttribute('aria-expanded', 'false');
+  sleepTick(); renderSleep();
+}
+function renderSleep() {
+  const btn = $('pSleepBtn'), left = sleepLeft();
+  btn.classList.toggle('on', !!sleepT);
+  let label = 'Sleep timer';
+  if (!sleepT) btn.textContent = '☾';
+  else if (sleepT.mode === 'end') { btn.textContent = '☾ End'; label = 'Sleep timer: stops at the end of this chapter'; }
+  else { btn.textContent = '☾ ' + fmtTime(Math.ceil(left)); label = 'Sleep timer: stops in ' + fmtTime(Math.ceil(left)); }
+  btn.title = label; btn.setAttribute('aria-label', label);
+  $('pSleepNote').textContent = sleepT ? label + (player.paused && sleepT.mode === 'time' ? ' of listening (paused)' : '') + '.' : 'Stop playback after:';
+  $('pSleepCancel').classList.toggle('hidden', !sleepT);
+  const last = lsGet('mp_sleep');
+  document.querySelectorAll('#pSleepMenu [data-sleep]').forEach((b) => {
+    const on = b.dataset.sleep === last && b.dataset.sleep !== 'off';
+    b.classList.toggle('last', on);
+    if (on) b.title = 'Last used'; else b.removeAttribute('title');
+  });
+}
+$('pSleepBtn').onclick = () => {
+  const m = $('pSleepMenu'), open = m.classList.toggle('hidden') === false;
+  $('pSleepBtn').setAttribute('aria-expanded', String(open));
+  renderSleep();
+};
+document.querySelectorAll('#pSleepMenu [data-sleep]').forEach((b) => { b.onclick = () => setSleep(b.dataset.sleep); });
+setInterval(() => { if (sleepT && !document.hidden) sleepTick(); }, 1000);
+document.addEventListener('visibilitychange', sleepTick);
 
 // ---------------------------------------------------------------------------
 // Lock screen and background playback. The Media Session API shows the title and
