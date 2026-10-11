@@ -708,7 +708,7 @@ async function loadChapter(c, startAt, autoplay) {
       for (let k = 0; k < parts; k++) { const d = mp3Duration(bufs[k]); segs.push({ t0: t, dur: d }); t += d; }
       const blob = new Blob(bufs.slice(0, parts), { type: 'audio/mpeg' });
       if (data) URL.revokeObjectURL(data.url);
-      data = P.cache[c] = { texts, segs, parts, blob, url: URL.createObjectURL(blob) };
+      data = P.cache[c] = { texts, segs, parts, blob, bufs: bufs.slice(0, parts), url: URL.createObjectURL(blob) };
     }
     if (P.c !== c || P.item.id !== id) return;          // the user moved on meanwhile
     renderReadText(data);
@@ -722,6 +722,7 @@ async function loadChapter(c, startAt, autoplay) {
       highlight();
     };
     setStatus(st, data.parts < ch.n ? 'Converted so far: ' + data.parts + ' of ' + ch.n + ' parts of this chapter.' : '');
+    if (!data.refined) { data.refined = true; refineTimings(data).catch(() => {}); }
   } catch (e) { setStatus(st, e.message, true); if (/log in again/i.test(e.message)) logout(); }
 }
 
@@ -734,6 +735,7 @@ function renderReadText(data) {
     const pieces = paras.map((p) => p.split(SENT_SPLIT).filter((s) => s.trim()));
     const total = pieces.flat().reduce((n, s) => n + speakWeight(s), 0) || 1;
     let t = seg ? seg.t0 : null;
+    const own = [];
     pieces.forEach((ps) => {
       const pEl = el('p');
       ps.forEach((s) => {
@@ -742,14 +744,82 @@ function renderReadText(data) {
         if (seg) {
           const d = seg.dur * speakWeight(s) / total, entry = { t0: t, t1: t + d, el: sp };
           sp.onclick = () => { player.currentTime = entry.t0 + 0.02; player.play().catch(() => {}); lastUserScroll = 0; };
-          sents.push(entry); t += d;
+          sents.push(entry); own.push(entry); t += d;
         }
       });
       box.appendChild(pEl);
     });
+    if (seg) seg.sents = own;
   });
   data.sents = sents;
   box.scrollTop = 0;
+}
+
+/**
+ * Moves estimated sentence starts onto the pauses actually present in the audio.
+ * Each segment is decoded on its own (keeps memory small); a pause is a stretch of
+ * at least 0.18 s whose loudness is far below the segment's typical speech level.
+ */
+async function refineTimings(data) {
+  const AC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  if (!AC) return;
+  const ctx = new AC(1, 1, 24000);
+  for (let k = 0; k < data.segs.length; k++) {
+    const seg = data.segs[k], list = seg.sents || [];
+    if (list.length < 2) continue;
+    let audio;
+    try { audio = await ctx.decodeAudioData(data.bufs[k].slice().buffer); } catch (e) { continue; }
+    const x = audio.getChannelData(0), sr = audio.sampleRate, hop = Math.round(sr * 0.02);
+    const env = [];
+    for (let i = 0; i + hop <= x.length; i += hop) { let e = 0; for (let j = i; j < i + hop; j++) e += x[j] * x[j]; env.push(Math.sqrt(e / hop)); }
+    const sorted = env.slice().sort((a, b) => a - b), loud = sorted[Math.floor(sorted.length * 0.7)] || 0;
+    const thr = loud * 0.08;
+    const pauses = [];               // [start, end] in seconds, relative to the segment
+    let run = -1;
+    for (let i = 0; i <= env.length; i++) {
+      const quiet = i < env.length && env[i] < thr;
+      if (quiet && run < 0) run = i;
+      if (!quiet && run >= 0) { if ((i - run) * 0.02 >= 0.18) pauses.push([run * 0.02, i * 0.02]); run = -1; }
+    }
+    // Scale: decoded length vs. frame-count length (they differ by encoder padding only).
+    const scale = seg.dur / audio.duration;
+    const P_ = pauses.map((p) => ({ end: p[1] * scale, len: p[1] - p[0] }));
+    const E = list.slice(1).map((x) => x.t0 - seg.t0);         // estimated sentence starts
+    // Ordered alignment of sentence starts to pauses (dynamic programming): matching costs
+    // the time difference minus a bonus for long pauses; leaving a start or a pause
+    // unmatched has a fixed cost, so short comma pauses are skipped when they fit worse.
+    const n = E.length, m = P_.length, INF = 1e9;
+    const dp = Array.from({ length: n + 1 }, () => new Float64Array(m + 1).fill(INF));
+    const bk = Array.from({ length: n + 1 }, () => new Int8Array(m + 1));
+    dp[0][0] = 0;
+    for (let a = 0; a <= n; a++) for (let b = 0; b <= m; b++) {
+      const v = dp[a][b]; if (v >= INF) continue;
+      if (b < m && v + 0.2 < dp[a][b + 1]) { dp[a][b + 1] = v + 0.2; bk[a][b + 1] = 1; }
+      if (a < n && v + 1.2 < dp[a + 1][b]) { dp[a + 1][b] = v + 1.2; bk[a + 1][b] = 2; }
+      if (a < n && b < m) {
+        const d = Math.abs(E[a] - P_[b].end);
+        if (d < 3) { const c = v + d - Math.min(0.3, P_[b].len - 0.18); if (c < dp[a + 1][b + 1]) { dp[a + 1][b + 1] = c; bk[a + 1][b + 1] = 3; } }
+      }
+    }
+    const match = new Array(n).fill(null);
+    for (let a = n, b = m; a > 0 || b > 0;) {
+      const k2 = bk[a][b];
+      if (k2 === 3) { match[a - 1] = P_[b - 1].end - 0.05; a--; b--; } else if (k2 === 2) a--; else b--;
+    }
+    // Unmatched starts: shift by the drift of the nearest anchors (linear in between).
+    const anchors = [[0, 0]].concat(E.map((e, q) => (match[q] != null ? [e, match[q]] : null)).filter(Boolean), [[seg.dur, seg.dur]]);
+    E.forEach((e, q) => {
+      let t = match[q];
+      if (t == null) {
+        let lo = anchors[0], hi = anchors[anchors.length - 1];
+        anchors.forEach((an) => { if (an[0] <= e && an[0] >= lo[0]) lo = an; if (an[0] >= e && an[0] <= hi[0]) hi = an; });
+        t = hi[0] > lo[0] ? lo[1] + (e - lo[0]) * (hi[1] - lo[1]) / (hi[0] - lo[0]) : e + (lo[1] - lo[0]);
+      }
+      list[q + 1].t0 = seg.t0 + Math.max(0, Math.min(seg.dur, t));
+    });
+    for (let q = 1; q < list.length; q++) { if (list[q].t0 < list[q - 1].t0) list[q].t0 = list[q - 1].t0; list[q - 1].t1 = list[q].t0; }
+    if (P && P.cache[P.c] === data) highlight();
+  }
 }
 
 function highlight() {
