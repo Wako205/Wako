@@ -5,6 +5,7 @@ const { test, expect, login, openAudio, INDEX_URL } = require('./support/backend
 
 const html = fs.readFileSync(path.resolve(__dirname, '..', 'index.html'), 'utf8');
 const NM = path.resolve(__dirname, '..', 'node_modules');
+const LIB_FILES = () => [...html.matchAll(/\{ src: '([^']+)', integrity: '([^']+)' \}/g)].map((m) => m[1]);
 const sri = (file) => 'sha384-' + crypto.createHash('sha384').update(fs.readFileSync(file)).digest('base64');
 /** jsDelivr npm URL -> file in node_modules, checking that the installed version is the pinned one. */
 function npmFile(url) {
@@ -31,11 +32,16 @@ test('every CDN script is pinned to an exact version with a matching integrity h
 test('the libraries load under their integrity checks', async ({ page, backend }) => {
   await page.goto(INDEX_URL);
   expect(await page.evaluate(() => [typeof JSZip, typeof marked, typeof DOMPurify, typeof PDFLib])).toEqual(['function', 'object', 'function', 'object']);
-  expect(await page.evaluate(async () => { await getPdfjs(); return [typeof pdfjsLib.getDocument, pdfjsLib.GlobalWorkerOptions.workerSrc.slice(0, 5)]; }))
-    .toEqual(['function', 'blob:']);
-  // A wrong hash is refused.
-  const err = await page.evaluate(() => loadScript({ src: LIB.pdfjs.src, integrity: 'sha384-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' }).then(() => 'loaded', (e) => e.message));
+  // pdf.js 4 is an ES module: imported, with its module worker, from blob URLs of files fetched with integrity.
+  expect(await page.evaluate(async () => { const pdf = await getPdfjs(); return [typeof pdf.getDocument, pdf.version, pdf.GlobalWorkerOptions.workerSrc.slice(0, 5)]; }))
+    .toEqual(['function', '4.10.38', 'blob:']);
+  expect(LIB_FILES()).toEqual(expect.arrayContaining([expect.stringContaining('pdfjs-dist@4.10.38/legacy/build/pdf.min.mjs'), expect.stringContaining('pdfjs-dist@4.10.38/legacy/build/pdf.worker.min.mjs')]));
+  // A wrong hash is refused, for classic scripts and for modules.
+  const BAD = 'sha384-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+  const err = await page.evaluate((bad) => loadScript({ src: LIB.pdfjs.src, integrity: bad }).then(() => 'loaded', (e) => e.message), BAD);
   expect(err).toContain('Could not load');
+  const err2 = await page.evaluate((bad) => verifiedBlobUrl({ src: LIB.pdfjs.src, integrity: bad }).then(() => 'loaded', (e) => e.message), BAD);
+  expect(err2).toContain('Could not load the PDF reader');
 });
 
 const EVIL = [

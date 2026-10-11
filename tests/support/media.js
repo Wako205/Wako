@@ -58,4 +58,70 @@ async function makeBookPdf({ chapters = 5, padBytes = 0 } = {}) {
   return Buffer.from(await doc.save({ useObjectStreams: false }));
 }
 
-module.exports = { makeMp3, makeBookPdf, NM };
+/** Draws words as wrapped lines from y downwards; the first line of each paragraph is indented. Returns the next y. */
+function drawParagraphs(page, font, paras, y, { x = 50, width = 62, size = 10, lead = 14, indent = 18 } = {}) {
+  for (const p of paras) {
+    let line = '', first = true;
+    const flush = () => { page.drawText(line.trim(), { x: x + (first ? indent : 0), y, size, font }); y -= lead; line = ''; first = false; };
+    for (const w of p.split(' ')) { if ((line + ' ' + w).length > width) flush(); line += ' ' + w; }
+    if (line.trim()) flush();
+  }
+  return y;
+}
+
+/**
+ * A novel laid out like a printed book: title page, a table of contents with page numbers,
+ * a running header and a page number on every text page, indented paragraphs, and chapters
+ * of two pages each whose headings carry a title ("Chapter 2 The Lantern").
+ */
+async function makeRichBookPdf() {
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.TimesRoman), bold = await doc.embedFont(StandardFonts.TimesRomanBold);
+  const titles = ['The River', 'The Lantern', 'The Search', 'The Wheel'];
+  const title = doc.addPage([420, 595]);
+  title.drawText('The Quiet Mill', { x: 110, y: 400, size: 24, font: bold });
+  title.drawText('A Novel', { x: 175, y: 360, size: 14, font });
+  const toc = doc.addPage([420, 595]);
+  toc.drawText('Contents', { x: 50, y: 540, size: 16, font: bold });
+  titles.forEach((t, i) => toc.drawText('Chapter ' + (i + 1) + ' ' + t + '   ' + (3 + 2 * i), { x: 50, y: 500 - 20 * i, size: 11, font }));
+  let pageNo = 3;
+  titles.forEach((t, i) => {
+    for (let half = 0; half < 2; half++) {
+      const page = doc.addPage([420, 595]);
+      page.drawText('THE QUIET MILL', { x: 160, y: 565, size: 8, font });
+      let y = 530;
+      if (half === 0) { page.drawText('Chapter ' + (i + 1) + ' ' + t, { x: 50, y, size: 15, font: bold }); y -= 34; }
+      const paras = [0, 1, 2].map((k) => 'Paragraph ' + (k + 1) + ' of part ' + (half + 1) + ' in chapter ' + (i + 1) + '. ' + LOREM.trim());
+      drawParagraphs(page, font, paras, y);
+      page.drawText(String(pageNo++), { x: 205, y: 30, size: 9, font });
+    }
+  });
+  return Buffer.from(await doc.save({ useObjectStreams: false }));
+}
+
+/** A short scientific article: abstract, numbered citations, figure captions, a DOI and a reference list. */
+async function makePaperPdf() {
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const body = 'Monolayer MoS2 grown by chemical vapour deposition shows strong photoluminescence [1]. ' +
+    'Raman spectra of the films agree with earlier reports [2, 3] and with Fig. 1. The phonon modes shift with strain [4]. ' +
+    'Table 1 lists the fitted parameters, and Fig. 2 shows the temperature dependence [5]. Similar trends were found in WS2 [6], ' +
+    'MoSe2 [7] and WSe2 [8], see also Fig. 3.';
+  for (let p = 0; p < 3; p++) {
+    const page = doc.addPage([595, 842]);
+    let y = 790;
+    if (p === 0) {
+      page.drawText('Strain-tuned phonons in monolayer MoS2', { x: 60, y, size: 16, font }); y -= 30;
+      page.drawText('Abstract', { x: 60, y, size: 12, font }); y -= 20;
+      page.drawText('doi:10.1000/example.2026.001', { x: 60, y: 40, size: 8, font });
+    }
+    y = drawParagraphs(page, font, [body, body], y, { x: 60, width: 90 });
+    if (p === 2) {
+      page.drawText('References', { x: 60, y: y - 10, size: 12, font });
+      for (let k = 1; k <= 8; k++) page.drawText('[' + k + '] A. Author, Phys. Rev. B ' + (100 + k) + ', 1 (2020).', { x: 60, y: y - 10 - 16 * k, size: 9, font });
+    }
+  }
+  return Buffer.from(await doc.save({ useObjectStreams: false }));
+}
+
+module.exports = { makeMp3, makeBookPdf, makeRichBookPdf, makePaperPdf, NM };
