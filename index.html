@@ -361,7 +361,8 @@ function showAudioInfo() {
   const d = audioOut.d, dur = $('player').duration;
   const parts = [audioOut.pages + ' pages', d.chars.toLocaleString() + ' characters read', 'voice ' + d.voice + ' (' + d.lang + ')'];
   if (isFinite(dur)) parts.push(Math.round(dur / 60) + ' min at 1×');
-  parts.push('Claude cost $' + d.cost.toFixed(3) + ' (speech is within the free Google allowance)');
+  parts.push('Claude cost $' + d.cost.toFixed(3));
+  if (d.ttsCap) parts.push('speech used this month: ' + Math.round(d.ttsUsed / 1000) + 'k of ' + Math.round(d.ttsCap / 1000) + 'k characters');
   $('audioInfo').textContent = parts.join(' · ');
 }
 
