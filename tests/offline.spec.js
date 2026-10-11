@@ -287,3 +287,24 @@ test('items other accounts shared are not saved offline; their bookmarks keep th
   await context.setOffline(false);
   await expect.poll(() => backend.callsOf('audio_progress').slice(before).find((p) => p.slot === 'b1')).toMatchObject({ id: 'shared1', owner: 'bob', token: 'tok-test' });
 });
+
+test('offline, the next chapter that plays is the next saved one', async ({ page, context, site, backend }) => {
+  backend.library[0].chapters[2] = { title: 'Chapter 3', n: 2, chars: 1400, status: 'done' };
+  await login(page, site);
+  await openAudio(page);
+  await book(page).getByRole('button', { name: 'Offline' }).click();
+  const panel = page.locator('.offpanel');
+  await expect(panel.locator('.offrow')).toHaveCount(3);
+  await panel.locator('.offrow').nth(0).getByRole('button', { name: /^Save chapter/ }).click();
+  await panel.locator('.offrow').nth(2).getByRole('button', { name: /^Save chapter/ }).click();
+  await expect(book(page)).toContainText('✓ 2 of 3 chapters saved offline');
+  await book(page).getByRole('button', { name: /Listen|Resume/ }).click();
+  await expect(page.locator('#pText span.s').first()).toBeVisible();
+  await context.setOffline(true);
+  const before = backend.calls.length;
+  await page.evaluate(() => { player.currentTime = player.duration - 0.4; player.play(); });
+  await expect(page.locator('#pChapter')).toHaveValue('2');                    // chapter 2 is not saved: skipped
+  await expect.poll(() => page.evaluate(() => !player.paused)).toBe(true);
+  await page.evaluate(() => player.pause());
+  expect(backend.calls.length).toBe(before);
+});
