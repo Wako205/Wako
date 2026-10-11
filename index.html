@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Manuscript Portal</title>
+<title>Wako205</title>
 <script>try { var t = localStorage.getItem('mp_theme'); if (t === 'night' || t === 'eye') document.documentElement.setAttribute('data-theme', t); } catch (e) {}</script>
 <style>
   /* Themes: day (default), night, eye care (warm paper tones, low blue light). Chosen in the top bar. */
@@ -98,7 +98,7 @@
 <body>
 <main>
   <div class="top">
-    <h1>Manuscript Portal</h1>
+    <h1>Wako205</h1>
     <div class="themes" id="themes" role="group" aria-label="Color theme">
       <button data-theme="day" title="White background">白天</button><button data-theme="night" title="Dark background">黑夜</button><button data-theme="eye" title="Warm paper tones, less blue light">护眼</button>
     </div>
@@ -685,10 +685,24 @@ $('previewBtn').onclick = async () => {
   $('previewBtn').disabled = false;
 };
 
+const UPLOAD_CHUNK = 4 * 1024 * 1024;   // must match the server
+async function uploadPdf(id, filename, bytes, onProgress) {
+  const n = Math.ceil(bytes.length / UPLOAD_CHUNK);
+  for (let i = 0; i < n; i++) {
+    const data = b64(bytes.subarray(i * UPLOAD_CHUNK, Math.min(bytes.length, (i + 1) * UPLOAD_CHUNK)));
+    let tries = 0;
+    for (;;) {
+      try { await api({ action: 'pdf_upload', token, id, size: bytes.length, index: i, data, filename }); break; }
+      catch (e) { if (++tries >= 3 || i === 0 && /session/i.test(e.message)) throw e; await new Promise((r) => setTimeout(r, 2000 * tries)); }
+    }
+    if (onProgress) onProgress(Math.round((i + 1) / n * 100));
+  }
+}
+
 $('audioBtn').onclick = async () => {
   const f = $('apdf').files[0], st = $('audioStatus');
   if (!f) return setStatus(st, 'Choose a PDF first.', true);
-  if (f.size > 40e6) return setStatus(st, 'PDF too large (limit 40 MB).', true);
+  if (f.size > 200e6) return setStatus(st, 'PDF too large (limit 200 MB).', true);
   if (audioBusy) return;
   audioBusy = true; $('audioBtn').disabled = true;
   try {
@@ -716,14 +730,18 @@ $('audioBtn').onclick = async () => {
       if (total > 160) throw new Error('This PDF has ' + total + ' pages; paper mode handles up to 160.');
       payload.parts = parts; payload.pages = total;
     }
-    // A copy of the original goes to Drive only when small; books need just the extracted text.
-    if (kind !== 'book' && bytes.length < 8e6) payload.pdf = b64(bytes);
     const mb = JSON.stringify(payload).length / 1e6;
     if (mb > 45) throw new Error('Upload too large (' + mb.toFixed(0) + ' MB). Select fewer chapters and try again.');
     setStatus(st, 'Uploading ' + mb.toFixed(1) + ' MB...');
-    try { await api(payload); }
+    let started;
+    try { started = await api(payload); }
     catch (e) { if (/failed to fetch|load failed|network/i.test(e.message)) throw new Error('Upload failed (' + mb.toFixed(1) + ' MB). Check the connection, or select fewer chapters, and try again.'); throw e; }
-    setStatus(st, 'Started. It appears in your library below; you can close this page meanwhile.');
+    // The original PDF is stored in Drive in 4 MB pieces, so its size is not limited by the request size.
+    let saved = true;
+    try { await uploadPdf(started.id, f.name, bytes, (p) => setStatus(st, 'Conversion started. Saving the original PDF to Drive: ' + p + '%')); }
+    catch (e) { saved = false; }
+    setStatus(st, 'Started. It appears in your library below; you can close this page meanwhile.' +
+      (saved ? '' : ' (The original PDF could not be saved to Drive; the conversion is not affected.)'));
     $('apdf').value = ''; bookData = null; docKind = null; renderKind(); renderBookPanel();
     await loadLibrary();
   } catch (e) {
@@ -1518,7 +1536,7 @@ async function exportDocx(d, edits, accept) {
   const date = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
   let nextId = 900000, applied = 0; const manual = [];
   const W = (name) => doc.createElementNS(W_NS, 'w:' + name);
-  const mark = (name) => { const e = W(name); e.setAttributeNS(W_NS, 'w:id', String(nextId++)); e.setAttributeNS(W_NS, 'w:author', 'Manuscript Portal'); e.setAttributeNS(W_NS, 'w:date', date); return e; };
+  const mark = (name) => { const e = W(name); e.setAttributeNS(W_NS, 'w:id', String(nextId++)); e.setAttributeNS(W_NS, 'w:author', 'Wako205'); e.setAttributeNS(W_NS, 'w:date', date); return e; };
   const simple = (r) => r.localName === 'r' && /^(p|hyperlink)$/.test(r.parentNode.localName)
     && Array.from(r.childNodes).filter((c) => c.nodeType === 1).every((c) => c.localName === 'rPr' || c.localName === 't')
     && r.getElementsByTagNameNS(W_NS, 't').length === 1;
@@ -1572,8 +1590,8 @@ async function exportDocx(d, edits, accept) {
     manual.push(ed);
   });
   if (accept) {   // accept only the changes made here; pre-existing tracked changes are left alone
-    Array.from(doc.getElementsByTagNameNS(W_NS, 'del')).filter((e) => e.getAttributeNS(W_NS, 'author') === 'Manuscript Portal').forEach((e) => e.parentNode.removeChild(e));
-    Array.from(doc.getElementsByTagNameNS(W_NS, 'ins')).filter((e) => e.getAttributeNS(W_NS, 'author') === 'Manuscript Portal').forEach((e) => {
+    Array.from(doc.getElementsByTagNameNS(W_NS, 'del')).filter((e) => e.getAttributeNS(W_NS, 'author') === 'Wako205' || e.getAttributeNS(W_NS, 'author') === 'Manuscript Portal').forEach((e) => e.parentNode.removeChild(e));
+    Array.from(doc.getElementsByTagNameNS(W_NS, 'ins')).filter((e) => e.getAttributeNS(W_NS, 'author') === 'Wako205' || e.getAttributeNS(W_NS, 'author') === 'Manuscript Portal').forEach((e) => {
       while (e.firstChild) e.parentNode.insertBefore(e.firstChild, e); e.parentNode.removeChild(e);
     });
   }
