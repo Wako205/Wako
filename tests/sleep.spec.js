@@ -9,6 +9,11 @@ async function openBook(page) {
   await expect(page.locator('#pText span.s')).toHaveCount(6);
   await expect.poll(() => page.evaluate(() => player.duration)).toBeGreaterThan(8);
 }
+/** Stops the fake clock's own flow, so only fastForward moves it (test steps take real time under load). */
+async function freezeClock(page) {
+  const now = await page.evaluate(() => Date.now());
+  await page.clock.pauseAt(now + 1000);
+}
 async function choose(page, label) {
   await page.click('#pSleepBtn');
   await expect(page.locator('#pSleepMenu')).toBeVisible();
@@ -19,6 +24,7 @@ async function choose(page, label) {
 test('stops after 15 minutes of listening, fading out over the last 10 seconds', async ({ page, backend }) => {
   await page.clock.install();
   await openBook(page);
+  await freezeClock(page);
   // Only the audio element's events drive the countdown: a page in the background may get no timers at all.
   await page.evaluate(() => { window.setInterval = () => 0; });
   // A long chapter, so the audio does not end during the test.
@@ -50,6 +56,7 @@ test('stops after 15 minutes of listening, fading out over the last 10 seconds',
 test('the countdown pauses while playback is paused', async ({ page, backend }) => {
   await page.clock.install();
   await openBook(page);
+  await freezeClock(page);
   await page.evaluate(() => { player.loop = true; });
   await choose(page, '30 min');
   await page.clock.fastForward(600000);                            // not playing: nothing counted
