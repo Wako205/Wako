@@ -93,6 +93,13 @@
   .mark button { padding:3px 8px; font-size:12px; }
   .readtext span.s.pend { color:var(--pend); cursor:default; }
   h2 { font-size: 18px; margin: 24px 0 12px; }
+  details.pron { margin-top:14px; border:1px solid var(--line); border-radius:8px; padding:8px 12px; font-size:14px; }
+  details.pron summary { cursor:pointer; color:var(--accent); }
+  .pron table { width:100%; border-collapse:collapse; margin-top:8px; }
+  .pron td, .pron th { padding:4px 6px 4px 0; text-align:left; vertical-align:middle; }
+  .pron th { font-weight:normal; color:var(--muted); font-size:13px; }
+  .pron input[type=text] { padding:6px 8px; }
+  .pron td:last-child { width:1%; white-space:nowrap; }
 </style>
 </head>
 <body>
@@ -236,6 +243,20 @@
         </select>
         <button class="ghost" id="previewBtn" type="button" title="Hear the first sentences of the selected text in this voice (uses about 0.1k characters of the allowance)">试听 Preview</button>
         </div>
+        <details class="pron" id="pronBox">
+          <summary id="pronSummary">Pronunciation of terms</summary>
+          <div class="notice" style="margin-top:8px">How technical terms are spoken, for example "MoS2" as "M O S two" or "CVD" as "C V D". Applied to books when they are converted; the text in the player keeps the original spelling. Papers and theses are not covered yet. The list is stored in this browser only, under your user name, until the server can keep it with your account.</div>
+          <table>
+            <thead><tr><th>Term</th><th>Spoken as</th><th></th></tr></thead>
+            <tbody id="pronList"></tbody>
+            <tfoot><tr>
+              <td><input type="text" id="pronTerm" placeholder="MoS2" aria-label="Term"></td>
+              <td><input type="text" id="pronSay" placeholder="M O S two" aria-label="Spoken as"></td>
+              <td><button class="small" id="pronAdd" type="button">Add</button></td>
+            </tr></tfoot>
+          </table>
+          <div class="status" id="pronStatus"></div>
+        </details>
         <div class="row" style="margin-top:16px"><button id="audioBtn">Generate audio</button><span class="status" id="audioStatus"></span></div>
         <div class="notice" style="margin-top:14px">The type of document is detected automatically. Papers: Claude rewrites the PDF into a listening script (references and citation numbers skipped; equations and units read in words), then Google Chirp 3 HD reads it. Books and other text: read as written, chapter by chapter, with running headers and page numbers removed. English, Japanese and Chinese are detected automatically. Every conversion is saved to your library below, together with your listening position, so it never has to be converted twice. You can close this page while a conversion runs.</div>
       </div>
@@ -330,7 +351,7 @@ function switchTab(t) {
   [['chat', 'tabChat', 'chatView'], ['tools', 'tabTools', 'toolsView'], ['audio', 'tabAudio', 'audioView']].forEach(([k, tab, view]) => {
     $(tab).classList.toggle('active', t === k); $(view).classList.toggle('hidden', t !== k);
   });
-  if (t === 'audio') loadLibrary(); else clearTimeout(libTimer);
+  if (t === 'audio') { renderPron(); loadLibrary(); } else clearTimeout(libTimer);
 }
 
 // ---------------------------------------------------------------------------
@@ -676,7 +697,7 @@ $('previewBtn').onclick = async () => {
   if (cut > 40) text = text.slice(0, cut + 1);
   $('previewBtn').disabled = true; setStatus(st, 'Preparing a sample of ' + $('avoice').value + '...');
   try {
-    const d = await api({ action: 'audio_preview', token, voice: $('avoice').value, text });
+    const d = await api({ action: 'audio_preview', token, voice: $('avoice').value, text: respell(text, pronList()) });
     if (previewAudio) previewAudio.pause();
     previewAudio = new Audio(URL.createObjectURL(new Blob([unb64(d.data)], { type: 'audio/mpeg' })));
     previewAudio.play().catch(() => {});
@@ -684,6 +705,56 @@ $('previewBtn').onclick = async () => {
   } catch (e) { setStatus(st, e.message, true); if (/log in again/i.test(e.message)) logout(); }
   $('previewBtn').disabled = false;
 };
+
+// ---------------------------------------------------------------------------
+// Pronunciation list: technical terms and how they are to be spoken. Book text is
+// respelled before it is sent for conversion; the player turns the spoken forms
+// back into the terms, using the list stored with each converted book. Kept in
+// localStorage per user until the backend can store it with the account.
+// ---------------------------------------------------------------------------
+function pronKey() { return 'mp_pron_' + (username || ''); }
+function pronList() {
+  try { const l = JSON.parse(lsGet(pronKey()) || '[]'); return Array.isArray(l) ? l.filter((x) => x && x.term && x.say) : []; } catch (e) { return []; }
+}
+function pronUsed(id) { try { const l = JSON.parse(lsGet('mp_pron_used_' + id) || '[]'); return Array.isArray(l) ? l : []; } catch (e) { return []; } }
+const reEsc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** One regular expression for all words in `from`, longest first; a word made of letters or digits matches whole words only. */
+function wordsRe(from) {
+  const alts = from.slice().sort((a, b) => b.length - a.length).map((w) =>
+    (/^[A-Za-z0-9]/.test(w) ? '(?<![A-Za-z0-9])' : '') + reEsc(w) + (/[A-Za-z0-9]$/.test(w) ? '(?![A-Za-z0-9])' : ''));
+  return new RegExp(alts.join('|'), 'g');
+}
+function mapWords(text, pairs) {
+  if (!pairs.length || !text) return text;
+  const to = new Map(pairs);
+  return text.replace(wordsRe(pairs.map((p) => p[0])), (m) => to.get(m));
+}
+/** Text with every term replaced by its spoken form. */
+function respell(text, list) { return mapWords(text, list.map((x) => [x.term, x.say])); }
+/** Inverse of respell, for display. */
+function unrespell(text, list) { return mapWords(text, list.map((x) => [x.say, x.term])); }
+
+function renderPron() {
+  const list = pronList(), box = $('pronList');
+  box.textContent = '';
+  list.forEach((x, i) => {
+    const tr = el('tr');
+    tr.appendChild(el('td', null, x.term)); tr.appendChild(el('td', null, x.say));
+    const td = el('td'), rm = el('button', 'ghost small', 'Remove'); rm.type = 'button';
+    rm.onclick = () => { const l = pronList(); l.splice(i, 1); lsSet(pronKey(), JSON.stringify(l)); renderPron(); };
+    td.appendChild(rm); tr.appendChild(td); box.appendChild(tr);
+  });
+  $('pronSummary').textContent = 'Pronunciation of terms' + (list.length ? ' (' + list.length + ')' : '');
+}
+$('pronAdd').onclick = () => {
+  const term = $('pronTerm').value.trim(), say = $('pronSay').value.trim(), st = $('pronStatus');
+  if (!term || !say) return setStatus(st, 'Enter both the term and how it is spoken.', true);
+  const l = pronList().filter((x) => x.term !== term);
+  l.push({ term, say }); l.sort((a, b) => a.term.localeCompare(b.term));
+  lsSet(pronKey(), JSON.stringify(l));
+  $('pronTerm').value = ''; $('pronSay').value = ''; setStatus(st, ''); renderPron(); $('pronTerm').focus();
+};
+[$('pronTerm'), $('pronSay')].forEach((x) => x.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('pronAdd').click(); } }));
 
 const UPLOAD_CHUNK = 4 * 1024 * 1024;   // must match the server
 async function uploadPdf(id, filename, bytes, onProgress) {
@@ -708,12 +779,13 @@ $('audioBtn').onclick = async () => {
   try {
     if (!docKind) await prepareBook();
     const bytes = new Uint8Array(await f.arrayBuffer());
-    const kind = audioKind();
+    const kind = audioKind(), pron = pronList();
     const payload = { action: 'audio_start', token, filename: f.name, voice: $('avoice').value, kind: kind === 'book' ? 'book' : 'paper' };
     if (kind === 'book') {
       if (!bookData) throw new Error('Could not read the text of this PDF.');
       // The whole book is stored, so other chapters can be converted later from the library.
-      payload.chapters = bookData.chapters.map((c) => ({ title: c.title, text: c.text }));
+      // Terms are respelled for speech; chapters added later from the library use this stored text.
+      payload.chapters = bookData.chapters.map((c) => ({ title: c.title, text: respell(c.text, pron) }));
       payload.selected = bookData.chapters.map((c, i) => (c.sel !== false ? i : -1)).filter((i) => i >= 0);
       if (!payload.selected.length) throw new Error('Select at least one chapter.');
     } else if (kind === 'thesis') {
@@ -737,6 +809,7 @@ $('audioBtn').onclick = async () => {
     try { started = await api(payload); }
     catch (e) { if (/failed to fetch|load failed|network/i.test(e.message)) throw new Error('Upload failed (' + mb.toFixed(1) + ' MB). Check the connection, or select fewer chapters, and try again.'); throw e; }
     // The original PDF is stored in Drive in 4 MB pieces, so its size is not limited by the request size.
+    if (kind === 'book' && pron.length) lsSet('mp_pron_used_' + started.id, JSON.stringify(pron));
     let saved = true;
     try { await uploadPdf(started.id, f.name, bytes, (p) => setStatus(st, 'Conversion started. Saving the original PDF to Drive: ' + p + '%')); }
     catch (e) { saved = false; }
@@ -980,7 +1053,8 @@ function fetchChapter(c, onStatus) {
   const say = onStatus || (() => {});
   const job = (async () => {
     say('Loading audio...');
-    const texts = (await api({ action: 'audio_text', token, id, chapter: c })).texts;
+    const used = pronUsed(id);
+    const texts = (await api({ action: 'audio_text', token, id, chapter: c })).texts.map((t) => unrespell(t, used));
     const bufs = new Array(ch.n);
     let next = 0, stop = ch.n;
     const worker = async () => {
