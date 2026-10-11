@@ -62,6 +62,21 @@
   .edit .old { background:var(--del); } .edit .new { background:var(--ins); }
   .edit .why { font-family: inherit; color:var(--muted); background:var(--soft); }
   pre.review { white-space:pre-wrap; word-break:break-word; font:inherit; margin:0; }
+  /* audio */
+  .chlist { max-height: 260px; overflow-y:auto; border:1px solid var(--line); border-radius:8px; margin-top:8px; padding:4px 10px; font-size:14px; }
+  .chlist label { display:flex; gap:8px; align-items:center; margin:4px 0; color:var(--ink); font-size:14px; }
+  .chlist .n { margin-left:auto; color:var(--muted); font-size:12px; white-space:nowrap; }
+  .libitem { border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin:10px 0; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  .libitem .t { font-weight:600; cursor:pointer; color:var(--accent); }
+  .libitem .m { font-size:13px; color:var(--muted); }
+  .libitem .grow { flex:1; min-width:200px; }
+  .bar { height:4px; background:var(--soft); border-radius:2px; margin-top:6px; overflow:hidden; } .bar i { display:block; height:100%; background:var(--accent); }
+  .readtext { margin-top:14px; max-height: 55vh; overflow-y:auto; border-top:1px solid var(--line); padding-top:10px; line-height:1.9; font-size:17px; }
+  .readtext p { margin:0 0 12px; }
+  .readtext span.s { cursor:pointer; border-radius:4px; transition: background .2s; }
+  .readtext span.s:hover { background:var(--soft); }
+  .readtext span.s.cur { background:#fff1b8; }
+  .readtext span.s.pend { color:#aaa; cursor:default; }
   h2 { font-size: 18px; margin: 24px 0 12px; }
 </style>
 </head>
@@ -146,9 +161,48 @@
 
     <!-- PDF to audio -->
     <section id="audioView" class="hidden">
+      <!-- Player (opened from the library) -->
+      <section class="card hidden" id="playerCard" style="margin-bottom:16px">
+        <div class="row" style="justify-content:space-between">
+          <h2 id="pTitle" style="margin:0"></h2>
+          <button class="ghost small" id="pClose">Close</button>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button class="ghost small" id="pPrev" title="Previous chapter">◀</button>
+          <select id="pChapter" style="width:auto;max-width:60%;padding:5px 8px"></select>
+          <button class="ghost small" id="pNext" title="Next chapter">▶</button>
+          <span class="status" id="pStatus"></span>
+        </div>
+        <audio id="player" controls preload="auto" style="width:100%;margin-top:10px"></audio>
+        <div class="row" style="margin-top:6px;font-size:13px;color:var(--muted)">
+          <label for="arate" style="margin:0">Speed</label>
+          <select id="arate" style="width:auto;padding:4px 8px;font-size:13px">
+            <option value="0.85">0.85×</option><option value="1" selected>1×</option><option value="1.15">1.15×</option>
+            <option value="1.3">1.3×</option><option value="1.5">1.5×</option><option value="1.75">1.75×</option><option value="2">2×</option>
+          </select>
+          <label style="margin:0;display:flex;gap:4px;align-items:center"><input type="checkbox" id="pFollow" checked> Follow text</label>
+          <button class="ghost small" id="dlAudioBtn" style="margin-left:auto">Download MP3</button>
+          <button class="ghost small" id="dlScriptBtn">Download text</button>
+        </div>
+        <div id="pText" class="readtext"></div>
+      </section>
+
+      <!-- New conversion -->
       <div class="card">
-        <label for="apdf">Paper (.pdf)</label>
+        <label for="apdf">PDF</label>
         <input type="file" id="apdf" accept=".pdf,application/pdf">
+        <div class="row" style="margin-top:12px;gap:18px">
+          <label style="margin:0;display:flex;gap:6px;align-items:center;color:var(--ink)"><input type="radio" name="akind" value="paper" checked> Paper: Claude writes a listening script (formulas, units, citations)</label>
+          <label style="margin:0;display:flex;gap:6px;align-items:center;color:var(--ink)"><input type="radio" name="akind" value="book"> Book or plain text: read as written, chapter by chapter (no Claude cost)</label>
+        </div>
+        <div id="bookPanel" class="hidden" style="margin-top:12px">
+          <div class="row" style="font-size:13px;color:var(--muted)">
+            <span id="bookSummary"></span>
+            <button class="ghost small" id="bookAll" style="margin-left:auto">Select all</button>
+            <button class="ghost small" id="bookNone">Select none</button>
+          </div>
+          <div id="bookChapters" class="chlist"></div>
+        </div>
         <label for="avoice">Voice</label>
         <select id="avoice">
           <option value="Charon">Charon (male, calm)</option>
@@ -159,24 +213,12 @@
           <option value="Leda">Leda (female, youthful)</option>
         </select>
         <div class="row" style="margin-top:16px"><button id="audioBtn">Generate audio</button><span class="status" id="audioStatus"></span></div>
-        <div class="notice" style="margin-top:14px">Claude first rewrites the PDF into a listening script (body text and figure captions in full; references, affiliations and citation numbers skipped; equations and units read in words), then Google Chirp 3 HD reads it. English, Japanese and Chinese papers are detected automatically. A 10-page paper takes about 3 to 6 minutes. You can leave this tab open and use other tabs meanwhile.</div>
+        <div class="notice" style="margin-top:14px">Paper mode: Claude rewrites the PDF into a listening script (references and citation numbers skipped; equations and units read in words), then Google Chirp 3 HD reads it. Book mode: the text is read as written, chapter by chapter, with running headers and page numbers removed. English, Japanese and Chinese are detected automatically. Every conversion is saved to your library below, together with your listening position, so it never has to be converted twice. You can close this page while a conversion runs.</div>
       </div>
-      <section class="hidden" id="audioResult">
-        <h2 id="audioTitle"></h2>
-        <audio id="player" controls preload="metadata" style="width:100%"></audio>
-        <div class="row" style="margin-top:10px">
-          <label for="arate" style="margin:0">Speed</label>
-          <select id="arate" style="width:auto;padding:5px 8px">
-            <option value="0.85">0.85×</option><option value="1" selected>1×</option><option value="1.15">1.15×</option>
-            <option value="1.3">1.3×</option><option value="1.5">1.5×</option><option value="1.75">1.75×</option>
-          </select>
-          <button id="dlAudioBtn">Download MP3</button>
-          <button id="dlScriptBtn" class="ghost">Download script (.txt)</button>
-        </div>
-        <div class="status" id="audioInfo" style="margin-top:8px"></div>
-        <details style="margin-top:10px"><summary style="cursor:pointer;color:var(--muted);font-size:14px">Show reading script</summary>
-          <pre class="review" id="audioScript" style="font-size:14px;margin-top:8px"></pre></details>
-      </section>
+
+      <!-- Library -->
+      <h2>Your audio library <span class="status" id="libUsage" style="font-weight:normal;font-size:13px;margin-left:8px"></span></h2>
+      <div id="library"><div class="status">Loading...</div></div>
     </section>
   </div>
 </main>
@@ -255,15 +297,18 @@ function switchTab(t) {
   [['chat', 'tabChat', 'chatView'], ['tools', 'tabTools', 'toolsView'], ['audio', 'tabAudio', 'audioView']].forEach(([k, tab, view]) => {
     $(tab).classList.toggle('active', t === k); $(view).classList.toggle('hidden', t !== k);
   });
-  if (t === 'audio') resumeAudioJob();
+  if (t === 'audio') loadLibrary(); else clearTimeout(libTimer);
 }
 
 // ---------------------------------------------------------------------------
-// PDF to audio. The PDF is split here into parts of AUDIO_PAGES pages plus one
-// look-ahead page, so sentences that cross a part boundary are read once and whole.
+// PDF to audio. Paper mode: the PDF is split here into parts of AUDIO_PAGES
+// pages plus one look-ahead page and Claude writes a listening script. Book
+// mode: text and chapters are extracted here (pdf.js) and read as written.
+// Every conversion is an item of the user's library, stored in Drive.
 // ---------------------------------------------------------------------------
 const AUDIO_PAGES = 4;
-let audioOut = null, audioRunning = false;
+const PDFJS_BASE = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+let libItems = [], libTimer = null, bookData = null, audioBusy = false;
 
 function b64(bytes) {
   let s = '';
@@ -271,6 +316,15 @@ function b64(bytes) {
   return btoa(s);
 }
 function unb64(str) { const bin = atob(str); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
+function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+function loadScript(src) {
+  return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('Could not load ' + src)); document.head.appendChild(s); });
+}
+async function getPdfjs() {
+  if (!window.pdfjsLib) { await loadScript(PDFJS_BASE + 'pdf.min.js'); window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_BASE + 'pdf.worker.min.js'; }
+  return window.pdfjsLib;
+}
 
 async function splitPdf(bytes) {
   const src = await PDFLib.PDFDocument.load(bytes, { ignoreEncryption: true });
@@ -287,87 +341,474 @@ async function splitPdf(bytes) {
   return { parts, total };
 }
 
-$('arate').onchange = () => { $('player').playbackRate = Number($('arate').value); };
-$('player').onloadedmetadata = () => { $('player').playbackRate = Number($('arate').value); showAudioInfo(); };
+// ---------------------------------------------------------------------------
+// Book mode: the PDF text is extracted here with pdf.js, running headers and
+// page numbers are removed, and the text is split into chapters. Nothing goes
+// through Claude; the server only synthesizes speech.
+// ---------------------------------------------------------------------------
+const CHAPTER_RE = /^(楔子|序章|序言|序|引子|引言|前言|尾声|后记|後記|跋|附录|第[0-9０-９一二三四五六七八九十百千零〇两]+[章回节節卷部篇幕]|(?:chapter|part|book)\s+[0-9ivxlc]+|prologue|epilogue|preface|introduction|afterword)(?=$|[\s:：.、．])(.{0,30})$/i;
+const PAGENUM_RE = /^[\s\-–—]*([0-9]{1,4}|[ivxlcdm]{1,6})[\s\-–—]*$/i;
+const CJK = '　-〿぀-ヿ㐀-鿿豈-﫿＀-￯';
+const CJK_GAP = new RegExp('([' + CJK + '])\\s+(?=[' + CJK + '])', 'g');
+
+/** Lines of one page, top to bottom: {s: text, x: left edge}. */
+function pageLines(items) {
+  const rows = [];
+  items.forEach((it) => {
+    if (!it.str || !it.str.trim()) return;
+    const y = it.transform[5], x = it.transform[4];
+    let row = rows.find((r) => Math.abs(r.y - y) < 2.5);
+    if (!row) { row = { y, parts: [] }; rows.push(row); }
+    row.parts.push({ x, s: it.str, h: Math.abs(it.transform[3]) || 10 });
+  });
+  rows.sort((a, b) => b.y - a.y);
+  return rows.map((r) => {
+    r.parts.sort((a, b) => a.x - b.x);
+    return { x: r.parts[0].x, h: r.parts[0].h,
+             s: r.parts.map((p) => p.s).join(' ').replace(CJK_GAP, '$1').replace(/\s+/g, ' ').trim() };
+  }).filter((l) => l.s);
+}
+
+/** Joins wrapped lines into paragraphs (blank line between them); no space between CJK characters. */
+function joinLines(lines) {
+  let out = '';
+  const cjk = new RegExp('[' + CJK + ']');
+  lines.forEach((l) => {
+    const t = l.s;
+    if (!out) { out = t; return; }
+    if (l.para) { out += '\n\n' + t; return; }
+    const a = out[out.length - 1], b = t[0];
+    if (/[A-Za-z]-$/.test(out) && /[a-z]/.test(b)) out = out.slice(0, -1) + t;
+    else if (cjk.test(a) || cjk.test(b)) out += t;
+    else out += ' ' + t;
+  });
+  return out;
+}
+
+/**
+ * pages: array of line arrays. Returns [{title, text}] in reading order.
+ * A running header is a first line that recurs on several pages; a header or a
+ * short standalone line that looks like a chapter title starts a new chapter.
+ */
+function splitChapters(pages) {
+  const firstCount = {};
+  pages.forEach((L) => { if (L[0]) firstCount[L[0].s] = (firstCount[L[0].s] || 0) + 1; });
+  const isRunning = (s) => (firstCount[s] || 0) >= 3;
+  const TOC_LINE = /\s+[0-9ivxlc]{1,4}$/i;
+  const isToc = (L) => L.filter((l) => TOC_LINE.test(l.s) && CHAPTER_RE.test(l.s.replace(TOC_LINE, ''))).length >= 3;
+  const chapters = [];
+  let cur = null;
+  const open = (title) => { cur = { title: title.replace(/\s+/g, ' ').trim(), lines: [] }; chapters.push(cur); };
+  const strip = (L0) => {
+    const L = L0.slice();
+    while (L.length && PAGENUM_RE.test(L[L.length - 1].s)) L.pop();     // footer page number
+    while (L.length && PAGENUM_RE.test(L[0].s)) L.shift();
+    return L;
+  };
+  pages.forEach((L0) => {
+    if (isToc(L0)) return;                                               // table of contents page
+    let L = strip(L0);
+    if (L.length && (isRunning(L[0].s) || CHAPTER_RE.test(L[0].s))) {
+      const head = L.shift().s;
+      while (L.length && PAGENUM_RE.test(L[0].s)) L.shift();
+      if (CHAPTER_RE.test(head) && (!cur || cur.title !== head.replace(/\s+/g, ' ').trim())) open(head);
+    }
+    // A line indented relative to the page's text block starts a paragraph.
+    const left = Math.min.apply(null, L.map((l) => l.x).concat([1e9]));
+    L.forEach((l) => {
+      if (l.s.length <= 30 && !TOC_LINE.test(l.s) && CHAPTER_RE.test(l.s) && !(cur && cur.title === l.s)) { open(l.s); return; }
+      if (cur) cur.lines.push({ s: l.s, para: l.x - left > 0.8 * l.h });
+    });
+  });
+  const out = chapters.map((c) => ({ title: c.title, text: joinLines(c.lines).trim() })).filter((c) => c.text.length > 20);
+  if (out.length) return out;
+  // No chapter structure found: read the whole text, minus running headers, as one part.
+  const all = [];
+  pages.forEach((L) => strip(L).forEach((l, i) => { if (!(i === 0 && isRunning(l.s))) all.push({ s: l.s, para: false }); }));
+  return [{ title: 'Full text', text: joinLines(all).trim() }];
+}
+
+
+const CJK_CHAR = new RegExp('[' + CJK + ']', 'g');
+/** Rough listening time in minutes: about 270 CJK characters or 900 Latin characters per minute. */
+function estMinutes(text) {
+  const cjk = (text.match(CJK_CHAR) || []).length;
+  return cjk / 270 + (text.length - cjk) / 900;
+}
+function fmtDur(min) { return min >= 60 ? Math.floor(min / 60) + ' h ' + Math.round(min % 60) + ' min' : Math.max(1, Math.round(min)) + ' min'; }
+function fmtTime(s) { s = Math.max(0, Math.floor(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0'); }
+function audioKind() { return document.querySelector('input[name=akind]:checked').value; }
+
+async function extractBook(file) {
+  const st = $('audioStatus');
+  setStatus(st, 'Reading the PDF text...');
+  const lib = await getPdfjs();
+  const doc = await lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+  const pages = [];
+  for (let i = 1; i <= doc.numPages; i++) {
+    const page = await doc.getPage(i);
+    pages.push(pageLines((await page.getTextContent()).items));
+    if (i % 40 === 0) setStatus(st, 'Reading the PDF text: page ' + i + ' of ' + doc.numPages);
+  }
+  const chapters = splitChapters(pages);
+  setStatus(st, '');
+  if (chapters.reduce((n, c) => n + c.text.length, 0) < 50) throw new Error('No text found. The PDF may be a scanned image without a text layer.');
+  return { chapters, pages: doc.numPages };
+}
+
+function renderBookPanel() {
+  const box = $('bookChapters'); box.textContent = '';
+  if (!bookData) { $('bookPanel').classList.add('hidden'); return; }
+  $('bookPanel').classList.remove('hidden');
+  bookData.chapters.forEach((c, i) => {
+    const lab = el('label');
+    const cb = el('input'); cb.type = 'checkbox'; cb.checked = c.sel !== false; cb.onchange = () => { c.sel = cb.checked; bookSummary(); };
+    lab.appendChild(cb); lab.appendChild(el('span', null, c.title));
+    lab.appendChild(el('span', 'n', c.text.length.toLocaleString() + ' chars · ' + fmtDur(estMinutes(c.text))));
+    box.appendChild(lab);
+  });
+  bookSummary();
+}
+function bookSummary() {
+  if (!bookData) return;
+  const sel = bookData.chapters.filter((c) => c.sel !== false);
+  const chars = sel.reduce((n, c) => n + c.text.replace(/\n/g, '').length, 0);
+  const left = libUsage.cap ? Math.max(0, libUsage.cap - libUsage.used) : null;
+  $('bookSummary').textContent = bookData.pages + ' pages, ' + bookData.chapters.length + ' chapters found. Selected: ' + sel.length +
+    ' chapters, ' + chars.toLocaleString() + ' characters, about ' + fmtDur(sel.reduce((n, c) => n + estMinutes(c.text), 0)) +
+    (left != null ? '. Speech allowance left this month: ' + left.toLocaleString() + ' characters' + (chars > left ? ' (not enough: deselect some chapters)' : '') : '');
+}
+$('bookAll').onclick = () => { if (bookData) { bookData.chapters.forEach((c) => { c.sel = true; }); renderBookPanel(); } };
+$('bookNone').onclick = () => { if (bookData) { bookData.chapters.forEach((c) => { c.sel = false; }); renderBookPanel(); } };
+
+async function prepareBook() {
+  const f = $('apdf').files[0];
+  bookData = null; renderBookPanel();
+  if (!f || audioKind() !== 'book') return;
+  try { bookData = await extractBook(f); renderBookPanel(); }
+  catch (e) { setStatus($('audioStatus'), e.message, true); }
+}
+$('apdf').onchange = prepareBook;
+document.querySelectorAll('input[name=akind]').forEach((r) => { r.onchange = prepareBook; });
 
 $('audioBtn').onclick = async () => {
   const f = $('apdf').files[0], st = $('audioStatus');
   if (!f) return setStatus(st, 'Choose a PDF first.', true);
-  if (f.size > 30e6) return setStatus(st, 'PDF too large (limit 30 MB).', true);
-  $('audioBtn').disabled = true; audioRunning = true; setStatus(st, 'Reading the PDF...');
+  if (f.size > 40e6) return setStatus(st, 'PDF too large (limit 40 MB).', true);
+  if (audioBusy) return;
+  audioBusy = true; $('audioBtn').disabled = true;
   try {
     const bytes = new Uint8Array(await f.arrayBuffer());
-    const { parts, total } = await splitPdf(bytes);
-    setStatus(st, 'Uploading ' + total + ' pages...');
-    const size = parts.reduce((n, p) => n + p.b64.length, 0);
-    const payload = { action: 'audio_start', token, filename: f.name, voice: $('avoice').value, pages: total, parts };
-    if (size + bytes.length * 1.4 < 45e6) payload.pdf = b64(bytes);   // keep a copy of the original in Drive
-    const { jobId } = await api(payload);
-    store('mp_audio_job', JSON.stringify({ jobId, name: f.name, pages: total }));
-    await finishAudioJob(jobId, f.name, total);
+    const payload = { action: 'audio_start', token, filename: f.name, voice: $('avoice').value, kind: audioKind() };
+    if (payload.kind === 'book') {
+      if (!bookData) await prepareBook();
+      if (!bookData) throw new Error('Could not read the text of this PDF.');
+      payload.chapters = bookData.chapters.filter((c) => c.sel !== false).map((c) => ({ title: c.title, text: c.text }));
+      if (!payload.chapters.length) throw new Error('Select at least one chapter.');
+      if (bytes.length < 25e6) payload.pdf = b64(bytes);
+    } else {
+      setStatus(st, 'Reading the PDF...');
+      const { parts, total } = await splitPdf(bytes);
+      if (total > 160) throw new Error('This PDF has ' + total + ' pages. Paper mode handles up to 160; use book mode for long texts.');
+      payload.parts = parts; payload.pages = total;
+      if (bytes.length < 25e6) payload.pdf = b64(bytes);
+    }
+    setStatus(st, 'Uploading...');
+    await api(payload);
+    setStatus(st, 'Started. It appears in your library below; you can close this page meanwhile.');
+    $('apdf').value = ''; bookData = null; renderBookPanel();
+    await loadLibrary();
   } catch (e) {
     setStatus(st, e.message, true);
     if (/log in again/i.test(e.message)) logout();
   }
-  $('audioBtn').disabled = false; audioRunning = false;
+  audioBusy = false; $('audioBtn').disabled = false;
 };
 
-// Re-attaches to a job started before the page was reloaded.
-function resumeAudioJob() {
-  if (audioRunning || audioOut) return;
-  let j = null; try { j = JSON.parse(load('mp_audio_job') || 'null'); } catch (e) {}
-  if (!j || !j.jobId) return;
-  audioRunning = true; $('audioBtn').disabled = true;
-  finishAudioJob(j.jobId, j.name, j.pages)
-    .catch((e) => { setStatus($('audioStatus'), e.message, true); store('mp_audio_job', null); })
-    .finally(() => { audioRunning = false; $('audioBtn').disabled = false; });
-}
-
-async function finishAudioJob(jobId, name, pages) {
-  const st = $('audioStatus'), t0 = Date.now();
-  let progress = 'Queued';
-  const timer = setInterval(() => setStatus(st, progress + ' (' + Math.round((Date.now() - t0) / 1000) + ' s)'), 1000);
+// ---------------------------------------------------------------------------
+// Library
+// ---------------------------------------------------------------------------
+const libUsage = { used: 0, cap: 0 };
+async function loadLibrary() {
   try {
-    const d = await waitForJob(jobId, (s, info) => { if (info && info.progress) progress = info.progress; });
-    progress = 'Downloading audio: 0 of ' + d.segments;
-    const segs = new Array(d.segments);
-    let next = 0, got = 0;
-    const worker = async () => {
-      while (next < d.segments) {
-        const i = next++;
-        for (let a = 0; ; a++) {
-          try { segs[i] = unb64((await api({ action: 'audio_part', token, jobId, index: i })).data); break; }
-          catch (e) { if (a >= 3) throw e; await sleep(2000); }
+    const d = await api({ action: 'audio_library', token });
+    libItems = d.items || []; libUsage.used = d.ttsUsed || 0; libUsage.cap = d.ttsCap || 0;
+    $('libUsage').textContent = 'Speech used this month: ' + Math.round(libUsage.used / 1000) + 'k of ' + Math.round(libUsage.cap / 1000) + 'k characters';
+    renderLibrary(); bookSummary();
+    pollLibrary();
+  } catch (e) {
+    $('library').textContent = e.message;
+    if (/log in again/i.test(e.message)) logout();
+  }
+}
+
+function itemMinutes(it) {
+  if (!it.chars) return 0;
+  return it.lang && it.lang !== 'en-US' ? it.chars / 270 : it.chars / 900;
+}
+
+function renderLibrary() {
+  const box = $('library'); box.textContent = '';
+  if (!libItems.length) { box.appendChild(el('div', 'status', 'Nothing yet. Converted PDFs will be listed here.')); return; }
+  libItems.forEach((it) => {
+    const row = el('div', 'libitem');
+    const g = el('div', 'grow');
+    const t = el('div', 't', it.title); t.onclick = () => openItem(it.id);
+    g.appendChild(t);
+    const meta = [it.kind === 'book' ? 'Book' : 'Paper', new Date(it.created).toLocaleDateString()];
+    if (it.chapters && it.chapters.length > 1) meta.push(it.chapters.length + ' chapters');
+    if (it.chars) meta.push('about ' + fmtDur(itemMinutes(it)));
+    if (it.voice) meta.push('voice ' + it.voice);
+    if (it.pos && it.chapters && it.chapters[it.pos.c]) meta.push('resume at ' + (it.chapters.length > 1 ? it.chapters[it.pos.c].title + ' ' : '') + fmtTime(it.pos.t));
+    g.appendChild(el('div', 'm', meta.join(' · ')));
+    if (it.state === 'processing') {
+      const ready = (it._ready || []).reduce((a, b) => a + b, 0), total = (it.chapters || []).reduce((a, c) => a + c.n, 0);
+      g.appendChild(el('div', 'm', (it._progress || 'Converting...') + (ready && total ? ' · you can start listening to finished chapters' : '')));
+      const bar = el('div', 'bar'); const i = el('i'); i.style.width = (total ? Math.round(100 * ready / total) : 3) + '%'; bar.appendChild(i); g.appendChild(bar);
+    }
+    if (it.state === 'error') g.appendChild(el('div', 'm', 'Failed: ' + (it.error || 'unknown error')));
+    row.appendChild(g);
+    const open = el('button', 'small', it.pos ? 'Resume' : 'Listen'); open.onclick = () => openItem(it.id);
+    open.disabled = it.state === 'error' || (it.state === 'processing' && !(it._ready || []).some((n) => n > 0));
+    row.appendChild(open);
+    if (it.state !== 'processing') {
+      const del = el('button', 'ghost small', 'Delete');
+      del.onclick = async () => {
+        if (!window.confirm('Delete "' + it.title + '" and its audio from Drive?')) return;
+        try { await api({ action: 'audio_delete', token, id: it.id }); if (P && P.item.id === it.id) closePlayer(); loadLibrary(); }
+        catch (e) { setStatus($('audioStatus'), e.message, true); }
+      };
+      row.appendChild(del);
+    }
+    box.appendChild(row);
+  });
+}
+
+// Polls conversions in progress; the server also uses these polls to restart a stalled job.
+function pollLibrary() {
+  clearTimeout(libTimer);
+  const busy = libItems.filter((it) => it.state === 'processing');
+  if (!busy.length || $('audioView').classList.contains('hidden')) return;
+  libTimer = setTimeout(async () => {
+    let reload = false;
+    for (const it of busy) {
+      try {
+        const d = await api({ action: 'status', token, jobId: it.id });
+        if (d.state === 'done') { reload = true; continue; }
+        it._progress = d.progress; it._ready = d.ready || it._ready;
+        if (d.chapters && d.chapters.length) it.chapters = d.chapters;
+      } catch (e) { reload = true; }
+    }
+    if (reload) return loadLibrary();
+    renderLibrary(); if (P) refreshChapterSelect(); pollLibrary();
+  }, 8000);
+}
+
+// ---------------------------------------------------------------------------
+// Player with synchronized text. Sentence times are estimated inside each audio
+// segment from character counts and pauses, scaled to the segment's exact length.
+// ---------------------------------------------------------------------------
+let P = null;               // { item, c, segs: [{t0, dur}], sents: [{t0, t1, el}], blob, url, cur, texts }
+const player = $('player');
+let lastUserScroll = 0, lastSave = 0, rafOn = false;
+
+/** Exact duration of an MP3 buffer from its frame headers. */
+function mp3Duration(b) {
+  let i = 0;
+  if (b[0] === 0x49 && b[1] === 0x44 && b[2] === 0x33) i = 10 + (((b[6] & 0x7f) << 21) | ((b[7] & 0x7f) << 14) | ((b[8] & 0x7f) << 7) | (b[9] & 0x7f));
+  const BR1 = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320], BR2 = [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160];
+  const SR = { 3: [44100, 48000, 32000], 2: [22050, 24000, 16000], 0: [11025, 12000, 8000] };
+  let frames = 0, sr = 0, spf = 0;
+  while (i + 4 <= b.length) {
+    if (b[i] !== 0xff || (b[i + 1] & 0xe0) !== 0xe0) { i++; continue; }
+    const ver = (b[i + 1] >> 3) & 3, layer = (b[i + 1] >> 1) & 3, bri = (b[i + 2] >> 4) & 15, sri = (b[i + 2] >> 2) & 3, pad = (b[i + 2] >> 1) & 1;
+    if (ver === 1 || layer !== 1 || bri === 0 || bri === 15 || sri === 3) { i++; continue; }
+    const rate = SR[ver][sri], br = (ver === 3 ? BR1 : BR2)[bri] * 1000;
+    const len = Math.floor((ver === 3 ? 144 : 72) * br / rate) + pad;
+    sr = rate; spf = ver === 3 ? 1152 : 576; frames++; i += len;
+  }
+  return sr ? frames * spf / sr : b.length * 8 / 32000;
+}
+
+const SENT_SPLIT = /(?<=[.!?。！？…][”’"」』）)]*)(?![”’"」』）)])\s*/;
+/** Relative speaking time of a sentence: characters plus pauses at punctuation. */
+function speakWeight(s) {
+  const cjk = (s.match(CJK_CHAR) || []).length;
+  const other = s.replace(CJK_CHAR, '').replace(/\s+/g, ' ').length;
+  const pauses = (s.match(/[，、；：,;:—]/g) || []).length;
+  return cjk + other * 0.3 + pauses * 0.8 + 1.5;
+}
+
+function openItem(id) {
+  const it = libItems.find((x) => x.id === id);
+  if (!it) return;
+  const local = (() => { try { return JSON.parse(lsGet('mp_pos_' + id) || 'null'); } catch (e) { return null; } })();
+  const pos = [it.pos, local].filter(Boolean).sort((a, b) => (b.at || 0) - (a.at || 0))[0] || { c: 0, t: 0 };
+  P = { item: it, c: -1, cache: {} };
+  $('playerCard').classList.remove('hidden');
+  $('pTitle').textContent = it.title;
+  refreshChapterSelect();
+  loadChapter(Math.min(pos.c || 0, (it.chapters || []).length - 1), pos.t || 0, false);
+  $('playerCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function refreshChapterSelect() {
+  if (!P) return;
+  const sel = $('pChapter'), it = libItems.find((x) => x.id === P.item.id) || P.item;
+  P.item = it;
+  const chs = it.chapters || [];
+  sel.textContent = '';
+  chs.forEach((ch, i) => {
+    const ready = it.state === 'processing' && it._ready ? it._ready[i] : ch.n;
+    const o = el('option', null, ch.title + (ready < ch.n ? (ready ? ' (partly ready)' : ' (converting)') : ''));
+    o.value = i; o.disabled = !ready; sel.appendChild(o);
+  });
+  sel.value = Math.max(0, P.c);
+  $('pChapter').style.display = chs.length > 1 ? '' : 'none';
+  $('pPrev').style.display = $('pNext').style.display = chs.length > 1 ? '' : 'none';
+}
+$('pChapter').onchange = () => loadChapter(Number($('pChapter').value), 0, true);
+$('pPrev').onclick = () => { if (P && P.c > 0) loadChapter(P.c - 1, 0, true); };
+$('pNext').onclick = () => { if (P && P.c < P.item.chapters.length - 1) loadChapter(P.c + 1, 0, true); };
+$('pClose').onclick = () => closePlayer();
+function closePlayer() {
+  saveProgress(true);
+  player.pause(); player.removeAttribute('src'); player.load();
+  if (P) Object.values(P.cache).forEach((x) => URL.revokeObjectURL(x.url));
+  P = null; $('playerCard').classList.add('hidden');
+}
+
+async function loadChapter(c, startAt, autoplay) {
+  if (!P) return;
+  saveProgress(true);
+  const id = P.item.id, ch = P.item.chapters[c];
+  if (!ch) return;
+  P.c = c; $('pChapter').value = c;
+  player.pause();
+  const st = $('pStatus');
+  try {
+    let data = P.cache[c];
+    if (!data || data.parts < ch.n) {
+      setStatus(st, 'Loading audio...');
+      const texts = (await api({ action: 'audio_text', token, id, chapter: c })).texts;
+      const bufs = new Array(ch.n);
+      let next = 0, stop = ch.n;
+      const worker = async () => {
+        while (next < stop) {
+          const k = next++;
+          try { bufs[k] = unb64((await api({ action: 'audio_part', token, id, chapter: c, index: k })).data); }
+          catch (e) { if (/not ready/i.test(e.message)) { stop = Math.min(stop, k); continue; } throw e; }
+          setStatus(st, 'Loading audio: ' + bufs.filter(Boolean).length + ' of ' + ch.n);
         }
-        progress = 'Downloading audio: ' + (++got) + ' of ' + d.segments;
-      }
+      };
+      await Promise.all([worker(), worker(), worker(), worker()]);
+      let parts = 0; while (parts < ch.n && bufs[parts]) parts++;
+      if (!parts) throw new Error('This chapter has not been converted yet.');
+      const segs = []; let t = 0;
+      for (let k = 0; k < parts; k++) { const d = mp3Duration(bufs[k]); segs.push({ t0: t, dur: d }); t += d; }
+      const blob = new Blob(bufs.slice(0, parts), { type: 'audio/mpeg' });
+      if (data) URL.revokeObjectURL(data.url);
+      data = P.cache[c] = { texts, segs, parts, blob, url: URL.createObjectURL(blob) };
+    }
+    if (P.c !== c || P.item.id !== id) return;          // the user moved on meanwhile
+    renderReadText(data);
+    P.sents = data.sents; P.cur = -1;
+    player.src = data.url;
+    player.playbackRate = Number($('arate').value);
+    player.onloadedmetadata = () => {
+      player.playbackRate = Number($('arate').value);
+      if (startAt) player.currentTime = Math.min(startAt, player.duration - 1);
+      if (autoplay) player.play().catch(() => {});
+      highlight();
     };
-    await Promise.all([worker(), worker(), worker()]);
-    const blob = new Blob(segs, { type: 'audio/mpeg' });
-    const base = name.replace(/\.pdf$/i, '');
-    audioOut = { blob, url: URL.createObjectURL(blob), script: d.script, base, d, pages };
-    $('player').src = audioOut.url;
-    $('audioTitle').textContent = base;
-    $('audioScript').textContent = d.script;
-    $('audioResult').classList.remove('hidden');
-    showAudioInfo(); showUsage(d);
-    store('mp_audio_job', null);
-    clearInterval(timer); setStatus(st, 'Done.');
-  } catch (e) { clearInterval(timer); throw e; }
+    setStatus(st, data.parts < ch.n ? 'Converted so far: ' + data.parts + ' of ' + ch.n + ' parts of this chapter.' : '');
+  } catch (e) { setStatus(st, e.message, true); if (/log in again/i.test(e.message)) logout(); }
 }
 
-function showAudioInfo() {
-  if (!audioOut) return;
-  const d = audioOut.d, dur = $('player').duration;
-  const parts = [audioOut.pages + ' pages', d.chars.toLocaleString() + ' characters read', 'voice ' + d.voice + ' (' + d.lang + ')'];
-  if (isFinite(dur)) parts.push(Math.round(dur / 60) + ' min at 1×');
-  parts.push('Claude cost $' + d.cost.toFixed(3));
-  if (d.ttsCap) parts.push('speech used this month: ' + Math.round(d.ttsUsed / 1000) + 'k of ' + Math.round(d.ttsCap / 1000) + 'k characters');
-  $('audioInfo').textContent = parts.join(' · ');
+function renderReadText(data) {
+  const box = $('pText'); box.textContent = '';
+  const sents = [];
+  data.texts.forEach((text, k) => {
+    const seg = data.segs[k];
+    const paras = text.split(/\n+/).filter((p) => p.trim());
+    const pieces = paras.map((p) => p.split(SENT_SPLIT).filter((s) => s.trim()));
+    const total = pieces.flat().reduce((n, s) => n + speakWeight(s), 0) || 1;
+    let t = seg ? seg.t0 : null;
+    pieces.forEach((ps) => {
+      const pEl = el('p');
+      ps.forEach((s) => {
+        const sp = el('span', 's' + (seg ? '' : ' pend'), s);
+        pEl.appendChild(sp); pEl.appendChild(document.createTextNode(/[A-Za-z0-9.,;:!?"')]$/.test(s) ? ' ' : ''));
+        if (seg) {
+          const d = seg.dur * speakWeight(s) / total, entry = { t0: t, t1: t + d, el: sp };
+          sp.onclick = () => { player.currentTime = entry.t0 + 0.02; player.play().catch(() => {}); lastUserScroll = 0; };
+          sents.push(entry); t += d;
+        }
+      });
+      box.appendChild(pEl);
+    });
+  });
+  data.sents = sents;
+  box.scrollTop = 0;
 }
 
-$('dlAudioBtn').onclick = () => audioOut && downloadBlob(audioOut.base + '.mp3', audioOut.blob);
-$('dlScriptBtn').onclick = () => audioOut && download(audioOut.base + '_script.txt', audioOut.script);
+function highlight() {
+  if (!P || !P.sents || !P.sents.length) return;
+  const t = player.currentTime, S = P.sents;
+  let lo = 0, hi = S.length - 1;
+  while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (S[mid].t0 <= t) lo = mid; else hi = mid - 1; }
+  if (lo === P.cur) return;
+  if (P.cur >= 0 && S[P.cur]) S[P.cur].el.classList.remove('cur');
+  P.cur = lo; const e = S[lo].el; e.classList.add('cur');
+  const box = $('pText');
+  if ($('pFollow').checked && Date.now() - lastUserScroll > 5000) {
+    const top = e.offsetTop - box.offsetTop - box.clientHeight / 3;
+    box.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+  }
+}
+function frame() { if (!rafOn) return; highlight(); requestAnimationFrame(frame); }
+player.addEventListener('play', () => { rafOn = true; requestAnimationFrame(frame); });
+player.addEventListener('pause', () => { rafOn = false; saveProgress(true); });
+player.addEventListener('seeked', highlight);
+player.addEventListener('timeupdate', () => { if (Date.now() - lastSave > 20000) saveProgress(false); });
+player.addEventListener('ended', () => {
+  rafOn = false;
+  if (!P) return;
+  const chs = P.item.chapters, n = P.c + 1;
+  const ready = P.item.state === 'processing' && P.item._ready ? P.item._ready[n] : (chs[n] && chs[n].n);
+  if (n < chs.length && ready) loadChapter(n, 0, true);
+  else saveProgress(true);
+});
+['wheel', 'touchmove', 'keydown'].forEach((ev) => $('pText').addEventListener(ev, () => { lastUserScroll = Date.now(); }, { passive: true }));
+$('arate').onchange = () => { player.playbackRate = Number($('arate').value); lsSet('mp_rate', $('arate').value); };
+try { const r = lsGet('mp_rate'); if (r) $('arate').value = r; } catch (e) {}
+
+/** Saves the listening position locally and in the library (so it follows the account). */
+function saveProgress(force) {
+  if (!P || P.c < 0 || !player.src) return;
+  const t = player.currentTime || 0;
+  if (!force && Date.now() - lastSave < 20000) return;
+  lastSave = Date.now();
+  const pos = { c: P.c, t, at: Date.now() };
+  lsSet('mp_pos_' + P.item.id, JSON.stringify(pos));
+  P.item.pos = pos;
+  api({ action: 'audio_progress', token, id: P.item.id, chapter: P.c, time: t }).catch(() => {});
+}
+window.addEventListener('pagehide', () => {
+  if (!P || P.c < 0 || !token) return;
+  try { navigator.sendBeacon(BACKEND_URL, JSON.stringify({ action: 'audio_progress', token, id: P.item.id, chapter: P.c, time: player.currentTime || 0 })); } catch (e) {}
+});
+
+$('dlAudioBtn').onclick = () => {
+  if (!P || !P.cache[P.c]) return;
+  const chs = P.item.chapters;
+  downloadBlob(P.item.title + (chs.length > 1 ? ' - ' + chs[P.c].title : '') + '.mp3', P.cache[P.c].blob);
+};
+$('dlScriptBtn').onclick = () => {
+  if (!P || !P.cache[P.c]) return;
+  const chs = P.item.chapters;
+  download(P.item.title + (chs.length > 1 ? ' - ' + chs[P.c].title : '') + '.txt', P.cache[P.c].texts.join('\n'));
+};
 
 // ---------------------------------------------------------------------------
 // File reading (shared): .docx text is extracted in the browser
