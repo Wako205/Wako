@@ -991,7 +991,8 @@ async function loadLibrary() {
     const az = $('azVoices'); az.disabled = !libUsage.azReady; az.classList.toggle('hidden', !libUsage.azReady);
     if (!libUsage.azReady && /^az:/.test($('avoice').value)) $('avoice').value = 'Charon';
     $('libUsage').textContent = 'Speech used this month: ' + (libUsage.azReady ? 'Google ' : '') + fmtK(libUsage.used, true) + ' of ' + fmtK(libUsage.cap) +
-      (libUsage.azReady ? ' · Microsoft ' + fmtK(libUsage.azUsed, true) + ' of ' + fmtK(libUsage.azCap) : '');
+      (libUsage.azReady ? ' · Microsoft' + (d.azTier === 's0' && d.azUntil ? ' (trial tier until ' + new Date(d.azUntil - 1).toLocaleDateString() + ')' : '') + ' ' +
+        fmtK(libUsage.azUsed, true) + ' of ' + fmtK(libUsage.azCap) : '');
     renderLibrary(); bookSummary();
     pollLibrary();
   } catch (e) {
