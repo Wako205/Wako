@@ -79,57 +79,16 @@ test('lock-screen metadata and controls', async ({ page, backend }) => {
   expect(await meta()).toBeNull();
 });
 
-test.describe('iOS', () => {
-  test.use({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1' });
-
-  const setHidden = (page, hidden) => page.evaluate((h) => {
-    Object.defineProperty(document, 'hidden', { configurable: true, get: () => h });
-    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => (h ? 'hidden' : 'visible') });
-    document.dispatchEvent(new Event('visibilitychange'));
-  }, hidden);
-
-  test('falls back to a plain audio element while the page is hidden', async ({ page, backend }) => {
-    await openBook(page);
-    await page.selectOption('#pVol', 'loud');
-    await page.locator('#pText span.s').nth(1).click();            // a tap: starts playback and unlocks the spare element
-    await expect.poll(() => page.evaluate(() => !!(AG && AG.el === player && spareAudio))).toBe(true);
-    const t0 = (await state(page)).t;
-
-    await setHidden(page, true);
-    expect(await page.evaluate(() => AG.el !== player && document.getElementById('player') === player)).toBe(true);
-    await expect.poll(async () => (await state(page)).paused).toBe(false);
-    await expect.poll(async () => (await state(page)).t).toBeGreaterThan(t0 + 0.3);
-    expect(await page.locator('audio').count()).toBe(1);
-    // While hidden, a new play does not route the element through Web Audio again.
-    await page.evaluate(() => { player.pause(); return player.play(); });
-    expect(await page.evaluate(() => AG.el !== player)).toBe(true);
-
-    // Back in the foreground, the next play uses the loudness chain again.
-    await setHidden(page, false);
-    await page.evaluate(() => { player.pause(); return player.play(); });
-    await expect.poll(() => page.evaluate(() => AG.el === player)).toBe(true);
-    // The highlight still follows the new element.
-    await page.locator('#pText span.s').nth(4).click();
-    await expect.poll(() => page.evaluate(() => Array.from(document.querySelectorAll('#pText span.s')).findIndex((s) => s.classList.contains('cur')))).toBe(4);
-    await page.evaluate(() => player.pause());
+test('playback never goes through Web Audio, so it continues with the screen locked', async ({ page, backend }) => {
+  await page.addInitScript(() => {
+    window.__routed = 0;
+    const orig = AudioContext.prototype.createMediaElementSource;
+    AudioContext.prototype.createMediaElementSource = function (el) { window.__routed++; return orig.call(this, el); };
   });
-});
-
-test.describe('iOS volume', () => {
-  test.use({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1' });
-
-  test('Original is the default on iPhone, and choosing it leaves Web Audio while playing', async ({ page, backend }) => {
-    await openBook(page);
-    await expect(page.locator('#pVol')).toHaveValue('normal');
-    expect(await page.evaluate(() => typeof AG === 'undefined' || !AG)).toBe(true);
-    await page.selectOption('#pVol', 'loud');
-    await expect(page.locator('#pStatus')).toContainText('use Original');
-    await page.locator('#pText span.s').nth(1).click();           // plays through the loudness chain
-    await expect.poll(() => page.evaluate(() => !!AG && AG.el === player && !player.paused)).toBe(true);
-    await page.selectOption('#pVol', 'normal');
-    await expect.poll(() => page.evaluate(() => AG.el !== player && document.getElementById('player') === player)).toBe(true);
-    await expect.poll(async () => (await state(page)).paused).toBe(false);
-    expect(await page.locator('audio').count()).toBe(1);
-    await page.evaluate(() => player.pause());
-  });
+  await openBook(page);
+  await expect(page.locator('#pVol')).toHaveCount(0);
+  await page.locator('#pText span.s').nth(1).click();
+  await expect.poll(async () => (await state(page)).paused).toBe(false);
+  expect(await page.evaluate(() => window.__routed)).toBe(0);
+  await page.evaluate(() => player.pause());
 });
