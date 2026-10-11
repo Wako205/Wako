@@ -104,7 +104,8 @@
   .readtext span.s.flash { background:var(--hl2); }
   .marks { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
   .mark { border:1px solid var(--line); border-radius:8px; padding:6px 10px; font-size:13px; display:flex; gap:8px; align-items:center; background:var(--soft); }
-  .mark b { font-weight:600; } .mark .w { color:var(--muted); max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .mark { min-width:0; max-width:100%; box-sizing:border-box; }
+  .mark b { font-weight:600; } .mark .w { color:var(--muted); max-width:220px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .mark button { padding:3px 8px; font-size:12px; }
   .readtext span.s.pend { color:var(--pend); cursor:default; }
   h2 { font-size: 18px; margin: 24px 0 12px; }
@@ -1103,7 +1104,7 @@ function renderLibrary() {
     g.appendChild(el('div', 'm', meta.join(' · ')));
     if (it.state === 'processing') {
       const ready = (it._ready || []).reduce((a, b) => a + b, 0), total = (it.chapters || []).reduce((a, c) => a + c.n, 0);
-      g.appendChild(el('div', 'm', (it._progress || 'Converting...') + (ready && total ? ' · you can start listening to finished chapters' : '')));
+      g.appendChild(el('div', 'm', (it._progress || 'Converting...') + (ready && total ? ' · you can start listening to finished chapters' : '') + ' · you can close this page while a conversion runs'));
       const bar = el('div', 'bar'); const i = el('i'); i.style.width = (total ? Math.round(100 * ready / total) : 3) + '%'; bar.appendChild(i); g.appendChild(bar);
     }
     if (it.state === 'error') g.appendChild(el('div', 'm', 'Failed: ' + (it.error || 'unknown error')));
@@ -1900,6 +1901,12 @@ function saveMark(slot) {
   api({ action: 'audio_progress', token, id: P.item.id, slot, chapter: m.c, time: m.t, label: m.label, ...ownerOf(P.item) })
     .catch((e) => setStatus($('pStatus'), 'Bookmark saved on this device only: ' + e.message, true));
 }
+/** A bookmark label kept short: at most 6 characters of Chinese or Japanese, 16 of other text. */
+function shortLabel(s) {
+  s = String(s).replace(/\s+/g, ' ').trim();
+  const max = /[\u3040-\u30ff\u3400-\u9fff]/.test(s) ? 6 : 16;
+  return s.length > max ? s.slice(0, max) + '…' : s;
+}
 function renderMarks() {
   const box = $('pMarks'); if (!box) return; box.textContent = '';
   if (!P) return;
@@ -1908,7 +1915,7 @@ function renderMarks() {
     const d = el('div', 'mark');
     d.appendChild(el('b', null, name));
     d.appendChild(el('span', null, m ? markText(m) : 'empty'));
-    if (m && m.label) { const w = el('span', 'w', m.label); w.title = m.label; d.appendChild(w); }
+    if (m && m.label) { const w = el('span', 'w', shortLabel(m.label)); w.title = m.label; d.appendChild(w); }
     if (m) { const go = el('button', 'small', 'Go'); go.onclick = () => goToMark(m); d.appendChild(go); }
     if (slot !== 'last') { const sv = el('button', 'ghost small', m ? 'Replace' : 'Save here'); sv.title = 'Save the current position as ' + name; sv.onclick = () => saveMark(slot); d.appendChild(sv); }
     box.appendChild(d);

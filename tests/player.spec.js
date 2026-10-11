@@ -52,7 +52,8 @@ test('saves two bookmarks that survive a reload', async ({ page, backend }) => {
   await expect(marks).toHaveCount(3);
   await marks.nth(1).getByRole('button', { name: 'Save here' }).click();
   await expect(marks.nth(1)).toContainText('0:05');
-  await expect(marks.nth(1)).toContainText('The second part begins here.');
+  await expect(marks.nth(1)).toContainText('The second part …');
+  await expect(marks.nth(1).locator('.w')).toHaveAttribute('title', 'The second part begins here.');
   const saved = backend.callsOf('audio_progress').find((c) => c.slot === 'b1');
   expect(saved).toMatchObject({ id: 'book1', chapter: 0, slot: 'b1', label: 'The second part begins here.' });
   expect(saved.time).toBeCloseTo(5.2, 1);
