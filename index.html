@@ -225,7 +225,8 @@
           <div id="bookChapters" class="chlist"></div>
         </div>
         <label for="avoice">Voice</label>
-        <select id="avoice">
+        <div class="row" style="flex-wrap:nowrap">
+        <select id="avoice" style="flex:1">
           <option value="Charon">Charon (male, calm)</option>
           <option value="Kore">Kore (female, clear)</option>
           <option value="Aoede">Aoede (female, light)</option>
@@ -233,6 +234,8 @@
           <option value="Puck">Puck (male, lively)</option>
           <option value="Leda">Leda (female, youthful)</option>
         </select>
+        <button class="ghost" id="previewBtn" type="button" title="Hear the first sentences of the selected text in this voice (uses about 0.1k characters of the allowance)">试听 Preview</button>
+        </div>
         <div class="row" style="margin-top:16px"><button id="audioBtn">Generate audio</button><span class="status" id="audioStatus"></span></div>
         <div class="notice" style="margin-top:14px">The type of document is detected automatically. Papers: Claude rewrites the PDF into a listening script (references and citation numbers skipped; equations and units read in words), then Google Chirp 3 HD reads it. Books and other text: read as written, chapter by chapter, with running headers and page numbers removed. English, Japanese and Chinese are detected automatically. Every conversion is saved to your library below, together with your listening position, so it never has to be converted twice. You can close this page while a conversion runs.</div>
       </div>
@@ -662,6 +665,26 @@ async function splitPdfRanges(bytes, ranges) {
   return { parts, total };
 }
 
+// Plays a short sample of the chosen voice reading the beginning of the selected text.
+let previewAudio = null;
+$('previewBtn').onclick = async () => {
+  const st = $('audioStatus');
+  const src = bookData && (bookData.chapters.find((c) => c.sel !== false && !c.front && c.text.length > 20) || bookData.chapters.find((c) => c.text.length > 20));
+  const sample = src ? src.text : 'This is a short sample of the selected voice. 这是所选声音的试听。';
+  let text = sample.replace(/\s+/g, ' ').trim().slice(0, 140);
+  const cut = Math.max(text.lastIndexOf('。'), text.lastIndexOf('. '), text.lastIndexOf('！'), text.lastIndexOf('？'));
+  if (cut > 40) text = text.slice(0, cut + 1);
+  $('previewBtn').disabled = true; setStatus(st, 'Preparing a sample of ' + $('avoice').value + '...');
+  try {
+    const d = await api({ action: 'audio_preview', token, voice: $('avoice').value, text });
+    if (previewAudio) previewAudio.pause();
+    previewAudio = new Audio(URL.createObjectURL(new Blob([unb64(d.data)], { type: 'audio/mpeg' })));
+    previewAudio.play().catch(() => {});
+    setStatus(st, 'Playing a sample (' + d.lang + ', ' + fmtK(d.chars) + ').');
+  } catch (e) { setStatus(st, e.message, true); if (/log in again/i.test(e.message)) logout(); }
+  $('previewBtn').disabled = false;
+};
+
 $('audioBtn').onclick = async () => {
   const f = $('apdf').files[0], st = $('audioStatus');
   if (!f) return setStatus(st, 'Choose a PDF first.', true);
@@ -675,8 +698,10 @@ $('audioBtn').onclick = async () => {
     const payload = { action: 'audio_start', token, filename: f.name, voice: $('avoice').value, kind: kind === 'book' ? 'book' : 'paper' };
     if (kind === 'book') {
       if (!bookData) throw new Error('Could not read the text of this PDF.');
-      payload.chapters = bookData.chapters.filter((c) => c.sel !== false).map((c) => ({ title: c.title, text: c.text }));
-      if (!payload.chapters.length) throw new Error('Select at least one chapter.');
+      // The whole book is stored, so other chapters can be converted later from the library.
+      payload.chapters = bookData.chapters.map((c) => ({ title: c.title, text: c.text }));
+      payload.selected = bookData.chapters.map((c, i) => (c.sel !== false ? i : -1)).filter((i) => i >= 0);
+      if (!payload.selected.length) throw new Error('Select at least one chapter.');
     } else if (kind === 'thesis') {
       const sel = bookData.chapters.filter((c) => c.sel !== false);
       if (!sel.length) throw new Error('Select at least one chapter.');
@@ -691,9 +716,13 @@ $('audioBtn').onclick = async () => {
       if (total > 160) throw new Error('This PDF has ' + total + ' pages; paper mode handles up to 160.');
       payload.parts = parts; payload.pages = total;
     }
-    if (bytes.length < 25e6) payload.pdf = b64(bytes);
-    setStatus(st, 'Uploading...');
-    await api(payload);
+    // A copy of the original goes to Drive only when small; books need just the extracted text.
+    if (kind !== 'book' && bytes.length < 8e6) payload.pdf = b64(bytes);
+    const mb = JSON.stringify(payload).length / 1e6;
+    if (mb > 45) throw new Error('Upload too large (' + mb.toFixed(0) + ' MB). Select fewer chapters and try again.');
+    setStatus(st, 'Uploading ' + mb.toFixed(1) + ' MB...');
+    try { await api(payload); }
+    catch (e) { if (/failed to fetch|load failed|network/i.test(e.message)) throw new Error('Upload failed (' + mb.toFixed(1) + ' MB). Check the connection, or select fewer chapters, and try again.'); throw e; }
     setStatus(st, 'Started. It appears in your library below; you can close this page meanwhile.');
     $('apdf').value = ''; bookData = null; docKind = null; renderKind(); renderBookPanel();
     await loadLibrary();
@@ -736,7 +765,8 @@ function renderLibrary() {
     const t = el('div', 't', it.title); t.onclick = () => openItem(it.id);
     g.appendChild(t);
     const meta = [it.kind === 'book' ? 'Book' : 'Paper', new Date(it.created).toLocaleDateString()];
-    if (it.chapters && it.chapters.length > 1) meta.push(it.chapters.length + ' chapters');
+    if (it.kind === 'book') meta.push(chaptersDone(it) + ' of ' + it.chapters.length + ' chapters converted');
+    else if (it.chapters && it.chapters.length > 1) meta.push(it.chapters.length + ' chapters');
     if (it.chars) meta.push('about ' + fmtDur(itemMinutes(it)));
     if (it.voice) meta.push('voice ' + it.voice);
     if (it.pos && it.chapters && it.chapters[it.pos.c]) meta.push('resume at ' + (it.chapters.length > 1 ? it.chapters[it.pos.c].title + ' ' : '') + fmtTime(it.pos.t));
@@ -749,8 +779,11 @@ function renderLibrary() {
     if (it.state === 'error') g.appendChild(el('div', 'm', 'Failed: ' + (it.error || 'unknown error')));
     row.appendChild(g);
     const open = el('button', 'small', it.pos ? 'Resume' : 'Listen'); open.onclick = () => openItem(it.id);
-    open.disabled = it.state === 'error' || (it.state === 'processing' && !(it._ready || []).some((n) => n > 0));
+    open.disabled = !(it.chapters || []).some((ch, i) => chapterReadyCount(it, i) > 0);
     row.appendChild(open);
+    if (it.kind === 'book' && it.state !== 'processing' && chaptersDone(it) < it.chapters.length) {
+      const add = el('button', 'ghost small', 'Add chapters'); add.onclick = () => toggleAddPanel(it, row); row.appendChild(add);
+    }
     if (it.state !== 'processing') {
       const del = el('button', 'ghost small', 'Delete');
       del.onclick = async () => {
@@ -764,6 +797,52 @@ function renderLibrary() {
   });
 }
 
+function chaptersDone(it) { return (it.chapters || []).filter((c) => c.status === 'done' || (!c.status && c.n > 0)).length; }
+/** Segments of chapter c that can be played now. */
+function chapterReadyCount(it, c) {
+  const ch = it.chapters[c];
+  if (!ch) return 0;
+  if (ch.status === 'done' || (!ch.status && it.state !== 'processing')) return ch.n;
+  if (ch.status === 'queued' || (!ch.status && it.state === 'processing')) return it._ready ? it._ready[c] || 0 : 0;
+  return 0;
+}
+
+/** Panel under a library book: pick more chapters to convert, without uploading the PDF again. */
+function toggleAddPanel(it, row) {
+  const old = row.nextSibling && row.nextSibling.classList && row.nextSibling.classList.contains('addpanel') ? row.nextSibling : null;
+  if (old) { old.remove(); return; }
+  const box = el('div', 'card addpanel'); box.style.margin = '-4px 0 12px';
+  box.appendChild(el('div', 'm', 'Choose chapters of "' + it.title + '" to convert. Converted chapters are ticked and kept.'));
+  const list = el('div', 'chlist'); const picks = [];
+  it.chapters.forEach((ch, i) => {
+    const lab = el('label'); const cb = el('input'); cb.type = 'checkbox';
+    const done = ch.status === 'done' || ch.status === 'queued';
+    cb.checked = done; cb.disabled = done; cb.onchange = () => { picks[i] = cb.checked; sum(); };
+    lab.appendChild(cb); lab.appendChild(el('span', null, ch.title + (done ? ' (converted)' : '')));
+    lab.appendChild(el('span', 'n', fmtK(ch.chars || 0) + ' · ' + fmtDur((ch.chars || 0) / (it.lang && it.lang !== 'en-US' ? 270 : 900))));
+    list.appendChild(lab);
+  });
+  box.appendChild(list);
+  const row2 = el('div', 'row'); row2.style.marginTop = '10px';
+  const voice = $('avoice').cloneNode(true); voice.removeAttribute('id'); voice.style.width = 'auto'; voice.value = it.voice || 'Charon';
+  const go = el('button', null, 'Convert selected'); const st = el('span', 'status');
+  const sum = () => {
+    const chars = it.chapters.reduce((n, ch, i) => n + (picks[i] ? ch.chars || 0 : 0), 0);
+    const left = Math.max(0, libUsage.cap - libUsage.used);
+    st.textContent = chars ? fmtK(chars) + ' of speech; allowance left ' + fmtK(left, true) + ' of ' + fmtK(libUsage.cap) + (chars > left ? ' (not enough)' : '') : 'Tick chapters to convert.';
+    go.disabled = !chars;
+  };
+  go.onclick = async () => {
+    go.disabled = true; setStatus(st, 'Starting...');
+    try {
+      await api({ action: 'audio_add', token, id: it.id, voice: voice.value, selected: picks.map((v, i) => (v ? i : -1)).filter((i) => i >= 0) });
+      box.remove(); await loadLibrary();
+    } catch (e) { setStatus(st, e.message.replace(/(\d{4,}) characters/g, (m, n) => fmtK(Number(n))), true); go.disabled = false; }
+  };
+  row2.appendChild(el('span', 'm', 'Voice')); row2.appendChild(voice); row2.appendChild(go); row2.appendChild(st);
+  box.appendChild(row2); row.after(box); sum();
+}
+
 // Polls conversions in progress; the server also uses these polls to restart a stalled job.
 function pollLibrary() {
   clearTimeout(libTimer);
@@ -773,10 +852,10 @@ function pollLibrary() {
     let reload = false;
     for (const it of busy) {
       try {
-        const d = await api({ action: 'status', token, jobId: it.id });
+        const d = await api({ action: 'status', token, jobId: it.jobId || it.id });
         if (d.state === 'done') { reload = true; continue; }
         it._progress = d.progress; it._ready = d.ready || it._ready;
-        if (d.chapters && d.chapters.length) it.chapters = d.chapters;
+        if (d.chapters && d.chapters.length && it.kind !== 'book') it.chapters = d.chapters;
       } catch (e) { reload = true; }
     }
     if (reload) return loadLibrary();
@@ -834,7 +913,9 @@ function openItem(id) {
   $('playerCard').classList.remove('hidden');
   $('pTitle').textContent = it.title;
   refreshChapterSelect();
-  loadChapter(Math.min(pos.c || 0, (it.chapters || []).length - 1), pos.t || 0, false);
+  let startC = Math.min(pos.c || 0, (it.chapters || []).length - 1), startT = pos.t || 0;
+  if (!chapterReadyCount(it, startC)) { startC = Math.max(0, it.chapters.findIndex((ch, i) => chapterReadyCount(it, i) > 0)); startT = 0; }
+  loadChapter(startC, startT, false);
   $('playerCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -845,8 +926,9 @@ function refreshChapterSelect() {
   const chs = it.chapters || [];
   sel.textContent = '';
   chs.forEach((ch, i) => {
-    const ready = it.state === 'processing' && it._ready ? it._ready[i] : ch.n;
-    const o = el('option', null, ch.title + (ready < ch.n ? (ready ? ' (partly ready)' : ' (converting)') : ''));
+    const ready = chapterReadyCount(it, i);
+    const label = ch.status === 'none' ? ' (not converted)' : ready < ch.n ? (ready ? ' (partly ready)' : ' (converting)') : '';
+    const o = el('option', null, ch.title + label);
     o.value = i; o.disabled = !ready; sel.appendChild(o);
   });
   sel.value = Math.max(0, P.c);
@@ -854,8 +936,12 @@ function refreshChapterSelect() {
   $('pPrev').style.display = $('pNext').style.display = chs.length > 1 ? '' : 'none';
 }
 $('pChapter').onchange = () => loadChapter(Number($('pChapter').value), 0, true);
-$('pPrev').onclick = () => { if (P && P.c > 0) loadChapter(P.c - 1, 0, true); };
-$('pNext').onclick = () => { if (P && P.c < P.item.chapters.length - 1) loadChapter(P.c + 1, 0, true); };
+function stepChapter(d) {
+  if (!P) return;
+  for (let n = P.c + d; n >= 0 && n < P.item.chapters.length; n += d) if (chapterReadyCount(P.item, n)) return loadChapter(n, 0, true);
+}
+$('pPrev').onclick = () => stepChapter(-1);
+$('pNext').onclick = () => stepChapter(1);
 $('pClose').onclick = () => closePlayer();
 function closePlayer() {
   saveProgress(true);
@@ -1111,9 +1197,10 @@ player.addEventListener('timeupdate', () => { if (Date.now() - lastSave > 20000)
 player.addEventListener('ended', () => {
   rafOn = false;
   if (!P) return;
-  const chs = P.item.chapters, n = P.c + 1;
-  const ready = P.item.state === 'processing' && P.item._ready ? P.item._ready[n] : (chs[n] && chs[n].n);
-  if (n < chs.length && ready) loadChapter(n, 0, true);
+  const chs = P.item.chapters;
+  let n = P.c + 1;
+  while (n < chs.length && chs[n].status === 'none') n++;          // skip chapters not converted
+  if (n < chs.length && chapterReadyCount(P.item, n)) loadChapter(n, 0, true);
   else saveProgress(true);
 });
 ['wheel', 'touchmove', 'keydown'].forEach((ev) => $('pText').addEventListener(ev, () => { lastUserScroll = Date.now(); }, { passive: true }));
