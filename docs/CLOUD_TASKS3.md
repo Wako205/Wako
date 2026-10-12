@@ -34,3 +34,12 @@ Optional quiet lo-fi music while listening, playing together with the speech.
 ## F. Continue listening
 - After login, show at the top of the PDF to audio tab a "Continue listening" card for the item (own or shared) with the most recent position: title, chapter, time, sentence label, and one button that opens the player there.
 - In the library, sort items by last listened (most recent position first), with an option to sort by date added. Remember the choice in this browser.
+
+## G. Visual polish of the whole page
+Redesign the layout and typography of `index.html` so the page looks calm, aligned and consistent. Behaviour and element ids stay the same; every existing test must keep passing (update a test only where it checks wording you removed, and say so in the pull request).
+- Alignment: one grid and one spacing scale (for example 4, 8, 12, 16, 24 px) for every card, row, label and control. Labels, fields and buttons in a row share a baseline and a height; card edges, headings and lists line up on the same left edge; numbers (times, sizes, percentages) use tabular figures and right-align in lists.
+- Type: at most four font sizes on the page (for example 12, 14, 16 and 20 px) and two weights; one line height for body text and one for the reading text (Chinese reading text stays large and comfortable). No text smaller than 12 px.
+- Remove explanations that are not needed: shorten or delete notices and helper sentences that repeat what the controls already say (for example the long paragraph under "Generate audio", the music panel notes, repeated hints in the library rows). Keep only text a first-time user needs to act; move rare details into `title` tooltips.
+- Icons and buttons: one icon style (inline SVG, same stroke width, same 16 or 20 px box, `currentColor`), used consistently for play, pause, previous, next, close, music, sleep, search, offline, share, delete. Text buttons in one row have equal height; primary, secondary (ghost) and destructive buttons each have one look. Every icon-only button has an `aria-label` and a 44 px touch target on phones.
+- Keep the three themes (护眼 default and first, 白天, 黑夜) with the same tokens; check contrast (WCAG AA for text). Keep everything working at 360 to 430 px with no horizontal scrolling and 44 px targets (`tests/phone-layout.spec.js`), and at desktop widths.
+- Attach before and after screenshots (desktop and 390 px, each theme for the audio tab and the open player) to the pull request.
