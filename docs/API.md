@@ -29,6 +29,8 @@ Every call is `POST` with a JSON body `{action, token, ...}` (sent as `text/plai
 | `audio_progress` | `id, chapter, time, label, slot ('last','b1','b2')`, optional `owner` | `ok` (for a shared item the position is stored for the caller only) |
 | `audio_delete` | `id` | `ok` (also stops sharing it) |
 | `audio_chapter_delete` | `id, chapter` (a converted chapter of a book) | `items`; the chapter becomes `status 'none'` and can be converted again |
+| `translate` | `paras [string]` (at most 1000 and 45,000 characters), `to` (`zh-Hans`, `zh-Hant`, `en`, `ja`, `ko`, `fr`, `de`, `es`, `it`, `pt`, `ru`, `ar`, `vi`, `th`, `id`), optional `from` | `translations [string]`, `detected [code]`, `used`, `cap` (Azure AI Translator; characters this month) |
+| `translate_usage` | | `ready, used, cap` |
 | `audio_rename` | `id, title` | `title` (renames an item of your own library) |
 | `audio_share` | `id, shared (true/false)` | `shared`; only the owner can share |
 | `audio_public` | | `items`: shared items of every account, `{id, owner, mine, title, kind, created, sharedAt, state, voice, lang, chars, chapters, pos, marks}` with the caller's own `pos` and `marks` |

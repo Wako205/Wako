@@ -61,6 +61,15 @@
 
   /* chat */
   #chatView { display:flex; flex-direction:column; flex:1; min-height: 60vh; }
+  #trText { width:100%; margin:10px 0; font-size:16px; line-height:1.6; }
+  .trhead select { width:auto; min-width:150px; }
+  .trout { margin-top:12px; font-size:16px; line-height:1.7; }
+  .trout .tp { display:grid; grid-template-columns:1fr; gap:4px 24px; padding:6px 0; border-bottom:1px solid var(--line); }
+  .trout.both .tp { grid-template-columns:1fr 1fr; }
+  .trout .src { display:none; color:var(--muted); white-space:pre-wrap; }
+  .trout.both .src { display:block; }
+  .trout .dst { white-space:pre-wrap; }
+  @media (max-width: 700px) { .trout.both .tp { grid-template-columns:1fr; } }
   #messages { flex:1; overflow-y:auto; padding: 4px 2px; }
   .msg { margin: 10px 0; display:flex; }
   .msg.user { justify-content:flex-end; }
@@ -265,6 +274,7 @@
       <button id="tabAudio" class="active">PDF to audio</button>
       <button id="tabTools" class="hidden" hidden>Polish / Review<span class="wide-only"> (Word &amp; LaTeX)</span></button>
       <button id="tabChat">Chat</button>
+      <button id="tabTrans">Translate</button>
     </div>
 
     <!-- Chat -->
@@ -296,6 +306,32 @@
           <span class="status" id="chatStatus"></span>
         </div>
         <div class="notice" style="margin-top:10px">Attached text and the conversation are stored in the administrator's Google Drive and sent to the Anthropic API. Replies take 20 s to 3 min. Keep this page open.</div>
+      </div>
+    </section>
+
+    <!-- Translate (Azure AI Translator) -->
+    <section id="transView" class="hidden">
+      <div class="card">
+        <div class="row trhead">
+          <label for="trTo" style="margin:0">To</label>
+          <select id="trTo"></select>
+          <label for="trFile" style="margin:0" class="trfile"><input type="file" id="trFile" accept=".txt,.md,.tex,.docx,.pdf,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" class="hidden"><button class="ghost small" type="button" id="trAttach">Open file</button></label>
+          <span class="status" id="trFileName"></span>
+        </div>
+        <textarea id="trText" rows="8" placeholder="Paste text, or open a .txt, .md, .tex, .docx or .pdf file" aria-label="Text to translate"></textarea>
+        <div class="row">
+          <button id="trBtn">Translate</button>
+          <span class="status" id="trStatus" role="status"></span>
+          <span class="status" id="trUsage" style="margin-left:auto"></span>
+        </div>
+      </div>
+      <div id="trResult" class="card hidden">
+        <div class="row">
+          <button class="ghost small" id="trCopy">Copy translation</button>
+          <button class="ghost small" id="trDownload">Download</button>
+          <button class="ghost small" id="trBoth" aria-pressed="false">Show original</button>
+        </div>
+        <div id="trOut" class="trout"></div>
       </div>
     </section>
 
@@ -631,13 +667,15 @@ $('pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('loginBt
 $('logoutBtn').onclick = logout;
 
 $('tabChat').onclick = () => switchTab('chat');
+$('tabTrans').onclick = () => switchTab('trans');
 $('tabTools').onclick = () => switchTab('tools');
 $('tabAudio').onclick = () => switchTab('audio');
 function switchTab(t) {
-  [['chat', 'tabChat', 'chatView'], ['tools', 'tabTools', 'toolsView'], ['audio', 'tabAudio', 'audioView']].forEach(([k, tab, view]) => {
+  [['chat', 'tabChat', 'chatView'], ['tools', 'tabTools', 'toolsView'], ['audio', 'tabAudio', 'audioView'], ['trans', 'tabTrans', 'transView']].forEach(([k, tab, view]) => {
     $(tab).classList.toggle('active', t === k); $(view).classList.toggle('hidden', t !== k);
   });
   if (t === 'audio' && (token || offlineMode)) { renderPron(); loadLibrary(); } else clearTimeout(libTimer);
+  if (t === 'trans' && token) trLoadUsage();
   renderNet();
 }
 
@@ -3344,6 +3382,138 @@ async function readAnyFile(f) {
   if (/\.docx$/i.test(f.name)) { const d = await readDocx(f); return { name: f.name, kind: 'docx', text: d.text, docx: d }; }
   const text = await f.text();
   return { name: f.name, kind: /\.tex$/i.test(f.name) ? 'tex' : 'text', text };
+}
+
+// ---------------------------------------------------------------------------
+// 13b. Translate: paragraphs go to Azure AI Translator through the backend, in batches.
+// Word files keep their layout: each paragraph's text is replaced in place.
+// ---------------------------------------------------------------------------
+const TR_LANGS = [['zh-Hans', '中文（简体）'], ['zh-Hant', '中文（繁體）'], ['en', 'English'], ['ja', '日本語'], ['ko', '한국어'],
+  ['fr', 'Français'], ['de', 'Deutsch'], ['es', 'Español'], ['it', 'Italiano'], ['pt', 'Português'], ['ru', 'Русский'],
+  ['ar', 'العربية'], ['vi', 'Tiếng Việt'], ['th', 'ไทย'], ['id', 'Bahasa Indonesia']];
+const TR_BATCH = 40000;                         // characters per request (the server accepts 45,000)
+let trDoc = null, trResult = null;              // trDoc: {name, kind, paras, docx?}; trResult: {to, out: [string]}
+(() => {
+  const sel = $('trTo');
+  TR_LANGS.forEach(([v, n]) => { const o = el('option', null, n); o.value = v; sel.appendChild(o); });
+  sel.value = lsGet('mp_tr_to') || 'zh-Hans';
+  sel.onchange = () => lsSet('mp_tr_to', sel.value);
+})();
+$('trAttach').onclick = () => $('trFile').click();
+$('trBoth').onclick = () => {
+  const on = $('trOut').classList.toggle('both');
+  $('trBoth').setAttribute('aria-pressed', String(on)); $('trBoth').textContent = on ? 'Hide original' : 'Show original';
+};
+$('trText').addEventListener('input', () => { if (trDoc && trDoc.kind !== 'text') { trDoc = null; $('trFileName').textContent = ''; } });
+
+/** Paragraphs of plain text: blocks separated by blank lines (line breaks inside a block are kept). */
+function textParas(text) { return String(text).replace(/\r\n?/g, '\n').split(/\n[ \t]*\n+/).map((p) => p.trim()).filter(Boolean); }
+
+$('trFile').onchange = async () => {
+  const f = $('trFile').files[0];
+  if (!f) return;
+  const st = $('trStatus');
+  setStatus(st, 'Reading ' + f.name + '...');
+  try {
+    if (/\.docx$/i.test(f.name)) {
+      const d = await readDocx(f);
+      const doc = new DOMParser().parseFromString(d.xml, 'application/xml');
+      const nodes = Array.from(doc.getElementsByTagNameNS(W_NS, 'p'));
+      const paras = nodes.map((p) => Array.from(p.getElementsByTagNameNS(W_NS, 't')).map((t) => t.textContent).join(''));
+      trDoc = { name: f.name, kind: 'docx', paras, docx: d };
+    } else if (/\.pdf$/i.test(f.name) || f.type === 'application/pdf') {
+      const lib = await getPdfjs();
+      const pages = await pdfLines(lib, new Uint8Array(await f.arrayBuffer()), (i, n) => setStatus(st, 'Reading page ' + i + ' of ' + n));
+      const clean = cleanPages(pages);
+      trDoc = { name: f.name, kind: 'pdf', paras: textParas(joinLines([].concat.apply([], clean))) };
+    } else {
+      trDoc = { name: f.name, kind: /\.tex$/i.test(f.name) ? 'tex' : /\.md$/i.test(f.name) ? 'md' : 'text', paras: textParas(await f.text()) };
+    }
+    $('trText').value = trDoc.paras.filter((p) => p.trim()).join('\n\n');
+    $('trFileName').textContent = f.name;
+    const n = trDoc.paras.reduce((a, p) => a + p.length, 0);
+    setStatus(st, fmtK(n) + ' characters' + (n > 50 ? '' : '. No text was found; a scanned PDF has no text layer.'), n <= 50);
+  } catch (e) { trDoc = null; setStatus(st, e.message, true); }
+  $('trFile').value = '';
+};
+
+async function trLoadUsage() {
+  try {
+    const d = await api({ action: 'translate_usage', token });
+    $('trUsage').textContent = d.ready ? fmtK(d.used, true) + ' of ' + fmtK(d.cap) + ' this month' : 'Not set up yet';
+    $('trUsage').title = 'Characters translated this month (Azure free tier); resets on the 1st. Contact the administrator to raise the limit.';
+  } catch (e) { $('trUsage').textContent = ''; }
+}
+
+$('trBtn').onclick = async () => {
+  const st = $('trStatus'), to = $('trTo').value;
+  // A file read here keeps its paragraphs (and Word layout) unless the text was edited by hand.
+  const doc = trDoc && $('trText').value === trDoc.paras.filter((p) => p.trim()).join('\n\n') ? trDoc
+    : { name: 'translation.txt', kind: 'text', paras: textParas($('trText').value) };
+  const idx = doc.paras.map((p, i) => (p.trim() ? i : -1)).filter((i) => i >= 0);
+  if (!idx.length) { setStatus(st, 'Nothing to translate.', true); return; }
+  const out = doc.paras.slice();
+  const batches = [];
+  let cur = [], size = 0;
+  idx.forEach((i) => {
+    const p = doc.paras[i].slice(0, TR_BATCH);
+    if (cur.length && (size + p.length > TR_BATCH || cur.length >= 900)) { batches.push(cur); cur = []; size = 0; }
+    cur.push(i); size += p.length;
+  });
+  if (cur.length) batches.push(cur);
+  $('trBtn').disabled = true;
+  try {
+    for (let b = 0; b < batches.length; b++) {
+      setStatus(st, 'Translating' + (batches.length > 1 ? ' part ' + (b + 1) + ' of ' + batches.length : '') + '...');
+      const d = await api({ action: 'translate', token, to, paras: batches[b].map((i) => doc.paras[i].slice(0, TR_BATCH)) }, 90000);
+      batches[b].forEach((i, k) => { out[i] = d.translations[k] || ''; });
+      $('trUsage').textContent = fmtK(d.used, true) + ' of ' + fmtK(d.cap) + ' this month';
+    }
+    trResult = { to, doc, out };
+    renderTrResult();
+    setStatus(st, 'Done.');
+  } catch (e) { setStatus(st, e.message, true); }
+  $('trBtn').disabled = false;
+};
+
+function renderTrResult() {
+  const box = $('trOut'); box.textContent = '';
+  const { doc, out } = trResult;
+  doc.paras.forEach((p, i) => {
+    if (!p.trim()) return;
+    const row = el('div', 'tp');
+    row.append(el('div', 'src', p), el('div', 'dst', out[i]));
+    box.appendChild(row);
+  });
+  $('trResult').classList.remove('hidden');
+}
+
+$('trCopy').onclick = async () => {
+  if (!trResult) return;
+  const text = trResult.out.filter((p, i) => trResult.doc.paras[i].trim()).join('\n\n');
+  try { await navigator.clipboard.writeText(text); setStatus($('trStatus'), 'Copied.'); } catch (e) { setStatus($('trStatus'), 'Copy failed: ' + e.message, true); }
+};
+
+$('trDownload').onclick = async () => {
+  if (!trResult) return;
+  const { doc, out, to } = trResult;
+  const base = doc.name.replace(/\.[^.]+$/, '') + '_' + to;
+  if (doc.kind === 'docx') { downloadBlob(base + '.docx', await writeDocxTranslated(doc.docx, out)); return; }
+  const ext = doc.kind === 'tex' ? '.tex' : doc.kind === 'md' ? '.md' : '.txt';
+  download(base + ext, out.filter((p, i) => doc.paras[i].trim()).join('\n\n') + '\n');
+};
+
+/** The Word file with each paragraph's text replaced by its translation (paragraph and first-run formatting kept). */
+async function writeDocxTranslated(d, out) {
+  const doc = new DOMParser().parseFromString(d.xml, 'application/xml');
+  Array.from(doc.getElementsByTagNameNS(W_NS, 'p')).forEach((p, i) => {
+    const ts = Array.from(p.getElementsByTagNameNS(W_NS, 't'));
+    if (!ts.length || out[i] === undefined || !ts.map((t) => t.textContent).join('').trim()) return;
+    ts[0].textContent = out[i]; ts[0].setAttribute('xml:space', 'preserve');
+    ts.slice(1).forEach((t) => { t.textContent = ''; });
+  });
+  d.zip.file('word/document.xml', new XMLSerializer().serializeToString(doc));
+  return d.zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
 }
 
 // ---------------------------------------------------------------------------

@@ -38,9 +38,9 @@ test('an expired token returns to the login form', async ({ page, backend }) => 
   await expect(page.locator('#loginView')).toBeVisible();
 });
 
-test('PDF to audio is the first tab and opens after login; Chat is last', async ({ page, backend }) => {
+test('PDF to audio is the first tab and opens after login; Chat, then Translate', async ({ page, backend }) => {
   await login(page);
-  expect(await page.locator('.tabs button:visible').allTextContents()).toEqual(['PDF to audio', 'Chat']);   // Polish / Review is hidden for now
+  expect(await page.locator('.tabs button:visible').allTextContents()).toEqual(['PDF to audio', 'Chat', 'Translate']);   // Polish / Review is hidden for now
   await expect(page.locator('#audioView')).toBeVisible();
   await expect(page.locator('#chatView')).toBeHidden();
   await expect(page.locator('#library .libitem').first()).toBeVisible();

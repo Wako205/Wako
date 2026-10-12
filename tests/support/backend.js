@@ -92,6 +92,11 @@ class MockBackend {
       case 'audio_add': return { id: body.id, jobId: 'job-add' };
       case 'audio_delete': this.library = this.library.filter((x) => x.id !== body.id); return {};
       case 'audio_share': { const it = this.item(body.id); if (body.shared) it.shared = Date.now(); else delete it.shared; return { shared: !!body.shared }; }
+      case 'translate_usage': return { ready: true, used: this.trUsed || 0, cap: 2000000 };
+      case 'translate': {
+        this.trUsed = (this.trUsed || 0) + body.paras.join('').length;
+        return { translations: body.paras.map((p) => '[' + body.to + '] ' + p), detected: body.paras.map(() => 'en'), used: this.trUsed, cap: 2000000 };
+      }
       case 'audio_rename': { this.item(body.id).title = body.title; return { title: body.title }; }
       case 'audio_public': return { items: JSON.parse(JSON.stringify(this.shared || [])) };
       case 'audio_chapter_delete': {

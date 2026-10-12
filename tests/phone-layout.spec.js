@@ -30,6 +30,10 @@ for (const width of [360, 390, 430]) {
       await page.click('#tabTools');
       expect(await audit(page, width)).toEqual({ overflow: 0, small: [] });
 
+      await page.click('#tabTrans');
+      expect(await audit(page, width)).toEqual({ overflow: 0, small: [] });
+      await expect(page.locator('#tabTrans')).toBeInViewport({ ratio: 1 });
+
       await openAudio(page);
       expect(await audit(page, width)).toEqual({ overflow: 0, small: [] });
       await page.locator('#library .libitem').first().getByRole('button', { name: 'Add chapters' }).click();
