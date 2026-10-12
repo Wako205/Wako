@@ -21,7 +21,7 @@ Every call is `POST` with a JSON body `{action, token, ...}` (sent as `text/plai
 ## Audio (PDF to speech)
 | action | request | reply |
 |---|---|---|
-| `audio_start` | `filename, voice, kind ('paper' or 'book')`; paper/thesis: `parts` (base64 PDF parts), `pages`, optional `chapterTitles`; book: `chapters [{title,text}]`, `selected [indices]` | `id` (library item), `jobId` |
+| `audio_start` | `filename, voice, kind ('paper' or 'book')`, optional `title` (shown in the library; default: file name); paper/thesis: `parts` (base64 PDF parts), `pages`, optional `chapterTitles`; book: `chapters [{title,text}]`, `selected [indices]` | `id` (library item), `jobId` |
 | `pdf_upload` | `id, size, index, data` (base64 of 4 MiB raw chunk `index`), `filename` | `done` (true after the last chunk). The server checks `size` (at most 200 MB), `index`, the chunk length, and refuses a second upload for an item that already has its PDF |
 | `audio_library` | | `items, ttsUsed, ttsCap` (Google), `azReady, azUsed, azCap` (Microsoft free tier, this month), `s0Used, s0Cap` (trial credit, all accounts, in total), `s0Mine, s0UserCap` (trial credit used by this account, and its limit of 2,000,000), `azTier ('s0' while the trial resource is valid, else 'f0'), azUntil` (ms, end of the trial resource, or null) |
 | `audio_text` | `id, chapter`, optional `owner` | `texts` (one string per audio segment) |
@@ -29,10 +29,11 @@ Every call is `POST` with a JSON body `{action, token, ...}` (sent as `text/plai
 | `audio_progress` | `id, chapter, time, label, slot ('last','b1','b2')`, optional `owner` | `ok` (for a shared item the position is stored for the caller only) |
 | `audio_delete` | `id` | `ok` (also stops sharing it) |
 | `audio_chapter_delete` | `id, chapter` (a converted chapter of a book) | `items`; the chapter becomes `status 'none'` and can be converted again |
+| `audio_rename` | `id, title` | `title` (renames an item of your own library) |
 | `audio_share` | `id, shared (true/false)` | `shared`; only the owner can share |
 | `audio_public` | | `items`: shared items of every account, `{id, owner, mine, title, kind, created, sharedAt, state, voice, lang, chars, chapters, pos, marks}` with the caller's own `pos` and `marks` |
 | `audio_add` | `id, voice, selected` (book chapters to convert next) | `id, jobId` |
-| `audio_outline` | `pages, head, firsts` | `chapters [{title, page}]` |
+| `audio_outline` | `pages, head, firsts`; for a book also `kind: 'book', cands` (short lines as "page:line text") | `chapters [{title, page}]` |
 | `audio_preview` | `text` (at most 200 characters), `voice` | `data` (base64 MP3), `lang, chars` |
 | `audio_voices` | `lang ('cmn-CN','ja-JP','en-US')` | `voices` |
 

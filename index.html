@@ -98,6 +98,11 @@
   .chlist .chdel .status { font-size:12px; }
   .libitem { border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin:10px 0; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
   .libitem .t { font-weight:600; cursor:pointer; color:var(--accent); }
+  .libitem .t { overflow-wrap:anywhere; display:inline; }
+  .libitem .rename { background:none; border:0; padding:0 4px; margin-left:4px; min-height:0; font-size:14px; color:var(--muted); cursor:pointer; vertical-align:baseline; }
+  .libitem .rename:hover { color:var(--accent); }
+  @media (pointer: coarse), (max-width: 600px) { .libitem .rename { min-height:44px; min-width:44px; padding:0 10px; margin:-12px 0 -12px 0; } }
+  .renamebox { width:100%; font-weight:600; }
   .libitem .m { font-size:13px; color:var(--muted); }
   .libitem .grow { flex:1; min-width:200px; }
   /* Library buttons: right-aligned in fixed columns, so the same button lines up from row to row
@@ -384,6 +389,8 @@
         <label for="apdf">PDF</label>
         <input type="file" id="apdf" accept=".pdf,application/pdf">
         <div id="kindLine" class="notice hidden" style="margin-top:12px;color:var(--ink)"></div>
+        <label for="atitle" id="atitleLab" class="hidden" style="margin-top:12px">Title</label>
+        <input type="text" id="atitle" class="hidden" maxlength="150" autocomplete="off">
         <div id="bookPanel" class="hidden" style="margin-top:12px">
           <div class="row" style="font-size:13px;color:var(--muted)">
             <span id="bookSummary"></span>
@@ -677,6 +684,7 @@ async function pdfLines(lib, data, onPage, info) {
   const pages = [];
   try {
     if (info) { try { info.outline = await pdfOutline(doc); } catch (e) { info.outline = null; } }
+    if (info) { try { const m = await doc.getMetadata(); info.title = String(m && m.info && m.info.Title || ''); } catch (e) { info.title = ''; } }
     for (let i = 1; i <= doc.numPages; i++) {
       const page = await doc.getPage(i);
       pages.push(pageLines((await page.getTextContent()).items));
@@ -853,7 +861,7 @@ function splitChapters(pages) {
     const left = Math.min.apply(null, L.map((l) => l.x).concat([1e9]));
     L.forEach((l, li) => {
       if (heads.has(l)) { open(headTitle(l), pi, li < 2); return; }
-      if (l.s.length <= 30 && !TOC_LINE.test(l.s) && CHAPTER_RE.test(l.s) && !(cur && cur.title === l.s)) { open(l.s, pi, li < 2); return; }
+      if (l.s.length <= 30 && (!TOC_LINE.test(l.s) || /^(chapter|part|book)\s+[0-9ivxlc]+$/i.test(l.s.trim())) && CHAPTER_RE.test(l.s) && !(cur && cur.title === l.s)) { open(l.s, pi, li < 2); return; }
       (cur || front).lines.push({ s: l.s, para: l.x - left > 0.8 * l.h });
     });
   });
@@ -862,18 +870,23 @@ function splitChapters(pages) {
     c.endPage = nx ? Math.max(c.startPage, nx.atTop ? nx.startPage - 1 : nx.startPage) : pages.length;
   });
   let out = chapters.map((c) => ({ title: c.title, text: joinLines(c.lines).trim(), startPage: c.startPage, endPage: c.endPage }))
-    .filter((c) => c.text.length > 20);
+    .filter((c) => c.text.length > 20 || PART_RE.test(c.title));   // a part's title page may hold only its title
   // Parts and chapters: offer the chapters; the text of a part's title page goes to its first chapter.
   if (out.some((c) => PART_RE.test(c.title)) && out.filter((c) => !PART_RE.test(c.title)).length >= 2) {
     const merged = [];
     let carry = '';
+    let part = '';
+    const seen = {};
+    out.forEach((c) => { seen[c.title] = (seen[c.title] || 0) + 1; });
     out.forEach((c) => {
-      if (PART_RE.test(c.title)) { carry += c.title + '\n\n' + c.text + '\n\n'; return; }
-      merged.push(carry ? Object.assign({}, c, { text: carry + c.text }) : c); carry = '';
+      if (PART_RE.test(c.title)) { carry += c.title + '\n\n' + (c.text ? c.text + '\n\n' : ''); part = c.title; return; }
+      const title = part && seen[c.title] > 1 && /^chapter\s+[0-9ivxlc]+$/i.test(c.title) ? part + ' · ' + c.title : c.title;
+      merged.push(Object.assign({}, c, { title, text: carry + c.text })); carry = '';
     });
     if (carry && merged.length) merged[merged.length - 1].text += '\n\n' + carry.trim();
     out = merged;
   }
+  out = out.filter((c) => c.text.length > 20);
   if (out.length) {
     const ft = joinLines(front.lines).trim();
     if (ft.length > 20) {
@@ -955,12 +968,39 @@ async function extractBook(file) {
   const pages = await pdfLines(lib, new Uint8Array(await file.arrayBuffer()),
     (i, n) => { if (i % 40 === 0) setStatus(st, 'Reading the PDF text: page ' + i + ' of ' + n); }, info);
   setStatus(st, '');
+  const title = docTitle(info.title, pages, file.name);
   const byOutline = info.outline ? chaptersFromOutline(info.outline, pages) : null;
-  if (byOutline) return { chapters: byOutline, pages: pages.length, lines: pages, outline: true };
+  if (byOutline) return { chapters: byOutline, pages: pages.length, lines: pages, outline: true, title };
   // No bookmarks: chapter headings by rule, or the titles listed in the table of contents, whichever finds more.
   const byRule = splitChapters(pages), byToc = chaptersFromToc(pages);
   const n = (list) => (list || []).filter((c) => !c.front && c.title !== 'Full text').length;
-  return { chapters: byToc && n(byToc) > n(byRule) ? byToc : byRule, pages: pages.length, lines: pages, toc: !!(byToc && n(byToc) > n(byRule)) };
+  return { chapters: byToc && n(byToc) > n(byRule) ? byToc : byRule, pages: pages.length, lines: pages, toc: !!(byToc && n(byToc) > n(byRule)), title };
+}
+
+/**
+ * Title of a document: the title in the PDF properties when it looks real, else the largest text on the
+ * first pages, else the file name made readable ("A.Zee-Fly_by_Night(2020).pdf" -> "A Zee Fly by Night").
+ */
+function docTitle(meta, pages, filename) {
+  const ok = (t) => t && t.length >= 2 && t.length <= 150 && /\p{L}{2}/u.test(t) &&
+    !/^(untitled|unknown|document|microsoft word\b.*|.*\.(docx?|pdf|indd|tex|rtf)|(part|chapter|contents|目录)\b.*)$/i.test(t);
+  const m = String(meta || '').replace(/\s+/g, ' ').trim();
+  if (ok(m)) return m;
+  let best = null;
+  pages.slice(0, 3).forEach((L, pi) => L.forEach((l, li) => {
+    if (l.s.trim().length >= 2 && (!best || l.h > best.h * 1.05)) best = { h: l.h, pi, li };
+  }));
+  const body = pages.slice(0, 3).reduce((a, L) => a.concat(L.map((l) => l.h)), []).sort((a, b) => a - b);
+  if (best && body.length && best.h >= 1.4 * body[Math.floor(body.length / 2)]) {
+    const L = pages[best.pi];
+    let a = best.li, b = best.li;                 // a title set on two or three lines in the same size
+    while (a > 0 && Math.abs(L[a - 1].h - best.h) < 0.5) a--;
+    while (b < L.length - 1 && Math.abs(L[b + 1].h - best.h) < 0.5 && b - a < 2) b++;
+    const t = joinLines(L.slice(a, b + 1).map((l) => ({ s: l.s }))).replace(/\s+/g, ' ').trim();
+    if (ok(t)) return t;
+  }
+  return String(filename || '').replace(/\.pdf$/i, '').replace(/[-_ ]*pdf[-_ ]*free[-_ ]*download/i, '')
+    .replace(/[(（\[]\s*\d{4}\s*[)）\]]/g, '').replace(/[_.]+|(?<=[a-z])-(?=[A-Za-z])|-(?=[A-Z])/g, ' ').replace(/\s+/g, ' ').trim() || 'Untitled';
 }
 
 /** A title reduced to letters and digits, for matching a contents entry with its heading in the text. */
@@ -1057,16 +1097,25 @@ const SKIP_RE = /^(contents|table of contents|目录|目錄|maps?|list of (figur
  */
 function chaptersFromOutline(outline, pages) {
   const marks = [];                               // {title, page, skip}: chapter starts, and pages that only end the one before
-  const add = (items) => items.forEach((it) => {
+  // "Chapter I" in every part: the part's name goes in front ("PART II · Chapter I"), so titles stay unique.
+  const generic = (t) => CHAPTER_RE.test(t) && /^(chapter\s+[0-9ivxlc]+|第[0-9０-９一二三四五六七八九十百千零〇两]+[章回节節])$/i.test(t.trim()) || PAGENUM_RE.test(t);
+  const add = (items, parent) => items.forEach((it) => {
     if (!it.page) return;
     const kids = (it.items || []).filter((k) => k.page);
     const sections = kids.every((k) => /^[0-9]+\.[0-9]+/.test(k.title));   // "1.1 ...": sections of a chapter, not chapters
-    if (kids.length >= 2 && !sections && (PART_RE.test(it.title) || outline.length <= 3)) {
+    // Expanded: parts, a wrapper around the whole book (its children have children of their own), the few
+    // entries of a short outline, and entries whose children are chapters ("Chapter I", "1", "II").
+    const chapterKids = kids.filter((k) => CHAPTER_RE.test(k.title) || PAGENUM_RE.test(k.title)).length >= 2;
+    if (kids.length >= 2 && !sections && (PART_RE.test(it.title) || outline.length <= 3 || kids.some((k) => (k.items || []).length >= 2) || chapterKids)) {
       if (it.page < kids[0].page) marks.push({ title: it.title, page: it.page, skip: true });   // the part's title page
-      add(kids);
-    } else marks.push({ title: it.title || 'Chapter', page: it.page, skip: SKIP_RE.test(it.title) });
+      add(kids, kids.some((k) => (k.items || []).length >= 2) ? null : it.title);
+    } else marks.push({ title: it.title || 'Chapter', long: parent && generic(it.title) ? parent + ' · ' + it.title : '', page: it.page, skip: SKIP_RE.test(it.title) });
   });
-  add(outline);
+  add(outline, null);
+  // Only when the titles repeat (numbering restarts in every part) is the part put in front.
+  const seen = {};
+  marks.forEach((m) => { seen[m.title] = (seen[m.title] || 0) + 1; });
+  marks.forEach((m) => { if (m.long && seen[m.title] > 1) m.title = m.long; });
   marks.sort((a, b) => a.page - b.page);
   const starts = marks.filter((m, i) => !marks.slice(0, i).some((p) => p.page === m.page && !p.skip) );
   const chs = starts.filter((m) => !m.skip);
@@ -1108,19 +1157,55 @@ function cleanPages(pages) {
  * reads the first pages (table of contents) and the first lines of every page and
  * returns the chapter titles with their start pages.
  */
-async function outlineWithClaude(d) {
+async function outlineWithClaude(d, kind) {
   const head = d.lines.slice(0, 15).map((L, i) => '[page ' + (i + 1) + ']\n' + L.map((l) => l.s).join('\n')).join('\n').slice(0, 30000);
   const firsts = d.lines.map((L, i) => (i + 1) + ': ' + L.slice(0, 3).map((l) => l.s).join(' | ').slice(0, 120)).join('\n').slice(0, 60000);
-  setStatus($('audioStatus'), 'Claude is finding the chapters...');
-  const r = await api({ action: 'audio_outline', token, pages: d.pages, head, firsts });
+  // Books: every short line that could be a heading ("page:line text"), so headings in the middle of a page are seen too.
+  const cands = [];
+  if (kind === 'book') d.lines.forEach((L, pi) => L.forEach((l, li) => {
+    const t = l.s.trim();
+    if (t && t.length <= 40 && !(t.length > 8 && /[.,;:!?…。，；：！？、”’"'»)]$/.test(t))) cands.push((pi + 1) + ':' + li + ' ' + t);
+  }));
+  setStatus($('audioStatus'), 'Claude is looking for the chapters...');
+  const r = await api(Object.assign({ action: 'audio_outline', token, pages: d.pages, head, firsts }, kind === 'book' ? { kind, cands: cands.join('\n').slice(0, 60000) } : {}));
   setStatus($('audioStatus'), '');
   const list = (r.chapters || []).filter((c) => c.page >= 1 && c.page <= d.pages).sort((a, b) => a.page - b.page);
   if (list.length < 2) return null;
+  if (kind === 'book') return chaptersAtHeadings(d.lines, list);
   const text = (a, b) => d.lines.slice(a - 1, b).map((L) => L.map((l) => l.s).join(' ')).join(' ');
   const out = [];
   if (list[0].page > 1) out.push({ title: 'Front matter (before the first chapter)', startPage: 1, endPage: list[0].page - 1, front: true });
   list.forEach((c, k) => out.push({ title: String(c.title).slice(0, 80), startPage: c.page, endPage: k + 1 < list.length ? Math.max(c.page, list[k + 1].page - 1) : d.pages }));
   out.forEach((c) => { c.text = text(c.startPage, c.endPage); });
+  return out;
+}
+
+/**
+ * Chapters that start at given headings ({title, page}): on its page, the chapter starts at the line that
+ * reads like the title, or at the top of the page when no line does. Running headers and page numbers are left out.
+ */
+function chaptersAtHeadings(pages, list) {
+  const clean = cleanPages(pages);
+  const marks = list.map((c) => {
+    const L = clean[c.page - 1] || [], want = normTitle(c.title);
+    const l = want ? L.findIndex((x) => { const g = normTitle(x.s); return g && (g === want || g.startsWith(want) || want.startsWith(g)); }) : -1;
+    return { title: String(c.title).slice(0, 80), p: c.page - 1, l: l < 0 ? 0 : l, head: l >= 0 };
+  });
+  const slice = (a, b) => {
+    const out = [];
+    for (let p = a.p; p <= (b ? b.p : clean.length - 1); p++) {
+      const L = clean[p], from = p === a.p ? a.l + (a.head ? 1 : 0) : 0, to = b && p === b.p ? b.l : L.length;
+      for (let l = from; l < to; l++) out.push(L[l]);
+    }
+    return joinLines(out).trim();
+  };
+  const out = [];
+  const front = slice({ p: 0, l: 0 }, marks[0]);
+  if (front.length > 20) out.push({ title: 'Front matter (before the first chapter)', text: front, startPage: 1, endPage: marks[0].p + 1, front: true });
+  marks.forEach((m, k) => {
+    const nx = marks[k + 1], text = slice(m, nx);
+    if (text.length > 20) out.push({ title: m.title, text: m.title + '\n\n' + text, startPage: m.p + 1, endPage: nx ? Math.max(m.p + 1, nx.p + (nx.l ? 1 : 0)) : pages.length });
+  });
   return out;
 }
 
@@ -1175,12 +1260,22 @@ $('bookNone').onclick = () => { if (bookData) { bookData.chapters.forEach((c) =>
 async function prepareBook() {
   const f = $('apdf').files[0];
   bookData = null; docKind = null; renderKind(); renderBookPanel();
+  $('atitle').value = ''; $('atitle').classList.add('hidden'); $('atitleLab').classList.add('hidden');
   if (!f) return;
   $('audioBtn').disabled = true;
   try {
     const d = await extractBook(f);
     const c = classifyDoc(d.lines, d.chapters);
     docKind = c.kind; docWhy = c.why; docPages = d.pages;
+    // A long book in which fewer than five chapters were recognized: Claude looks at the lines that could be
+    // headings, in case the chapters are marked in a way the rules do not know.
+    const found = d.chapters.filter((x) => !x.front && x.title !== 'Full text').length;
+    if (docKind === 'book' && found < 5 && (d.pages >= 60 || d.chapters.reduce((n, x) => n + x.text.length, 0) >= 150000)) {
+      try {
+        const o = await outlineWithClaude(d, 'book');
+        if (o && o.filter((x) => !x.front).length > Math.max(found, 2)) { d.chapters = o; docWhy += ', chapters found by Claude'; }
+      } catch (e) { setStatus($('audioStatus'), 'Claude could not look for chapters (' + e.message + ').', true); }
+    }
     if (docKind === 'thesis' && d.chapters.filter((x) => !x.front && x.title !== 'Full text').length < 3) {
       try { const o = await outlineWithClaude(d); if (o) { d.chapters = o; docWhy += ', chapters found by Claude'; } }
       catch (e) { setStatus($('audioStatus'), 'Chapter search failed (' + e.message + '); split by pages instead.', true); }
@@ -1195,6 +1290,7 @@ async function prepareBook() {
     }
     delete d.lines;
     bookData = d;
+    $('atitle').value = d.title || ''; $('atitle').classList.remove('hidden'); $('atitleLab').classList.remove('hidden');
     if (docKind === 'book' && d.chapters.reduce((n, x) => n + x.text.length, 0) < 50) throw new Error('No text found. The PDF may be a scanned image without a text layer.');
     defaultSelection(); renderKind();
   } catch (e) { setStatus($('audioStatus'), e.message, true); }
@@ -1317,6 +1413,7 @@ $('audioBtn').onclick = async () => {
     const bytes = new Uint8Array(await f.arrayBuffer());
     const kind = audioKind(), pron = pronList();
     const payload = { action: 'audio_start', token, filename: f.name, voice: $('avoice').value, kind: kind === 'book' ? 'book' : 'paper' };
+    if ($('atitle').value.trim()) payload.title = $('atitle').value.trim();
     if (kind === 'book') {
       if (!bookData) throw new Error('Could not read the text of this PDF.');
       // The whole book is stored, so other chapters can be converted later from the library.
@@ -1468,6 +1565,27 @@ function renderShared() {
     if (openPanels.includes(it.owner + '|' + it.id)) toggleOfflinePanel(it, row);
   });
 }
+/** Turns a library title into a field: Enter or leaving the field saves, Escape cancels. */
+function startRename(it, head) {
+  const t = head;
+  const inp = el('input'); inp.type = 'text'; inp.value = it.title; inp.maxLength = 150; inp.className = 'renamebox';
+  inp.setAttribute('aria-label', 'New title');
+  t.replaceWith(inp); inp.focus(); inp.select();
+  let done = false;
+  const finish = async (save) => {
+    if (done) return; done = true;
+    const v = inp.value.replace(/\s+/g, ' ').trim();
+    if (save && v && v !== it.title) {
+      inp.disabled = true;
+      try { await api({ action: 'audio_rename', token, id: it.id, title: v }); it.title = v; }
+      catch (e) { setStatus($('audioStatus'), e.message, true); }
+    }
+    renderLibrary(); loadShared();
+  };
+  inp.onkeydown = (e) => { if (e.key === 'Enter') finish(true); else if (e.key === 'Escape') finish(false); };
+  inp.onblur = () => finish(true);
+}
+
 /** Extra request field for an item another account shared: whose library it is in. */
 function ownerOf(it) { return it && it.owner && !it.mine ? { owner: it.owner } : {}; }
 
@@ -1511,7 +1629,11 @@ function renderLibrary() {
     const row = el('div', 'libitem');
     const g = el('div', 'grow');
     const t = el('div', 't', it.title); t.onclick = () => openItem(it.id);
-    g.appendChild(t);
+    const ren = el('button', 'iconbtn rename', '✎'); ren.type = 'button'; ren.dataset.net = '1';
+    ren.setAttribute('aria-label', 'Rename'); ren.title = 'Rename';
+    ren.onclick = (e) => { e.stopPropagation(); startRename(it, head); };
+    const head = el('div', 'thead'); head.append(t, ren);
+    g.appendChild(head);
     const meta = [it.kind === 'book' ? 'Book' : 'Paper', new Date(it.created).toLocaleDateString()];
     if (it.kind === 'book') meta.push(chaptersDone(it) + '/' + it.chapters.length + ' chapters');
     else if (it.chapters && it.chapters.length > 1) meta.push(it.chapters.length + ' chapters');

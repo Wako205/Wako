@@ -149,4 +149,47 @@ async function makeNumberedBookPdf({ chapters = 4, roman = false } = {}) {
   return Buffer.from(await doc.save({ useObjectStreams: false }));
 }
 
-module.exports = { makeMp3, makeBookPdf, makeNumberedBookPdf, makeRichBookPdf, makePaperPdf, NM };
+/** A long book (about 70 pages) whose chapters are headed by words ("ONE", "TWO", ...) in the running text. */
+async function makeWordHeadedBookPdf({ chapters = 6 } = {}) {
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const WORDS = ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT'];
+  const lines = [];
+  for (let c = 1; c <= chapters; c++) {
+    if (c > 1) for (let k = 0; k < 7; k++) lines.push({ t: 'The last lines of chapter ' + (c - 1) + ', line ' + k + '.' });
+    lines.push({ t: WORDS[c - 1], head: true });
+    for (let k = 0; k < 360; k++) lines.push({ t: 'Text of chapter ' + c + ', line ' + k + ', going on quietly.' });
+  }
+  let page = null, y = 0, n = 0;
+  const newPage = () => { page = doc.addPage([420, 595]); y = 540; n++; page.drawText(String(n), { x: 205, y: 30, size: 9, font }); };
+  for (const l of lines) {
+    if (!page || y < 60) newPage();
+    page.drawText(l.t, { x: l.head ? 190 : 40, y, size: l.head ? 14 : 10, font });
+    y -= l.head ? 26 : 14;
+  }
+  return Buffer.from(await doc.save({ useObjectStreams: false }));
+}
+
+/** Two parts of two chapters each, every part restarting at "Chapter I", with a running header on every page. */
+async function makePartsBookPdf() {
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const lines = [];
+  ['PART I', 'PART II'].forEach((part, pi) => {
+    lines.push({ t: part, head: true, page: true });
+    ['Chapter I', 'Chapter II'].forEach((ch, ci) => {
+      lines.push({ t: ch, head: true, page: true });
+      for (let k = 0; k < 60; k++) lines.push({ t: 'Text of part ' + (pi + 1) + ' chapter ' + (ci + 1) + ', line ' + k + '.' });
+    });
+  });
+  let page = null, y = 0, n = 0;
+  const newPage = () => { page = doc.addPage([420, 595]); n++; page.drawText('A Long Novel', { x: 160, y: 560, size: 9, font }); page.drawText(n + ' of many', { x: 180, y: 30, size: 9, font }); y = 530; };
+  for (const l of lines) {
+    if (!page || y < 60 || (l.page && y < 530)) newPage();
+    page.drawText(l.t, { x: l.head ? 170 : 40, y, size: l.head ? 14 : 10, font });
+    y -= l.head ? 26 : 14;
+  }
+  return Buffer.from(await doc.save({ useObjectStreams: false }));
+}
+
+module.exports = { makeMp3, makeBookPdf, makeNumberedBookPdf, makeWordHeadedBookPdf, makePartsBookPdf, makeRichBookPdf, makePaperPdf, NM };

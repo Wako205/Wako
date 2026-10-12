@@ -92,6 +92,7 @@ class MockBackend {
       case 'audio_add': return { id: body.id, jobId: 'job-add' };
       case 'audio_delete': this.library = this.library.filter((x) => x.id !== body.id); return {};
       case 'audio_share': { const it = this.item(body.id); if (body.shared) it.shared = Date.now(); else delete it.shared; return { shared: !!body.shared }; }
+      case 'audio_rename': { this.item(body.id).title = body.title; return { title: body.title }; }
       case 'audio_public': return { items: JSON.parse(JSON.stringify(this.shared || [])) };
       case 'audio_chapter_delete': {
         const ch = this.item(body.id).chapters[body.chapter];
