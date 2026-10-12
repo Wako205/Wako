@@ -82,17 +82,19 @@ test('WebKit decodes and renders a file of "My music"', async ({ page, backend }
   expect(r.rmsDb).toBeCloseTo(-44, 1);
 });
 
-test('WebKit: the music follows the narration in the player', async ({ page, backend }) => {
+test('WebKit: the mini player plays the music together with the narration', async ({ page, backend }) => {
   backend.mp3 = toneWav(9, 220);                               // the mock serves WAV segments here
   await login(page);
+  await expect(page.locator('#mStatus')).toHaveText(/^Ready: /, { timeout: 30000 });
+  await page.click('#mmPlay');                                 // a real tap, as iOS requires
   await openAudio(page);
   await page.locator('#library .libitem').first().getByRole('button', { name: 'Listen' }).click();
   await expect(page.locator('#pText span.s').first()).toBeVisible();
-  await page.click('#pMusic');
-  await page.check('#mOn');
   await page.locator('#pText span.s').nth(1).click();          // a tap on a sentence starts the narration
-  await expect(page.locator('#mStatus')).toHaveText('Playing: Rain.', { timeout: 30000 });
-  await expect.poll(() => page.evaluate(() => [!player.paused, !music.paused])).toEqual([true, true]);
+  await expect.poll(() => page.evaluate(() => [!player.paused, !music.paused]), { timeout: 30000 }).toEqual([true, true]);
   await page.evaluate(() => player.pause());
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => music.paused)).toBe(false);  // the music is independent of the book
+  await page.click('#mmPlay');
   await expect.poll(() => page.evaluate(() => music.paused)).toBe(true);
 });

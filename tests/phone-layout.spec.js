@@ -26,6 +26,7 @@ for (const width of [360, 390, 430]) {
       await expect(page.locator('#themes')).toBeInViewport({ ratio: 1 });
       await expect(page.locator('.tabs')).toBeInViewport({ ratio: 1 });
 
+      await page.evaluate(() => { const b = document.getElementById('tabTools'); b.hidden = false; b.classList.remove('hidden'); });   // the tab is hidden for now; its layout is still checked
       await page.click('#tabTools');
       expect(await audit(page, width)).toEqual({ overflow: 0, small: [] });
 

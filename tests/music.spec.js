@@ -10,12 +10,6 @@ async function openBook(page) {
   await expect(page.locator('#pText span.s').first()).toBeVisible();
   await expect.poll(() => page.evaluate(() => player.duration)).toBeGreaterThan(8);
 }
-async function musicOn(page) {
-  await page.click('#pMusic');
-  await expect(page.locator('#pMusicPanel')).toBeVisible();
-  await page.selectOption('#mSource', 'gen');                    // these tests use the generated music
-  await page.check('#mOn');
-}
 
 test('generated music is rendered at the chosen level below the speech, as a seamless loop', async ({ page, backend }) => {
   await page.goto(INDEX_URL);
@@ -42,204 +36,127 @@ test('generated music is rendered at the chosen level below the speech, as a sea
   expect(r.seeds.diff).toBeGreaterThan(1);                        // the next seed is different music
 });
 
-test('the music starts, pauses and resumes with the narration and keeps going across chapters', async ({ page, backend }) => {
-  await page.addInitScript(() => { window.__ac = 0; const A = window.AudioContext; window.AudioContext = function (...a) { window.__ac++; return new A(...a); }; });
-  await openBook(page);
-  await musicOn(page);
-  await expect(page.locator('#pMusic')).toHaveClass(/on/);
-  expect((await st(page)).music).toBe(false);                    // nothing plays before the narration
-  await page.evaluate(() => player.play());
-  await expect(page.locator('#mStatus')).toHaveText('Playing: Rain.', { timeout: 20000 });
-  await expect.poll(async () => (await st(page)).music).toBe(true);
-  await expect.poll(async () => (await st(page)).t).toBeGreaterThan(0.3);
-  expect((await st(page)).src).toMatch(/^blob:/);
 
-  await page.evaluate(() => player.pause());
-  await expect.poll(async () => (await st(page)).music).toBe(false);
-  const t = (await st(page)).t;
-  await page.evaluate(() => player.play());
-  await expect.poll(async () => (await st(page)).music).toBe(true);
-  expect((await st(page)).t).toBeGreaterThanOrEqual(t - 0.05);  // resumed, not restarted
+// The small music player next to the themes: the built-in lofi library (CC0 tracks in music/lofi/).
+const fs = require('fs'), path = require('path');
+const LOFI = path.resolve(__dirname, '..', 'music', 'lofi');
+const tracks = () => JSON.parse(fs.readFileSync(path.join(LOFI, 'tracks.json'), 'utf8')).tracks;
 
-  // The lock-screen title stays the book's; lock-screen pause stops both.
-  expect(await page.evaluate(() => navigator.mediaSession.metadata.title)).toBe('The Quiet Mill');
-  // Across the end of a chapter the music does not stop.
-  const src = (await st(page)).src;
-  await page.evaluate(() => { player.currentTime = player.duration - 0.3; });
-  await expect(page.locator('#pChapter')).toHaveValue('1');
-  await expect.poll(async () => (await st(page)).player).toBe(true);
-  expect(await st(page)).toMatchObject({ music: true, src });
-
-  await page.click('#pClose');
-  await expect.poll(async () => (await st(page)).music).toBe(false);
-  expect(await page.evaluate(() => window.__ac)).toBe(0);         // no Web Audio while playing
+test('the lofi tracks are in the site and listed in tracks.json', async () => {
+  const list = tracks();
+  expect(list.length).toBeGreaterThanOrEqual(17);
+  for (const t of list) { expect(fs.existsSync(path.join(LOFI, t.file))).toBe(true); expect(t.title).toBeTruthy(); }
 });
 
-test('a new rendering follows when one ends, and the level and style can be changed', async ({ page, backend }) => {
-  await openBook(page);
-  await musicOn(page);
+test('mini player: loaded at login, ▶ plays, a second tap pauses, independent of the book', async ({ page, backend }) => {
+  test.setTimeout(90000);
+  await page.addInitScript(() => { window.__ac = 0; const A = window.AudioContext; window.AudioContext = function (...a) { window.__ac++; return new A(...a); }; });
+  const list = tracks();
+  await login(page);
+  await expect(page.locator('#miniMusic')).toBeVisible();
+  await expect(page.locator('#mmTrack option')).toHaveCount(list.length + 1);
+  await expect(page.locator('#mmTrack option').first()).toHaveText('♪ All lofi (' + list.length + ')');
+  // Loaded at login, nothing plays yet.
+  await expect(page.locator('#mStatus')).toHaveText(/^Ready: /, { timeout: 30000 });
+  expect((await st(page)).music).toBe(false);
+  await expect(page.locator('#mmPlay')).toHaveAttribute('aria-label', 'Play music');
+
+  await page.click('#mmPlay');
+  await expect.poll(async () => (await st(page)).music).toBe(true);
+  await expect(page.locator('#mmPlay')).toHaveAttribute('aria-label', 'Pause music');
+  await expect(page.locator('#mStatus')).toHaveText(/^Playing: /);
+
+  // The book plays at the same time; pausing the book leaves the music on.
+  await openAudio(page);
+  await page.locator('#library .libitem').first().getByRole('button', { name: 'Listen' }).click();
+  await expect.poll(() => page.evaluate(() => player.duration)).toBeGreaterThan(8);
   await page.evaluate(() => player.play());
-  await expect(page.locator('#mStatus')).toHaveText('Playing: Rain.', { timeout: 20000 });
-  await expect.poll(() => page.evaluate(() => !!mNextReady), { timeout: 20000 }).toBe(true);
+  await expect.poll(async () => { const s = await st(page); return s.player && s.music; }).toBe(true);
+  expect(await page.evaluate(() => navigator.mediaSession.metadata.title)).toBe('The Quiet Mill');   // the lock screen shows the book
+  await page.evaluate(() => player.pause());
+  await page.waitForTimeout(300);
+  expect((await st(page)).music).toBe(true);
+  await page.click('#pClose');
+  await page.waitForTimeout(300);
+  expect((await st(page)).music).toBe(true);
+
+  // Second tap: pause; the same track continues on the next tap.
+  await page.click('#mmPlay');
+  await expect.poll(async () => (await st(page)).music).toBe(false);
+  await expect(page.locator('#mmPlay')).toHaveAttribute('aria-label', 'Play music');
+  const t = (await st(page)).t, src = (await st(page)).src;
+  await page.click('#mmPlay');
+  await expect.poll(async () => (await st(page)).music).toBe(true);
+  expect(await st(page)).toMatchObject({ src });
+  expect((await st(page)).t).toBeGreaterThanOrEqual(t - 0.05);
+  expect(await page.evaluate(() => window.__ac)).toBe(0);         // no Web Audio while playing
+  await page.click('#mmPlay');
+});
+
+test('choosing one track plays it; the next track follows at the end; the choice is per user', async ({ page, backend }) => {
+  test.setTimeout(90000);
+  const list = tracks();
+  await login(page);
+  await expect(page.locator('#mStatus')).toHaveText(/^Ready: /, { timeout: 30000 });
+  await page.selectOption('#mmTrack', list[2].file);
+  await expect(page.locator('#mStatus')).toHaveText('Ready: ' + list[2].title + '.', { timeout: 30000 });
+  await page.click('#mmPlay');
+  await expect(page.locator('#mStatus')).toHaveText('Playing: ' + list[2].title + '.');
+  await expect.poll(async () => (await st(page)).music).toBe(true);
+  // All tracks: at the end of one, the prepared next one starts.
+  await page.selectOption('#mmTrack', 'all');
+  await expect(page.locator('#mStatus')).toHaveText(/^Playing: /, { timeout: 30000 });
+  await expect.poll(() => page.evaluate(() => !!mNextReady), { timeout: 30000 }).toBe(true);
   const first = (await st(page)).src;
   await page.evaluate(() => { music.currentTime = music.duration - 0.2; });
   await expect.poll(async () => (await st(page)).src).not.toBe(first);
   await expect.poll(async () => (await st(page)).music).toBe(true);
+  expect(JSON.parse(await page.evaluate(() => localStorage.getItem('mp_music_tester')))).toMatchObject({ source: 'lofi', lofi: 'all' });
 
-  await page.selectOption('#mLevel', 'quiet');
-  await page.selectOption('#mPreset', 'night');
-  await expect(page.locator('#mStatus')).toHaveText('Playing: Night.', { timeout: 20000 });
-  expect(await page.evaluate(() => mTrack.rmsDb)).toBeCloseTo(-50, 1);
-  await page.selectOption('#mLevel', 'louder');
-  await expect.poll(() => page.evaluate(() => mTrack && Math.round(mTrack.rmsDb)), { timeout: 20000 }).toBe(-38);
-  await page.uncheck('#mOn');
-  await expect.poll(async () => (await st(page)).music).toBe(false);
-  expect((await st(page)).player).toBe(true);                    // the narration goes on
-  await page.evaluate(() => player.pause());
-});
-
-test('my music: files kept in this browser, played in order or shuffled at the chosen level, never uploaded', async ({ page, backend }) => {
-  await openBook(page);
-  await musicOn(page);
-  await page.selectOption('#mSource', 'mine');
-  await expect(page.locator('#mFiles')).toHaveText('No files yet.');
-  const a = makeMp3({ bursts: 2, freq: 330 }), b = makeMp3({ bursts: 3, freq: 440 });
-  await page.setInputFiles('#mAdd', [{ name: 'one.mp3', mimeType: 'audio/mpeg', buffer: a }, { name: 'two.mp3', mimeType: 'audio/mpeg', buffer: b }]);
-  await expect(page.locator('#mFiles .mfile')).toHaveCount(2);
-  await expect(page.locator('#mFiles .mname')).toHaveText(['one.mp3', 'two.mp3']);
-  await page.evaluate(() => player.play());
-  await expect(page.locator('#mStatus')).toHaveText('Playing: one.mp3.', { timeout: 20000 });
-  expect(await page.evaluate(() => mTrack.rmsDb)).toBeCloseTo(-44, 1);
-  await expect.poll(() => page.evaluate(() => !!mNextReady), { timeout: 20000 }).toBe(true);
-  await page.evaluate(() => { music.currentTime = music.duration - 0.1; });
-  await expect(page.locator('#mStatus')).toHaveText('Playing: two.mp3.');
-  await page.evaluate(() => player.pause());
-  // Nothing about the files went to the server.
-  expect(backend.calls.filter((c) => JSON.stringify(c).includes('one.mp3'))).toEqual([]);
-  // Removing a file.
-  await page.locator('#mFiles .mfile').first().getByRole('button', { name: 'Remove one.mp3' }).click();
-  await expect(page.locator('#mFiles .mname')).toHaveText(['two.mp3']);
-  // Shuffle with one file plays it again and again.
-  await page.selectOption('#mOrder', 'shuffle');
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('mp_music_tester')).order)).toBe('shuffle');
-});
-
-test('the choices are remembered per user in this browser, and logout stops the music', async ({ page, backend }) => {
-  await openBook(page);
-  await musicOn(page);
-  await page.selectOption('#mPreset', 'cafe');
-  await page.selectOption('#mLevel', 'quiet');
-  await page.reload();
-  await openAudio(page);
-  await page.locator('#library .libitem').first().getByRole('button', { name: /Listen|Resume/ }).click();
-  await page.click('#pMusic');
-  await expect(page.locator('#mOn')).toBeChecked();
-  await expect(page.locator('#mPreset')).toHaveValue('cafe');
-  await expect(page.locator('#mLevel')).toHaveValue('quiet');
-  await page.evaluate(() => player.play());
-  await expect.poll(async () => (await st(page)).music, { timeout: 20000 }).toBe(true);
+  // Logout stops the music and hides the player; another user has the default choice.
+  await page.selectOption('#mmTrack', list[1].file);
   await page.click('#logoutBtn');
   await expect.poll(async () => (await st(page)).music).toBe(false);
+  await expect(page.locator('#miniMusic')).toBeHidden();
   await login(page, 'bob');
-  await openAudio(page);
-  await page.locator('#library .libitem').first().getByRole('button', { name: /Listen|Resume/ }).click();
-  await page.click('#pMusic');
-  await expect(page.locator('#mOn')).not.toBeChecked();
-  await expect(page.locator('#mPreset')).toHaveValue('rain');
-});
-
-for (const theme of ['eye', 'day', 'night']) {
-  test('music controls at 360 px in the ' + theme + ' theme', async ({ page, backend }) => {
-    await page.setViewportSize({ width: 360, height: 800 });
-    await openBook(page);
-    await page.evaluate((t) => setTheme(t), theme);
-    await musicOn(page);
-    await page.selectOption('#mSource', 'mine');
-    const r = await page.evaluate(() => ({
-      overflow: document.documentElement.scrollWidth - 360,
-      small: [...document.querySelectorAll('#playerCard button, #playerCard select')].filter((b) => b.offsetParent && b.getBoundingClientRect().height < 44).map((b) => b.id || b.textContent),
-      rows: new Set([...document.querySelectorAll('.pset > *')].filter((e) => e.offsetParent && e.getBoundingClientRect().width > 1).map((e) => Math.round(e.getBoundingClientRect().top / 8))).size,
-      on: (() => { const s = getComputedStyle(document.getElementById('pMusic')); return [s.color, s.backgroundColor]; })(),
-    }));
-    expect(r).toMatchObject({ overflow: 0, small: [], rows: 1 });
-    expect(r.on[0]).not.toBe(r.on[1]);
-  });
-}
-
-test('quick changes of the choices end with the music of the last choice', async ({ page, backend }) => {
-  await openBook(page);
-  await musicOn(page);
-  await page.evaluate(() => player.play());
-  // Three changes while the first rendering is still running.
-  await page.selectOption('#mPreset', 'night');
-  await page.selectOption('#mLevel', 'louder');
-  await page.selectOption('#mPreset', 'cafe');
-  await expect(page.locator('#mStatus')).toHaveText('Playing: Café.', { timeout: 30000 });
-  expect(await page.evaluate(() => Math.round(mTrack.rmsDb))).toBe(-38);
-  await expect.poll(() => page.evaluate(() => !music.paused)).toBe(true);
-  await page.evaluate(() => player.pause());
+  await expect(page.locator('#mmTrack')).toHaveValue('all');
+  await expect(page.locator('#mmPlay')).toHaveAttribute('aria-label', 'Play music');          // after a login nothing plays by itself
 });
 
 test('after a media error the music tries the same track once more under a new address', async ({ page, backend }) => {
-  await openBook(page);
-  await musicOn(page);
-  await page.evaluate(() => player.play());
-  await expect(page.locator('#mStatus')).toHaveText('Playing: Rain.', { timeout: 20000 });
+  test.setTimeout(90000);
+  await login(page);
+  await expect(page.locator('#mStatus')).toHaveText(/^Ready: /, { timeout: 30000 });
+  await page.click('#mmPlay');
   await expect.poll(async () => (await st(page)).music).toBe(true);
-  // A real media error: the address of the playing file stops working.
   const breakIt = () => page.evaluate(() => { URL.revokeObjectURL(music.src); music.load(); });
   const first = (await st(page)).src;
   await breakIt();
   await expect.poll(async () => (await st(page)).src).not.toBe(first);
   await expect.poll(async () => { const s = await st(page); return s.music && s.t > 0.3; }).toBe(true);
   expect(await page.evaluate(() => mTrack.retried)).toBe(true);
-  // A second error is not retried again (no endless loop); the narration goes on.
   const second = (await st(page)).src;
   await breakIt();
   await expect.poll(() => page.evaluate(() => !!(music.error && music.error.code))).toBe(true);
   expect((await st(page)).src).toBe(second);
-  expect((await st(page)).player).toBe(true);
-  await page.evaluate(() => player.pause());
+  await page.click('#mmPlay');
 });
 
-// The built-in lofi library: CC0 tracks in music/lofi/, listed in tracks.json.
-const fs = require('fs'), path = require('path');
-const LOFI = path.resolve(__dirname, '..', 'music', 'lofi');
-async function serveLofi(page, seen) {
-  await page.route('https://wako205.github.io/Wako/music/lofi/**', (route) => {
-    const name = decodeURIComponent(new URL(route.request().url()).pathname.split('/').pop());
-    seen.push(name);
-    const type = name.endsWith('.json') ? 'application/json' : 'audio/mpeg';
-    route.fulfill({ status: 200, contentType: type, headers: { 'access-control-allow-origin': '*' }, body: fs.readFileSync(path.join(LOFI, name)) });
+for (const theme of ['eye', 'day', 'night']) {
+  test('mini player at 360 px in the ' + theme + ' theme', async ({ page, backend }) => {
+    await page.setViewportSize({ width: 360, height: 800 });
+    await login(page);
+    await page.evaluate((t) => setTheme(t), theme);
+    await expect(page.locator('#miniMusic')).toBeVisible();
+    await expect(page.locator('#mStatus')).toHaveText(/^Ready: /, { timeout: 30000 });
+    await page.click('#mmPlay');
+    const r = await page.evaluate(() => ({
+      overflow: document.documentElement.scrollWidth - 360,
+      small: [...document.querySelectorAll('#miniMusic button, #miniMusic select')].filter((b) => b.getBoundingClientRect().height < 44).map((b) => b.id),
+      on: (() => { const s = getComputedStyle(document.getElementById('mmPlay')); return [s.color, s.backgroundColor]; })(),
+    }));
+    expect(r).toMatchObject({ overflow: 0, small: [] });
+    expect(r.on[0]).not.toBe(r.on[1]);
+    await page.click('#mmPlay');
   });
 }
-
-test('the lofi library is the default source; all tracks or one chosen track play under the narration', async ({ page, backend }) => {
-  test.setTimeout(90000);
-  const seen = [];
-  await serveLofi(page, seen);
-  const list = JSON.parse(fs.readFileSync(path.join(LOFI, 'tracks.json'), 'utf8')).tracks;
-  expect(list.length).toBeGreaterThanOrEqual(6);
-  for (const t of list) expect(fs.existsSync(path.join(LOFI, t.file))).toBe(true);
-  await openBook(page);
-  await page.click('#pMusic');
-  await expect(page.locator('#mSource')).toHaveValue('lofi');
-  await expect(page.locator('#mLofi option')).toHaveCount(list.length + 1);
-  await expect(page.locator('#mLofi option').first()).toHaveText('All tracks (' + list.length + ')');
-  await expect(page.locator('#mLofiNote')).toBeVisible();
-  // One chosen track.
-  await page.selectOption('#mLofi', list[1].file);
-  await expect(page.locator('#mOrderRow')).toBeHidden();
-  await page.check('#mOn');
-  await page.evaluate(() => player.play());
-  await expect(page.locator('#mStatus')).toHaveText('Playing: ' + list[1].title + '.', { timeout: 30000 });
-  await expect.poll(async () => (await st(page)).music).toBe(true);
-  expect(seen).toContain(list[1].file);
-  // All tracks, shuffled by default.
-  await page.selectOption('#mLofi', 'all');
-  await expect(page.locator('#mOrderRow')).toBeVisible();
-  await expect(page.locator('#mOrder')).toHaveValue('shuffle');
-  await expect(page.locator('#mStatus')).toHaveText(/^Playing: /, { timeout: 30000 });
-  await page.evaluate(() => player.pause());
-  expect(JSON.parse(await page.evaluate(() => localStorage.getItem('mp_music_tester')))).toMatchObject({ source: 'lofi', lofi: 'all', on: true });
-});

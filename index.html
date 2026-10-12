@@ -157,7 +157,7 @@
   #pSleepBtn .sl { font-variant-numeric:tabular-nums; }
   #pSleepBtn .sl:empty { display:none; }
   #pSleepBtn:not(.icon) { padding:var(--s1) var(--s3); }
-  #pSleepBtn.on, #pMusic.on { background:var(--accent); color:var(--on-accent); border-color:var(--accent); }
+  #pSleepBtn.on { background:var(--accent); color:var(--on-accent); border-color:var(--accent); }
   #player { display:block; width:100%; margin-top:var(--s3); }
   .pset { margin-top:var(--s2); font-size:var(--f2); color:var(--muted); }
   .pset select { width:auto; }
@@ -186,13 +186,10 @@
   .results button.hit:hover { background:var(--soft); }
   .results .hit b { display:block; font-size:var(--f1); color:var(--muted); }
   .results mark { background:var(--hl2); color:var(--ink); border-radius:2px; }
-  .musicpanel { margin-top:var(--s2); padding:var(--s3); border:1px solid var(--line); border-radius:var(--r); background:var(--soft); font-size:var(--f2); color:var(--ink); display:flex; flex-direction:column; gap:var(--s2); }
-  .musicpanel .mfields { display:grid; grid-template-columns:repeat(auto-fill, minmax(144px, 1fr)); gap:var(--s2) var(--s3); }
-  .musicpanel .mfield label { margin:0 0 var(--s1); }
-  .musicpanel .mfile { display:flex; gap:var(--s2); align-items:center; padding:var(--s1) 0; border-bottom:1px solid var(--line); }
-  .musicpanel .mname { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .musicpanel .mfile .m { font-size:var(--f1); font-variant-numeric:tabular-nums; }
-  .musicpanel .mnote { font-size:var(--f1); color:var(--muted); }
+  .topmid { display:flex; gap:var(--s2); align-items:center; flex-wrap:wrap; }
+  .minimusic { display:inline-flex; gap:var(--s2); align-items:center; }
+  .minimusic select { width:auto; max-width:200px; }
+  .minimusic.err select { border-color:var(--err); }
   .pdl { margin-top:var(--s3); }
   .banner { font-size:var(--f2); background:var(--soft); border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:var(--r); padding:var(--s2) var(--s3); margin-bottom:var(--s3); display:flex; gap:var(--s2); align-items:center; flex-wrap:wrap; }
   body.offline [data-net] { opacity:.45; pointer-events:none; }
@@ -235,6 +232,9 @@
     #brand { font-size:var(--f3); }
     .themes button { padding:0 var(--s2); min-width:44px; }
     .who button { padding:var(--s1) var(--s3); }
+    .topmid { order:3; width:100%; }               /* name and Log out on the first row, themes and music below */
+    .minimusic { flex:1; min-width:0; }
+    .minimusic select { flex:1; min-width:0; max-width:none; }
     .wide-only { display:none; }
     #preset { width:100% !important; }
     .chlist { max-height:50vh; }
@@ -262,7 +262,6 @@
   <symbol id="i-prev" viewBox="0 0 24 24"><path d="M6 5v14M18 5.5 9 12l9 6.5z"/></symbol>
   <symbol id="i-next" viewBox="0 0 24 24"><path d="M18 5v14M6 5.5 15 12l-9 6.5z"/></symbol>
   <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
-  <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></symbol>
   <symbol id="i-sleep" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
   <symbol id="i-offline" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></symbol>
@@ -274,8 +273,15 @@
   <div id="netBanner" class="banner hidden" role="status"></div>
   <div class="top">
     <h1 id="brand">Wako205</h1>
+    <div class="topmid">
     <div class="themes" id="themes" role="group" aria-label="Color theme">
       <button data-theme="eye" title="Warm paper tones, less blue light">护眼</button><button data-theme="day" title="White background">白天</button><button data-theme="night" title="Dark background">黑夜</button>
+    </div>
+    <div class="minimusic hidden" id="miniMusic" role="group" aria-label="Background music">
+      <select id="mmTrack" aria-label="Background music" title="Background music (lofi by Holizna, CC0)"></select>
+      <button class="ghost icon" id="mmPlay" type="button" aria-label="Play music" aria-pressed="false" title="Play or pause the music"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg></button>
+      <span class="sr-only" id="mStatus" aria-live="polite"></span>
+    </div>
     </div>
     <div class="who hidden" id="who"><span id="whoUsage"></span><button class="ghost" id="logoutBtn">Log out</button></div>
   </div>
@@ -296,7 +302,7 @@
   <div id="appView" class="hidden" style="display:flex;flex-direction:column;flex:1">
     <div class="tabs">
       <button id="tabAudio" class="active">PDF to audio</button>
-      <button id="tabTools"><span>Polish / Review<span class="wide-only"> (Word &amp; LaTeX)</span></span></button>
+      <button id="tabTools" class="hidden" hidden><span>Polish / Review<span class="wide-only"> (Word &amp; LaTeX)</span></span></button>
       <button id="tabChat">Chat</button>
     </div>
 
@@ -387,33 +393,8 @@
             <option value="1.3">1.3×</option><option value="1.5">1.5×</option><option value="1.75">1.75×</option><option value="2">2×</option>
           </select>
           <label class="check follow" title="Keep the screen on (no auto-lock) while audio plays"><input type="checkbox" id="pAwake" checked aria-label="Keep the screen on while audio plays"><svg class="ic" aria-hidden="true"><use href="#i-screen"/></svg><span class="wide-only">Screen on</span></label>
-          <button class="ghost" id="pMusic" title="Background music" aria-label="Background music" aria-expanded="false" aria-controls="pMusicPanel"><svg class="ic" aria-hidden="true"><use href="#i-music"/></svg><span class="wide-only">Music</span></button>
           <button class="ghost push" id="pJump" title="Scroll the text to the sentence being read"><span>Jump<span class="wide-only"> to current</span></span></button>
           <button class="ghost" id="pRead" title="Show only the text, with a small progress bar"><span>Full<span class="wide-only"> screen</span></span></button>
-        </div>
-        <div id="pMusicPanel" class="musicpanel hidden" role="group" aria-label="Background music">
-          <label class="check mon"><input type="checkbox" id="mOn"> Music under the narration</label>
-          <div class="mfields">
-            <div class="mfield"><label for="mSource">Source</label>
-            <select id="mSource"><option value="lofi">Lofi library</option><option value="mine">My music</option><option value="gen">Generated</option></select></div>
-            <div class="mfield" id="mLofiRow"><label for="mLofi">Track</label>
-            <select id="mLofi"><option value="all">All tracks</option></select></div>
-            <div class="mfield" id="mGenRow"><label for="mPreset">Style</label>
-            <select id="mPreset"><option value="rain">Rain</option><option value="night">Night</option><option value="cafe">Café</option></select></div>
-            <div class="mfield" id="mOrderRow"><label for="mOrder">Order</label>
-            <select id="mOrder"><option value="order">In order</option><option value="shuffle">Shuffle</option></select></div>
-            <div class="mfield"><label for="mLevel">Level</label>
-            <select id="mLevel"><option value="quiet">Quiet</option><option value="normal">Normal</option><option value="louder">Louder</option></select></div>
-          </div>
-          <div id="mLofiNote" class="mnote hidden" title="Public domain (CC0), loaded from this site as needed.">Music by Holizna (CC0).</div>
-          <div id="mMine" class="hidden">
-            <div id="mFiles"></div>
-            <div class="row mt">
-              <input type="file" id="mAdd" accept="audio/*" multiple class="hidden">
-              <button class="ghost" type="button" id="mAddBtn" title="Your files stay in this browser and are never uploaded.">Add files</button>
-            </div>
-          </div>
-          <div class="status" id="mStatus" aria-live="polite"></div>
         </div>
         <div id="pMarks" class="marks"></div>
         <form class="row psearch" id="pSearchForm" role="search">
@@ -465,12 +446,10 @@
             <option value="az:en-US-AvaMultilingualNeural">Ava (English, female)</option>
           </optgroup>
           <optgroup label="Google (best for English)">
-            <option value="Charon" selected>Charon (male, calm)</option>
-            <option value="Kore">Kore (female, clear)</option>
+            <option value="Kore" selected>Kore (female, clear)</option>
             <option value="Aoede">Aoede (female, light)</option>
             <option value="Orus">Orus (male, firm)</option>
             <option value="Puck">Puck (male, lively)</option>
-            <option value="Leda">Leda (female, youthful)</option>
           </optgroup>
         </select>
         <button class="ghost" id="previewBtn" type="button" data-net="1" title="Hear the first sentences of the selected text in this voice (uses about 0.1k characters of the allowance)">试听 Preview</button>
@@ -645,6 +624,7 @@ function showApp() {
   $('who').classList.remove('hidden'); $('brand').textContent = username + '@Wako205';
   renderChat();
   loadMusicPrefs();
+  musicSync();                                      // loads the first track, ready for ▶
   switchTab('audio');
 }
 /**
@@ -665,7 +645,7 @@ function logout() {
   offWipe(user).then(renderNet);
   offlineMode = false;
   token = username = null; store('mp_token', null); store('mp_user', null); $('brand').textContent = 'Wako205';
-  mPrefs.on = false; resetMusic(); $('pMusicPanel').classList.add('hidden');
+  mPrefs.on = false; resetMusic(); $('miniMusic').classList.add('hidden');
   clearTimeout(libTimer); libItems = []; sharedItems = []; $('library').textContent = ''; $('libUsage').textContent = ''; $('usageCard').classList.add('hidden'); $('usageCard').parentElement.classList.add('nousage');
   $('sharedLib').textContent = ''; $('sharedCard').classList.add('hidden');
   chat = { convId: null, messages: [] }; pendingDoc = null; currentFile = null; store('mp_chat', null);
@@ -739,10 +719,11 @@ function getPdfjs() {
 }
 
 /** Text lines of every page (see pageLines), read with the given pdf.js library. */
-async function pdfLines(lib, data, onPage) {
+async function pdfLines(lib, data, onPage, info) {
   const doc = await lib.getDocument({ data, isEvalSupported: false }).promise;   // never compile font data to code
   const pages = [];
   try {
+    if (info) { try { info.outline = await pdfOutline(doc); } catch (e) { info.outline = null; } }
     for (let i = 1; i <= doc.numPages; i++) {
       const page = await doc.getPage(i);
       pages.push(pageLines((await page.getTextContent()).items));
@@ -750,6 +731,26 @@ async function pdfLines(lib, data, onPage) {
     }
   } finally { doc.destroy(); }
   return pages;
+}
+
+/** The PDF's bookmarks as [{title, page (1-based), items}], or null. */
+async function pdfOutline(doc) {
+  const raw = await doc.getOutline();
+  if (!raw || !raw.length) return null;
+  const pageOf = async (dest) => {
+    try {
+      const d = typeof dest === 'string' ? await doc.getDestination(dest) : dest;
+      if (!d || !d[0]) return 0;
+      return (typeof d[0] === 'number' ? d[0] : await doc.getPageIndex(d[0])) + 1;
+    } catch (e) { return 0; }
+  };
+  const walk = async (items, depth) => {
+    const out = [];
+    for (const it of items || []) out.push({ title: String(it.title || '').replace(/\s+/g, ' ').trim(), page: await pageOf(it.dest),
+                                             items: depth < 3 ? await walk(it.items, depth + 1) : [] });
+    return out;
+  };
+  return walk(raw, 0);
 }
 
 async function splitPdf(bytes) {
@@ -785,13 +786,19 @@ function pageLines(items) {
     const y = it.transform[5], x = it.transform[4];
     let row = rows.find((r) => Math.abs(r.y - y) < 2.5);
     if (!row) { row = { y, parts: [] }; rows.push(row); }
-    row.parts.push({ x, s: it.str, h: Math.abs(it.transform[3]) || 10 });
+    row.parts.push({ x, s: it.str, h: Math.abs(it.transform[3]) || 10, w: it.width || 0 });
   });
   rows.sort((a, b) => b.y - a.y);
   return rows.map((r) => {
     r.parts.sort((a, b) => a.x - b.x);
-    return { x: r.parts[0].x, h: r.parts[0].h,
-             s: r.parts.map((p) => p.s).join(' ').replace(CJK_GAP, '$1').replace(/\s+/g, ' ').trim() };
+    // Pieces that touch belong to one word (ligatures such as "fi", "ff", "Th" often come as separate pieces).
+    let s = '';
+    r.parts.forEach((p, i) => {
+      const q = r.parts[i - 1];
+      const touch = q && q.w > 0 && p.x - (q.x + q.w) < 0.12 * Math.min(p.h, q.h) && /\S$/.test(q.s) && /^\S/.test(p.s);
+      s += (i && !touch ? ' ' : '') + p.s;
+    });
+    return { x: r.parts[0].x, h: r.parts[0].h, s: s.replace(CJK_GAP, '$1').replace(/\s+/g, ' ').trim() };
   }).filter((l) => l.s);
 }
 
@@ -851,8 +858,19 @@ function splitChapters(pages) {
     const nx = chapters[k + 1];
     c.endPage = nx ? Math.max(c.startPage, nx.atTop ? nx.startPage - 1 : nx.startPage) : pages.length;
   });
-  const out = chapters.map((c) => ({ title: c.title, text: joinLines(c.lines).trim(), startPage: c.startPage, endPage: c.endPage }))
+  let out = chapters.map((c) => ({ title: c.title, text: joinLines(c.lines).trim(), startPage: c.startPage, endPage: c.endPage }))
     .filter((c) => c.text.length > 20);
+  // Parts and chapters: offer the chapters; the text of a part's title page goes to its first chapter.
+  if (out.some((c) => PART_RE.test(c.title)) && out.filter((c) => !PART_RE.test(c.title)).length >= 2) {
+    const merged = [];
+    let carry = '';
+    out.forEach((c) => {
+      if (PART_RE.test(c.title)) { carry += c.title + '\n\n' + c.text + '\n\n'; return; }
+      merged.push(carry ? Object.assign({}, c, { text: carry + c.text }) : c); carry = '';
+    });
+    if (carry && merged.length) merged[merged.length - 1].text += '\n\n' + carry.trim();
+    out = merged;
+  }
   if (out.length) {
     const ft = joinLines(front.lines).trim();
     if (ft.length > 20) {
@@ -930,10 +948,129 @@ async function extractBook(file) {
   const st = $('audioStatus');
   setStatus(st, 'Reading the PDF text...');
   const lib = await getPdfjs();
+  const info = {};
   const pages = await pdfLines(lib, new Uint8Array(await file.arrayBuffer()),
-    (i, n) => { if (i % 40 === 0) setStatus(st, 'Reading the PDF text: page ' + i + ' of ' + n); });
+    (i, n) => { if (i % 40 === 0) setStatus(st, 'Reading the PDF text: page ' + i + ' of ' + n); }, info);
   setStatus(st, '');
-  return { chapters: splitChapters(pages), pages: pages.length, lines: pages };
+  const byOutline = info.outline ? chaptersFromOutline(info.outline, pages) : null;
+  if (byOutline) return { chapters: byOutline, pages: pages.length, lines: pages, outline: true };
+  // No bookmarks: chapter headings by rule, or the titles listed in the table of contents, whichever finds more.
+  const byRule = splitChapters(pages), byToc = chaptersFromToc(pages);
+  const n = (list) => (list || []).filter((c) => !c.front && c.title !== 'Full text').length;
+  return { chapters: byToc && n(byToc) > n(byRule) ? byToc : byRule, pages: pages.length, lines: pages, toc: !!(byToc && n(byToc) > n(byRule)) };
+}
+
+/** A title reduced to letters and digits, for matching a contents entry with its heading in the text. */
+const normTitle = (t) => String(t).normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+
+/**
+ * Chapters from a table of contents whose entries are titles with page numbers ("Developing a Theme  10"),
+ * for books that do not number their chapters. Each title is looked up as a heading line in the text,
+ * in order; the chapter starts at that line. Returns null when fewer than three titles are found.
+ */
+function chaptersFromToc(pages) {
+  const ENTRY = /^(.{2,100}?)[\s.·…_]*\s([0-9]{1,4})$/;
+  const entries = [];
+  let tocEnd = -1;
+  for (let pi = 0; pi < Math.min(pages.length, 30); pi++) {
+    const found = pages[pi].map((l) => l.s.match(ENTRY)).filter((m) => m && /\p{L}{2}/u.test(m[1]));
+    if (found.length >= 5) {
+      found.forEach((m) => entries.push({ title: m[1].replace(/[\s.·…_]+$/, '').trim(), printed: Number(m[2]) }));
+      tocEnd = pi;
+    } else if (tocEnd >= 0 && pi > tocEnd + 1) break;
+  }
+  // Chapters only: no "1.1" sections, no parts, no contents or copyright entries.
+  const list = entries.filter((e) => !/^[0-9]+\.[0-9]+/.test(e.title) && !PART_RE.test(e.title) && !SKIP_RE.test(e.title) && normTitle(e.title).length >= 3);
+  if (list.length < 3) return null;
+  const clean = cleanPages(pages);
+  let pi = tocEnd + 1, li = 0;
+  const marks = [];
+  list.forEach((e) => {
+    const want = normTitle(e.title);
+    for (let p = pi; p < clean.length; p++) {
+      const L = clean[p];
+      for (let l = p === pi ? li : 0; l < L.length; l++) {
+        const got = normTitle(L[l].s);
+        if (got && (got === want || (got.startsWith(want) && got.length <= want.length + 4))) {
+          marks.push({ title: e.title, p, l }); pi = p; li = l + 1; return;
+        }
+      }
+    }
+  });
+  if (marks.length < 3 || marks.length < 0.6 * list.length) return null;
+  const slice = (a, b) => {                       // lines from mark a up to (not including) mark b
+    const out = [];
+    for (let p = a.p; p <= (b ? b.p : clean.length - 1); p++) {
+      const L = clean[p], from = p === a.p ? a.l + 1 : 0, to = b && p === b.p ? b.l : L.length;
+      for (let l = from; l < to; l++) out.push(L[l]);
+    }
+    return joinLines(out).trim();
+  };
+  const out = [];
+  const front = joinLines([].concat.apply([], clean.slice(tocEnd + 1, marks[0].p)).concat(clean[marks[0].p].slice(0, marks[0].l))).trim();
+  if (front.length > 20) out.push({ title: 'Front matter (before the first chapter)', text: front, startPage: 1, endPage: marks[0].p + 1, front: true });
+  marks.forEach((m, k) => {
+    const nx = marks[k + 1], text = slice(m, nx);
+    if (text.length > 20) out.push({ title: m.title.slice(0, 80), text: m.title + '\n\n' + text, startPage: m.p + 1, endPage: nx ? nx.p + 1 : pages.length });
+  });
+  return out.filter((c) => !c.front).length >= 3 ? out : null;
+}
+
+// A part of a book (a group of chapters), not a chapter: "Part II", "Book 1", "II", "第一部", "上卷", "第二篇".
+const PART_RE = /^((part|book|volume)\s+([0-9]+|[ivxlc]+|one|two|three|four|five|six)\b.*|[ivxlc]{1,5}\.?|第[0-9０-９一二三四五六七八九十]+[部卷篇]\S*|[上中下]卷.*)$/i;
+const SKIP_RE = /^(contents|table of contents|目录|目錄|maps?|list of (figures|tables|illustrations)|copyright|版权|cover|title page)$/i;
+
+/**
+ * Chapters from the PDF bookmarks. A part with chapters inside is replaced by its chapters, so a
+ * book of parts and chapters is offered chapter by chapter; sections inside chapters are not split.
+ * Returns null when the bookmarks do not describe at least three chapters.
+ */
+function chaptersFromOutline(outline, pages) {
+  const marks = [];                               // {title, page, skip}: chapter starts, and pages that only end the one before
+  const add = (items) => items.forEach((it) => {
+    if (!it.page) return;
+    const kids = (it.items || []).filter((k) => k.page);
+    const sections = kids.every((k) => /^[0-9]+\.[0-9]+/.test(k.title));   // "1.1 ...": sections of a chapter, not chapters
+    if (kids.length >= 2 && !sections && (PART_RE.test(it.title) || outline.length <= 3)) {
+      if (it.page < kids[0].page) marks.push({ title: it.title, page: it.page, skip: true });   // the part's title page
+      add(kids);
+    } else marks.push({ title: it.title || 'Chapter', page: it.page, skip: SKIP_RE.test(it.title) });
+  });
+  add(outline);
+  marks.sort((a, b) => a.page - b.page);
+  const starts = marks.filter((m, i) => !marks.slice(0, i).some((p) => p.page === m.page && !p.skip) );
+  const chs = starts.filter((m) => !m.skip);
+  if (chs.length < 3) return null;
+  const clean = cleanPages(pages);
+  const text = (a, b) => joinLines([].concat.apply([], clean.slice(a - 1, b))).trim();
+  const out = [];
+  const first = starts[0].page;
+  if (first > 1) {
+    const ft = text(1, first - 1);
+    if (ft.length > 20) out.push({ title: 'Front matter (before the first chapter)', text: ft, startPage: 1, endPage: first - 1, front: true });
+  }
+  starts.forEach((m, k) => {
+    if (m.skip) return;
+    const end = k + 1 < starts.length ? Math.max(m.page, starts[k + 1].page - 1) : pages.length;
+    const t = text(m.page, end);
+    if (t.length > 20) out.push({ title: m.title.slice(0, 80), text: t, startPage: m.page, endPage: end });
+  });
+  return out.filter((c) => !c.front).length >= 3 ? out : null;
+}
+
+/** Page lines without running headers and page numbers, with paragraph starts marked (as in splitChapters). */
+function cleanPages(pages) {
+  const firstCount = {};
+  pages.forEach((L) => { if (L[0]) firstCount[L[0].s] = (firstCount[L[0].s] || 0) + 1; });
+  return pages.map((L0) => {
+    const L = L0.slice();
+    while (L.length && PAGENUM_RE.test(L[L.length - 1].s)) L.pop();
+    while (L.length && PAGENUM_RE.test(L[0].s)) L.shift();
+    if (L.length && (firstCount[L[0].s] || 0) >= 3) L.shift();
+    while (L.length && PAGENUM_RE.test(L[0].s)) L.shift();
+    const left = Math.min.apply(null, L.map((l) => l.x).concat([1e9]));
+    return L.map((l) => ({ s: l.s, para: l.x - left > 0.8 * l.h }));
+  });
 }
 
 /**
@@ -1239,7 +1376,7 @@ async function loadLibrary() {
   libUsage.azUsed = d.azUsed || 0; libUsage.azCap = d.azCap || 0; libUsage.azReady = !!d.azReady;
   libUsage.s0Used = d.s0Used || 0; libUsage.s0Cap = d.s0Cap || 0; libUsage.s0Until = d.azTier === 's0' && d.azUntil ? d.azUntil : 0;
   const az = $('azVoices'); az.disabled = !libUsage.azReady; az.classList.toggle('hidden', !libUsage.azReady);
-  if (!libUsage.azReady && /^az:/.test($('avoice').value)) $('avoice').value = 'Charon';
+  if (!libUsage.azReady && /^az:/.test($('avoice').value)) $('avoice').value = 'Kore';
   $('libUsage').textContent = 'Speech used this month: ' + (libUsage.azReady ? 'Google ' : '') + fmtK(libUsage.used, true) + ' of ' + fmtK(libUsage.cap) +
     (libUsage.azReady ? ' · Microsoft ' + (libUsage.s0Until ? 'free ' : '') + fmtK(libUsage.azUsed, true) + ' of ' + fmtK(libUsage.azCap, !!libUsage.s0Until) +
       (libUsage.s0Until ? ', then trial credit ' + fmtK(libUsage.s0Used, true) + ' of ' + fmtK(libUsage.s0Cap) +
@@ -1417,9 +1554,9 @@ function toggleAddPanel(it, row) {
   });
   box.appendChild(list);
   const row2 = el('div', 'row');
-  const voice = $('avoice').cloneNode(true); voice.removeAttribute('id'); voice.className = 'auto'; voice.value = it.voice || 'Charon';
+  const voice = $('avoice').cloneNode(true); voice.removeAttribute('id'); voice.className = 'auto'; voice.value = it.voice || 'Kore';
   voice.querySelectorAll('[id]').forEach((x) => x.removeAttribute('id'));
-  if (!voice.value) voice.value = 'Charon';
+  if (!voice.value) voice.value = 'Kore';
   voice.onchange = () => sum();
   const go = el('button', null, 'Convert selected'); const st = el('span', 'status');
   const sum = () => {
@@ -2418,6 +2555,7 @@ function sleepStop() {
   player.pause();                                     // the pause event saves the position
   saveProgress(true);
   setFade(1);
+  if (mPrefs.on) { mPrefs.on = false; music.pause(); renderMini(); }   // the music stops too
   setStatus($('pStatus'), 'Sleep timer: playback stopped.');
   renderSleep();
 }
@@ -2695,16 +2833,17 @@ async function myMusicData(key) { const db = await musicDb(); const f = await mu
 
 // State: the choices (per user, in this browser), and the track playing.
 const music = $('music');
-let mPrefs = { on: false, source: 'lofi', lofi: 'all', preset: 'rain', level: 'normal', order: 'shuffle' };
+let mPrefs = { on: false, source: 'lofi', lofi: 'all', preset: 'rain', level: 'louder', order: 'shuffle' };
 let mTrack = null, mNext = null, mNextReady = null, mSeed = 1, mIndex = -1, mGen = 0, mUnlocked = false;
 function musicPrefsKey() { return 'mp_music_' + (username || ''); }
 function loadMusicPrefs() {
-  mPrefs = { on: false, source: 'lofi', lofi: 'all', preset: 'rain', level: 'normal', order: 'shuffle' };
+  mPrefs = { on: false, source: 'lofi', lofi: 'all', preset: 'rain', level: 'louder', order: 'shuffle' };
   try { Object.assign(mPrefs, JSON.parse(lsGet(musicPrefsKey()) || '{}')); } catch (e) {}
+  mPrefs.on = false;                                   // the music starts only with a tap on ▶
   if (!MUSIC_PRESETS[mPrefs.preset]) mPrefs.preset = 'rain';
   if (!(mPrefs.level in MUSIC_LEVELS)) mPrefs.level = 'normal';
   if (['lofi', 'mine', 'gen'].indexOf(mPrefs.source) < 0) mPrefs.source = 'lofi';
-  renderMusicPanel();
+  renderMini();
 }
 function saveMusicPrefs() { lsSet(musicPrefsKey(), JSON.stringify(mPrefs)); }
 const musicTarget = () => SPEECH_DB + MUSIC_LEVELS[mPrefs.level];
@@ -2748,21 +2887,25 @@ function lofiList() {
   }
   return lofiP;
 }
-async function renderLofiSelect() {
-  let list = [];
-  try { list = await lofiList(); } catch (e) {}
-  const sel = $('mLofi');
-  if (sel.options.length !== list.length + 1) {
-    sel.textContent = ''; sel.appendChild(el('option', null, 'All tracks (' + list.length + ')')).value = 'all';
-    list.forEach((t) => { const o = el('option', null, t.title + (t.collection ? ' · ' + t.collection : '')); o.value = t.file; sel.appendChild(o); });
-  }
-  sel.value = list.some((t) => t.file === mPrefs.lofi) ? mPrefs.lofi : 'all';
-}
 function track(gen, y, label, lv) {
   const blob = wavBlob(y, MUSIC_RATE);
   return { gen, blob, url: URL.createObjectURL(blob), label, seconds: y.length / MUSIC_RATE, retried: false, ...lv };
 }
 function dropTrack(t) { if (t && t.url) URL.revokeObjectURL(t.url); }
+/** Loads the first track after login, so ▶ starts at once (nothing plays). */
+function musicPrepare() { if (!mTrack && !musicSync.busy && username) prepareFirst(); }
+async function prepareFirst() {
+  if (prepareFirst.busy) return;
+  prepareFirst.busy = true;
+  const gen = mGen;
+  try {
+    const t = await makeTrack(gen);
+    if (gen !== mGen || mTrack) dropTrack(t);
+    else { mTrack = t; music.src = t.url; setStatus($('mStatus'), (musicWanted() ? 'Playing: ' : 'Ready: ') + t.label + '.'); if (musicWanted()) music.play().catch(() => {}); prepareNext(); }
+  } catch (e) { if (gen === mGen) setStatus($('mStatus'), e.message, true); }
+  prepareFirst.busy = false;
+  renderMini();
+}
 /** Prepares the following track while the current one plays, so the switch needs no work in the background. */
 function prepareNext() {
   if (mNext || mNextReady || !mTrack) return;
@@ -2777,11 +2920,11 @@ function resetMusic() {
   mIndex = -1;
   musicSync();
 }
-/** The music plays while the narration plays, if it is switched on. */
-function musicWanted() { return mPrefs.on && !!P && !player.paused; }
+/** The music plays on its own, from ▶ to ❚❚, independently of the narration (both can play together). */
+function musicWanted() { return mPrefs.on && !!username; }
 async function musicSync() {
-  if (!musicWanted()) { if (!music.paused) music.pause(); return; }
-  if (mTrack) { if (music.paused) music.play().catch(() => {}); return; }
+  if (!musicWanted()) { if (!music.paused) music.pause(); renderMini(); if (!mTrack && username) musicPrepare(); return; }
+  if (mTrack) { if (music.paused) music.play().catch(() => {}); renderMini(); return; }
   if (musicSync.busy) return;
   musicSync.busy = true;
   const gen = mGen;
@@ -2791,11 +2934,12 @@ async function musicSync() {
     if (gen !== mGen) dropTrack(t);                       // the choices changed meanwhile: rendered again below
     else {
       mTrack = t; music.src = t.url; music.loop = false;
-      setStatus($('mStatus'), 'Playing: ' + t.label + '.');
+      setStatus($('mStatus'), (musicWanted() ? 'Playing: ' : 'Ready: ') + t.label + '.');
       if (musicWanted()) music.play().catch(() => {});
       prepareNext();
     }
-  } catch (e) { if (gen === mGen) setStatus($('mStatus'), e.message, true); }
+  } catch (e) { if (gen === mGen) { setStatus($('mStatus'), e.message, true); $('mmPlay').title = e.message; } }
+  renderMini();
   musicSync.busy = false;
   if (gen !== mGen) musicSync();
 }
@@ -2803,7 +2947,7 @@ async function musicSync() {
 // if it is not ready, the current one plays again.
 music.addEventListener('ended', () => {
   const t = mNextReady; mNextReady = null;
-  if (t && t.gen === mGen) { dropTrack(mTrack); mTrack = t; music.src = t.url; setStatus($('mStatus'), 'Playing: ' + t.label + '.'); }
+  if (t && t.gen === mGen) { dropTrack(mTrack); mTrack = t; music.src = t.url; setStatus($('mStatus'), 'Playing: ' + t.label + '.'); renderMini(); }
   else music.currentTime = 0;
   if (musicWanted()) music.play().catch(() => {});
   prepareNext();
@@ -2824,65 +2968,33 @@ function unlockMusic() {
 }
 ['touchend', 'click'].forEach((ev) => document.addEventListener(ev, unlockMusic, true));
 
-function renderMusicPanel() {
-  $('mOn').checked = mPrefs.on; $('mSource').value = mPrefs.source; $('mPreset').value = mPrefs.preset;
-  $('mLevel').value = mPrefs.level; $('mOrder').value = mPrefs.order;
-  $('mGenRow').classList.toggle('hidden', mPrefs.source !== 'gen');
-  $('mLofiRow').classList.toggle('hidden', mPrefs.source !== 'lofi');
-  $('mLofiNote').classList.toggle('hidden', mPrefs.source !== 'lofi');
-  $('mOrderRow').classList.toggle('hidden', mPrefs.source === 'gen' || (mPrefs.source === 'lofi' && mPrefs.lofi !== 'all'));
-  $('mMine').classList.toggle('hidden', mPrefs.source !== 'mine');
-  if (mPrefs.source === 'lofi') renderLofiSelect();
-  $('pMusic').classList.toggle('on', mPrefs.on);
-  if (!mPrefs.on) setStatus($('mStatus'), '');
-  if (mPrefs.source === 'mine') renderMyMusic();
-}
-async function renderMyMusic() {
-  const box = $('mFiles');
+/** The small music player next to the themes: a track list and ▶ / ❚❚. */
+async function renderMini() {
+  $('miniMusic').classList.toggle('hidden', !username);
+  const on = mPrefs.on, btn = $('mmPlay');
+  setIcon(btn, on ? 'pause' : 'play'); btn.classList.toggle('on', on);
+  btn.setAttribute('aria-pressed', String(on)); btn.setAttribute('aria-label', on ? 'Pause music' : 'Play music');
+  $('miniMusic').classList.toggle('err', $('mStatus').classList.contains('err'));
   let list = [];
-  try { list = await myMusicList(); } catch (e) {}
-  box.textContent = '';
-  if (!list.length) box.appendChild(el('div', 'status', 'No files yet.'));
-  list.forEach((f) => {
-    const r = el('div', 'mfile');
-    r.appendChild(el('span', 'mname', f.name));
-    r.appendChild(el('span', 'm', fmtMB(f.size)));
-    const x = iconButton('danger', 'delete', null, 'Remove ' + f.name);
-    x.onclick = async () => {
-      const db = await musicDb(), tx = db.transaction('files', 'readwrite'); tx.objectStore('files').delete(f.key);
-      await new Promise((res) => { tx.oncomplete = res; tx.onerror = res; });
-      renderMyMusic(); resetMusic();
-    };
-    r.appendChild(x); box.appendChild(r);
-  });
+  try { list = await lofiList(); } catch (e) {}
+  const sel = $('mmTrack');
+  if (sel.options.length !== list.length + 1) {
+    sel.textContent = '';
+    sel.appendChild(el('option', null, '♪ All lofi (' + list.length + ')')).value = 'all';
+    list.forEach((t) => { const o = el('option', null, '♪ ' + t.title); o.value = t.file; sel.appendChild(o); });
+  }
+  sel.value = list.some((t) => t.file === mPrefs.lofi) ? mPrefs.lofi : 'all';
+  if (mTrack && mPrefs.on) sel.title = 'Playing: ' + mTrack.label;
 }
+$('mmPlay').onclick = () => {
+  mPrefs.on = !mPrefs.on; saveMusicPrefs();
+  mUnlocked = true;
+  if (mPrefs.on && mTrack) { music.play().catch(() => {}); setStatus($('mStatus'), 'Playing: ' + mTrack.label + '.'); }   // inside the tap, as iOS requires
+  if (!mPrefs.on) { music.pause(); if (mTrack) setStatus($('mStatus'), 'Paused: ' + mTrack.label + '.'); }
+  renderMini(); musicSync();
+};
+$('mmTrack').onchange = () => { mPrefs.source = 'lofi'; mPrefs.lofi = $('mmTrack').value; saveMusicPrefs(); resetMusic(); };
 function fmtMB(n) { return n >= 1e6 ? (n / 1e6).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1e3)) + ' kB'; }
-$('pMusic').onclick = () => {
-  const open = $('pMusicPanel').classList.toggle('hidden') === false;
-  $('pMusic').setAttribute('aria-expanded', String(open));
-  if (open) renderMusicPanel();
-};
-$('mOn').onchange = () => { mPrefs.on = $('mOn').checked; saveMusicPrefs(); unlockMusic(); renderMusicPanel(); resetMusic(); };
-[['mSource', 'source'], ['mLofi', 'lofi'], ['mPreset', 'preset'], ['mLevel', 'level'], ['mOrder', 'order']].forEach(([id, k]) => {
-  $(id).onchange = () => { mPrefs[k] = $(id).value; saveMusicPrefs(); renderMusicPanel(); if (k !== 'order') resetMusic(); };
-});
-$('mAddBtn').onclick = () => $('mAdd').click();
-$('mAdd').onchange = async () => {
-  const files = Array.from($('mAdd').files || []);
-  $('mAdd').value = '';
-  if (!files.length) return;
-  try {
-    const db = await musicDb();
-    for (const f of files) {
-      const data = await f.arrayBuffer(), tx = db.transaction('files', 'readwrite');
-      tx.objectStore('files').put({ key: (username || '') + '|' + Date.now() + Math.random().toString(36).slice(2, 6), user: username || '', name: f.name, type: f.type, size: f.size, data, at: Date.now() });
-      await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
-    }
-    setStatus($('mStatus'), files.length === 1 ? 'Added "' + files[0].name + '".' : 'Added ' + files.length + ' files.');
-  } catch (e) { setStatus($('mStatus'), 'The files could not be stored in this browser: ' + e.message, true); }
-  renderMyMusic();
-  if (!mTrack) musicSync();
-};
 
 ['wheel', 'touchmove', 'keydown'].forEach((ev) => $('pText').addEventListener(ev, () => { lastUserScroll = Date.now(); }, { passive: true }));
 $('arate').onchange = () => { player.playbackRate = Number($('arate').value); lsSet('mp_rate', $('arate').value); };

@@ -14,8 +14,6 @@ async function fullPlayer(page, backend) {
   await expect(page.locator('#sharedLib .libitem')).toHaveCount(1);
   await page.locator('#library .libitem').first().getByRole('button', { name: 'Listen' }).click();
   await expect(page.locator('#pText span.s').first()).toBeVisible();
-  await page.click('#pMusic');
-  await page.selectOption('#mSource', 'gen');
   await page.click('#pSleepBtn');
   await page.fill('#pSearch', 'sentence');
   await page.click('#pSearchBtn');
@@ -52,6 +50,7 @@ for (const [width, ctl] of [[1280, 36], [390, 44]]) {
       const views = [await audit(page)];
       await fullPlayer(page, backend);
       views.push(await audit(page));
+      await page.evaluate(() => { const b = document.getElementById('tabTools'); b.hidden = false; b.classList.remove('hidden'); });   // hidden for now; still checked
       await page.click('#tabTools'); views.push(await audit(page));
       await page.click('#tabChat'); views.push(await audit(page));
       for (const v of views) {
@@ -86,7 +85,7 @@ for (const [width, ctl] of [[1280, 36], [390, 44]]) {
       expect(r.unlabelled).toEqual([]);
       expect(r.small).toBe(0);
       // Icons for the actions named in the brief.
-      for (const [sel, name] of [['#pPrev', 'prev'], ['#pNext', 'next'], ['#pClose', 'close'], ['#pMusic', 'music'], ['#pSleepBtn', 'sleep'], ['#pSearchBtn', 'search'], ['#mPlay', 'play'], ['#mExit', 'close']])
+      for (const [sel, name] of [['#pPrev', 'prev'], ['#pNext', 'next'], ['#pClose', 'close'], ['#mmPlay', 'play'], ['#pSleepBtn', 'sleep'], ['#pSearchBtn', 'search'], ['#mPlay', 'play'], ['#mExit', 'close']])
         expect(await page.locator(sel + ' use').getAttribute('href'), sel).toBe('#i-' + name);
       const book = page.locator('#library .libitem').first();
       for (const [name, ic] of [['Listen', 'play'], ['Offline', 'offline'], ['Share', 'share'], ['Delete', 'delete']])
