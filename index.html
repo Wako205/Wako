@@ -502,9 +502,13 @@ function fmtTime(s) { s = Math.max(0, Math.floor(s)); const h = Math.floor(s / 3
 let token = null, username = null;     // the token is kept in memory and in this tab's sessionStorage only
 
 // text/plain body keeps this a "simple" request, which Apps Script requires (no CORS preflight).
-async function api(payload) {
+async function api(payload, timeoutMs) {
   if (!isOnline()) throw new Error(OFFLINE_MSG);
-  const r = await fetch(BACKEND_URL, { method: 'POST', body: JSON.stringify(payload) });
+  const ctl = timeoutMs ? new AbortController() : null, timer = ctl && setTimeout(() => ctl.abort(), timeoutMs);
+  let r;
+  try { r = await fetch(BACKEND_URL, { method: 'POST', body: JSON.stringify(payload), signal: ctl ? ctl.signal : undefined }); }
+  catch (e) { throw new Error(e && e.name === 'AbortError' ? 'The server did not answer in time' : 'Network error: ' + e.message); }
+  finally { if (timer) clearTimeout(timer); }
   if (!r.ok) throw new Error('Server error (HTTP ' + r.status + ')');
   const data = await r.json();
   if (!data.ok) throw new Error(data.error || 'Unknown error');
@@ -1935,6 +1939,19 @@ function closePlayer() {
  * Audio and text of chapter c: all its segments, fetched four at a time and joined
  * into one MP3. Concurrent calls for the same chapter share one download.
  */
+// One audio part: a request that hangs is given up after PART_TIMEOUT_MS, and a failed or hung request
+// is tried again (up to PART_TRIES times), so one slow answer does not stop the rest of a long chapter.
+let PART_TIMEOUT_MS = 60000;
+const PART_TRIES = 4;
+async function partWithRetry(req) {
+  for (let i = 1; ; i++) {
+    try { return await api(req, PART_TIMEOUT_MS); }
+    catch (e) {
+      if (i >= PART_TRIES || /not ready|log in again|No such segment|no longer shared/i.test(e.message) || !isOnline()) throw e;
+      await sleep(1500 * i);
+    }
+  }
+}
 /** Chapter data (texts, segment timings, one MP3 blob) from the first `parts` downloaded segments. */
 function chapterData(texts, bufs, parts) {
   const segs = []; let t = 0;
@@ -1971,7 +1988,7 @@ function fetchChapter(c, onStatus, onEarly) {
     const worker = async () => {
       while (next < stop) {
         const k = next++;
-        try { bufs[k] = unb64((await api({ action: 'audio_part', token, id, chapter: c, index: k, ...from })).data); }
+        try { bufs[k] = unb64((await partWithRetry({ action: 'audio_part', token, id, chapter: c, index: k, ...from })).data); }
         catch (e) { if (/not ready/i.test(e.message)) { stop = Math.min(stop, k); continue; } throw e; }
         say('Loading audio: ' + bufs.filter(Boolean).length + ' of ' + ch.n);
         const cb = job.early;
@@ -2356,7 +2373,7 @@ function chapterEnded() {
   rafOn = false;
   if (!P) return;
   // Only the first parts are loaded: wait for the rest, which then continues from here.
-  if (P.partial) { P.waitFull = true; setStatus($('pStatus'), 'Loading the rest of this chapter...'); return; }
+  if (P.partial) { P.waitFull = true; setStatus($('pStatus'), 'Loading the rest of this chapter... ' + ($('pStatus').textContent.match(/[0-9]+ of [0-9]+/) || [''])[0]); return; }
   // The sleep timer stops here, also instead of waiting for a chapter that is still being converted
   // (playback would otherwise start again by itself whenever the conversion finishes).
   if (sleepAtChapterEnd()) return;
