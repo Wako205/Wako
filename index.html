@@ -1983,9 +1983,22 @@ const EARLY_PARTS = 1;   // playback starts as soon as the first part (one to th
 function fetchChapter(c, onStatus, onEarly) {
   const id = P.item.id, ch = P.item.chapters[c], cache = P.cache, loading = P.loading, from = ownerOf(P.item);
   if (cache[c] && cache[c].parts >= ch.n) return Promise.resolve(cache[c]);
-  if (loading[c]) { if (onEarly) loading[c].early = onEarly; return loading[c]; }
-  const say = onStatus || (() => {});
-  let earlyDone = false;
+  if (loading[c]) {
+    // Already loading (the next chapter is loaded in the background): play its first parts at once.
+    const j = loading[c];
+    if (onStatus) j.say = onStatus;
+    if (onEarly) {
+      j.early = onEarly;
+      const st = j.st;
+      if (st && st.texts && !st.earlyDone) {
+        let pre = 0; while (pre < ch.n && st.bufs[pre]) pre++;
+        if (pre >= EARLY_PARTS && pre < ch.n) { st.earlyDone = true; onEarly(chapterData(st.texts, st.bufs, pre)); }
+      }
+    }
+    return j;
+  }
+  const st = { texts: null, bufs: null, earlyDone: false };
+  const say = (m) => { if (job.say) job.say(m); };
   const job = (async () => {
     const used = pronUsed(id), saved = await offGet(P.item, c).catch(() => null);
     let texts, bufs, stop = ch.n;
@@ -1999,6 +2012,7 @@ function fetchChapter(c, onStatus, onEarly) {
       texts = await chapterTexts(P.item, c);
       bufs = new Array(ch.n);
     }
+    st.texts = texts; st.bufs = bufs;
     let next = 0;
     const it = P.item, total = ch.chars ? fmtDur(ch.chars / (it.lang && it.lang !== 'en-US' ? 270 : 900)) : '';
     const worker = async () => {
@@ -2008,9 +2022,9 @@ function fetchChapter(c, onStatus, onEarly) {
         catch (e) { if (/not ready/i.test(e.message)) { stop = Math.min(stop, k); continue; } throw e; }
         say('Loading audio: ' + bufs.filter(Boolean).length + ' of ' + ch.n + ' parts' + (total ? ' (the chapter is about ' + total + ' long; the player shows the loaded part)' : ''));
         const cb = job.early;
-        if (cb && !earlyDone) {
+        if (cb && !st.earlyDone) {
           let pre = 0; while (pre < ch.n && bufs[pre]) pre++;
-          if (pre >= EARLY_PARTS && pre < ch.n) { earlyDone = true; cb(chapterData(texts, bufs, pre)); }
+          if (pre >= EARLY_PARTS && pre < ch.n) { st.earlyDone = true; cb(chapterData(texts, bufs, pre)); }
         }
       }
     };
@@ -2022,7 +2036,7 @@ function fetchChapter(c, onStatus, onEarly) {
     if (!P || P.cache !== cache) URL.revokeObjectURL(cache[c].url);   // the player was closed meanwhile
     return cache[c];
   })();
-  job.early = onEarly || null;
+  job.early = onEarly || null; job.say = onStatus || null; job.st = st;
   loading[c] = job;
   job.then(() => { delete loading[c]; }, () => { delete loading[c]; });
   return job;
@@ -2159,8 +2173,9 @@ function nextReadyChapter(c) {
 function prefetchNext() {
   if (!P || P.c < 0) return;
   const n = nextReadyChapter(P.c);
+  // Kept in memory: this chapter, the next one (loaded now, in the background) and the one before (for ◀).
   Object.keys(P.cache).forEach((k) => {
-    if (Number(k) !== P.c && Number(k) !== n) { URL.revokeObjectURL(P.cache[k].url); delete P.cache[k]; }
+    if (Number(k) !== P.c && Number(k) !== n && Number(k) !== P.c - 1) { URL.revokeObjectURL(P.cache[k].url); delete P.cache[k]; }
   });
   if (n >= 0) fetchChapter(n).catch(() => {});
 }

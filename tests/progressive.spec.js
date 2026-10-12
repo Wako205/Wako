@@ -27,3 +27,21 @@ test('playback starts after the first parts while the rest of the chapter is sti
   expect(after.paused).toBe(false);
   await page.evaluate(() => document.getElementById('player').pause());
 });
+
+test('a chapter being loaded in the background starts at once when chosen', async ({ page, backend }) => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  backend.on('audio_part', (b) => (b.chapter === 1 && b.index === 1 ? gate.then(() => ({ data: backend.mp3.toString('base64') })) : { data: backend.mp3.toString('base64') }));
+  await login(page);
+  await openAudio(page);
+  await page.locator('#library .libitem').first().getByRole('button', { name: 'Listen' }).click();
+  // Chapter 1 is complete; chapter 2 is loaded in the background (its second part is held back).
+  await expect.poll(() => backend.callsOf('audio_part').filter((c) => c.chapter === 1).length).toBe(2);
+  await page.selectOption('#pChapter', '1');
+  await expect.poll(() => page.evaluate(() => P.c === 1 && !!P.partial)).toBe(true);    // plays its first part without waiting
+  await page.evaluate(() => player.play());
+  await expect.poll(() => page.evaluate(() => !player.paused)).toBe(true);
+  release();
+  await expect.poll(() => page.evaluate(() => P.cache[1] && P.cache[1].parts)).toBe(2);
+  await page.evaluate(() => player.pause());
+});
