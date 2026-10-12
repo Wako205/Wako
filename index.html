@@ -2661,7 +2661,7 @@ function pickIndex(n) {
   return mIndex < 0 ? Math.floor(Math.random() * n) : (mIndex + 1 + Math.floor(Math.random() * (n - 1))) % n;
 }
 // Built-in lofi library: MP3 files in music/lofi/ of this site, listed in music/lofi/tracks.json.
-const LOFI_DIR = 'music/lofi/';
+const LOFI_DIR = location.protocol === 'file:' ? 'https://wako205.github.io/Wako/music/lofi/' : 'music/lofi/';   // tests open the page as a file
 let lofiP = null;
 function lofiList() {
   if (!lofiP) {

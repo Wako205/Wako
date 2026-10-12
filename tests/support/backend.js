@@ -111,6 +111,12 @@ class MockBackend {
     await page.route('**/*', async (route) => {
       const url = route.request().url();
       if (/^(file|data|blob):|^http:\/\/127\.0\.0\.1[:/]/.test(url)) return route.continue();      // the page, and the local test server
+      // The site's own files that the page fetches by the published address (the built-in lofi library).
+      const site = url.match(/^https:\/\/wako205\.github\.io\/Wako\/(music\/lofi\/[^?#]+)/);
+      if (site) {
+        const f = path.join(__dirname, '..', '..', decodeURIComponent(site[1]));
+        if (fs.existsSync(f)) return route.fulfill({ status: 200, path: f, headers: { 'content-type': f.endsWith('.json') ? 'application/json' : 'audio/mpeg', 'access-control-allow-origin': '*' } });
+      }
       const file = cdnFile(url);
       if (file && fs.existsSync(file)) {
         return route.fulfill({ status: 200, path: file, headers: { 'content-type': 'application/javascript; charset=utf-8', 'access-control-allow-origin': '*' } });

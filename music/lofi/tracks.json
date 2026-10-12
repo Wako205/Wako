@@ -1,0 +1,112 @@
+{
+ "artist": "Holizna",
+ "license": "CC0 1.0 (public domain)",
+ "source": [
+  "https://opengameart.org/content/chill-beats-collection",
+  "https://opengameart.org/content/sad-lo-fi-lofi-collectioni"
+ ],
+ "tracks": [
+  {
+   "file": "holizna-city-in-the-rearview.mp3",
+   "title": "City In The Rearview",
+   "collection": "Chill Beats",
+   "seconds": 176
+  },
+  {
+   "file": "holizna-families.mp3",
+   "title": "Families",
+   "collection": "Chill Beats",
+   "seconds": 144
+  },
+  {
+   "file": "holizna-opinions.mp3",
+   "title": "Opinions",
+   "collection": "Chill Beats",
+   "seconds": 168
+  },
+  {
+   "file": "holizna-old-age.mp3",
+   "title": "Old Age",
+   "collection": "Chill Beats",
+   "seconds": 214
+  },
+  {
+   "file": "holizna-dream-pop.mp3",
+   "title": "Dream Pop",
+   "collection": "Chill Beats",
+   "seconds": 242
+  },
+  {
+   "file": "holizna-autumn.mp3",
+   "title": "Autumn",
+   "collection": "Chill Beats",
+   "seconds": 170
+  },
+  {
+   "file": "holizna-not-it-lofi.mp3",
+   "title": "Not It",
+   "collection": "Sad Lo-Fi 1",
+   "seconds": 177
+  },
+  {
+   "file": "holizna-fire-place.mp3",
+   "title": "Fire Place",
+   "collection": "Sad Lo-Fi 1",
+   "seconds": 170
+  },
+  {
+   "file": "holizna-small-towns-smaller-lives.mp3",
+   "title": "Small Towns Smaller Lives",
+   "collection": "Sad Lo-Fi 1",
+   "seconds": 146
+  },
+  {
+   "file": "holizna-winter-blues.mp3",
+   "title": "Winter Blues",
+   "collection": "Sad Lo-Fi 1",
+   "seconds": 224
+  },
+  {
+   "file": "holizna-all-the-way-sad.mp3",
+   "title": "All The Way Sad",
+   "collection": "Sad Lo-Fi 1",
+   "seconds": 186
+  },
+  {
+   "file": "holizna-shut-up-or-shut-in.mp3",
+   "title": "Shut up, or shut in",
+   "collection": "Sad Lo-Fi 1",
+   "seconds": 120
+  },
+  {
+   "file": "holizna-yesterday.mp3",
+   "title": "Yesterday",
+   "collection": "Sad Lo-Fi 1",
+   "seconds": 151
+  },
+  {
+   "file": "holizna-cellar-door.mp3",
+   "title": "Cellar Door",
+   "collection": "Sad Lo-Fi 2",
+   "seconds": 132
+  },
+  {
+   "file": "holizna-seasons-change.mp3",
+   "title": "Seasons Change",
+   "collection": "Sad Lo-Fi 2",
+   "seconds": 136
+  },
+  {
+   "file": "holizna-mixed-signals.mp3",
+   "title": "Mixed Signals",
+   "collection": "Sad Lo-Fi 2",
+   "seconds": 109
+  },
+  {
+   "file": "holizna-static.mp3",
+   "title": "Static",
+   "collection": "Sad Lo-Fi 2",
+   "seconds": 149
+  }
+ ]
+}

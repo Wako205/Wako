@@ -192,6 +192,7 @@ test('"End of chapter" stops instead of waiting for a chapter still being conver
 test('the background music stops with the sleep timer', async ({ page, backend }) => {
   await openBook(page);
   await page.click('#pMusic');
+  await page.selectOption('#mSource', 'gen');
   await page.check('#mOn');
   await choose(page, 'End of chapter');
   await page.evaluate(() => { player.currentTime = player.duration - 3; player.play(); });

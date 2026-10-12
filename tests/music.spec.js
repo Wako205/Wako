@@ -13,6 +13,7 @@ async function openBook(page) {
 async function musicOn(page) {
   await page.click('#pMusic');
   await expect(page.locator('#pMusicPanel')).toBeVisible();
+  await page.selectOption('#mSource', 'gen');                    // these tests use the generated music
   await page.check('#mOn');
 }
 
@@ -199,4 +200,46 @@ test('after a media error the music tries the same track once more under a new a
   expect((await st(page)).src).toBe(second);
   expect((await st(page)).player).toBe(true);
   await page.evaluate(() => player.pause());
+});
+
+// The built-in lofi library: CC0 tracks in music/lofi/, listed in tracks.json.
+const fs = require('fs'), path = require('path');
+const LOFI = path.resolve(__dirname, '..', 'music', 'lofi');
+async function serveLofi(page, seen) {
+  await page.route('https://wako205.github.io/Wako/music/lofi/**', (route) => {
+    const name = decodeURIComponent(new URL(route.request().url()).pathname.split('/').pop());
+    seen.push(name);
+    const type = name.endsWith('.json') ? 'application/json' : 'audio/mpeg';
+    route.fulfill({ status: 200, contentType: type, headers: { 'access-control-allow-origin': '*' }, body: fs.readFileSync(path.join(LOFI, name)) });
+  });
+}
+
+test('the lofi library is the default source; all tracks or one chosen track play under the narration', async ({ page, backend }) => {
+  test.setTimeout(90000);
+  const seen = [];
+  await serveLofi(page, seen);
+  const list = JSON.parse(fs.readFileSync(path.join(LOFI, 'tracks.json'), 'utf8')).tracks;
+  expect(list.length).toBeGreaterThanOrEqual(6);
+  for (const t of list) expect(fs.existsSync(path.join(LOFI, t.file))).toBe(true);
+  await openBook(page);
+  await page.click('#pMusic');
+  await expect(page.locator('#mSource')).toHaveValue('lofi');
+  await expect(page.locator('#mLofi option')).toHaveCount(list.length + 1);
+  await expect(page.locator('#mLofi option').first()).toHaveText('All tracks (' + list.length + ')');
+  await expect(page.locator('#mLofiNote')).toBeVisible();
+  // One chosen track.
+  await page.selectOption('#mLofi', list[1].file);
+  await expect(page.locator('#mOrderRow')).toBeHidden();
+  await page.check('#mOn');
+  await page.evaluate(() => player.play());
+  await expect(page.locator('#mStatus')).toHaveText('Playing: ' + list[1].title + '.', { timeout: 30000 });
+  await expect.poll(async () => (await st(page)).music).toBe(true);
+  expect(seen).toContain(list[1].file);
+  // All tracks, shuffled by default.
+  await page.selectOption('#mLofi', 'all');
+  await expect(page.locator('#mOrderRow')).toBeVisible();
+  await expect(page.locator('#mOrder')).toHaveValue('shuffle');
+  await expect(page.locator('#mStatus')).toHaveText(/^Playing: /, { timeout: 30000 });
+  await page.evaluate(() => player.pause());
+  expect(JSON.parse(await page.evaluate(() => localStorage.getItem('mp_music_tester')))).toMatchObject({ source: 'lofi', lofi: 'all', on: true });
 });
