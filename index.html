@@ -330,19 +330,22 @@
           <label class="mon"><input type="checkbox" id="mOn"> Music under the narration</label>
           <div class="row">
             <label for="mSource">Source</label>
-            <select id="mSource"><option value="gen">Generated</option><option value="mine">My music</option></select>
+            <select id="mSource"><option value="lofi">Lofi library</option><option value="mine">My music</option><option value="gen">Generated</option></select>
+            <span id="mLofiRow" class="row"><label for="mLofi">Track</label>
+            <select id="mLofi"><option value="all">All tracks</option></select></span>
             <span id="mGenRow" class="row"><label for="mPreset">Style</label>
             <select id="mPreset"><option value="rain">Rain</option><option value="night">Night</option><option value="cafe">Café</option></select></span>
+            <span id="mOrderRow" class="row"><label for="mOrder">Order</label>
+            <select id="mOrder"><option value="order">In order</option><option value="shuffle">Shuffle</option></select></span>
             <label for="mLevel">Level</label>
             <select id="mLevel"><option value="quiet">Quiet</option><option value="normal">Normal</option><option value="louder">Louder</option></select>
           </div>
+          <div id="mLofiNote" class="mnote hidden">Lofi music by Holizna, public domain (CC0), loaded from this site as needed.</div>
           <div id="mMine" class="hidden">
             <div id="mFiles"></div>
             <div class="row">
               <input type="file" id="mAdd" accept="audio/*" multiple class="hidden">
               <button class="ghost small" type="button" id="mAddBtn">Add files</button>
-              <label for="mOrder">Order</label>
-              <select id="mOrder"><option value="order">In order</option><option value="shuffle">Shuffle</option></select>
             </div>
             <div class="mnote">Your files stay in this browser and are never uploaded.</div>
           </div>
@@ -2614,14 +2617,15 @@ async function myMusicData(key) { const db = await musicDb(); const f = await mu
 
 // State: the choices (per user, in this browser), and the track playing.
 const music = $('music');
-let mPrefs = { on: false, source: 'gen', preset: 'rain', level: 'normal', order: 'order' };
+let mPrefs = { on: false, source: 'lofi', lofi: 'all', preset: 'rain', level: 'normal', order: 'shuffle' };
 let mTrack = null, mNext = null, mNextReady = null, mSeed = 1, mIndex = -1, mGen = 0, mUnlocked = false;
 function musicPrefsKey() { return 'mp_music_' + (username || ''); }
 function loadMusicPrefs() {
-  mPrefs = { on: false, source: 'gen', preset: 'rain', level: 'normal', order: 'order' };
+  mPrefs = { on: false, source: 'lofi', lofi: 'all', preset: 'rain', level: 'normal', order: 'shuffle' };
   try { Object.assign(mPrefs, JSON.parse(lsGet(musicPrefsKey()) || '{}')); } catch (e) {}
   if (!MUSIC_PRESETS[mPrefs.preset]) mPrefs.preset = 'rain';
   if (!(mPrefs.level in MUSIC_LEVELS)) mPrefs.level = 'normal';
+  if (['lofi', 'mine', 'gen'].indexOf(mPrefs.source) < 0) mPrefs.source = 'lofi';
   renderMusicPanel();
 }
 function saveMusicPrefs() { lsSet(musicPrefsKey(), JSON.stringify(mPrefs)); }
@@ -2634,12 +2638,47 @@ async function makeTrack(gen) {
     const lv = setLevel(y, musicTarget());
     return track(gen, y, MUSIC_PRESETS[mPrefs.preset].name, lv);
   }
+  if (mPrefs.source === 'lofi') {
+    const all = await lofiList(), one = all.find((t) => t.file === mPrefs.lofi), list = one ? [one] : all;
+    if (!list.length) throw new Error('The lofi library could not be loaded.');
+    mIndex = pickIndex(list.length);
+    const t = list[mIndex], r = await fetch(LOFI_DIR + encodeURIComponent(t.file));
+    if (!r.ok) throw new Error('Could not load "' + t.title + '".');
+    const y = await renderFileSamples(await r.arrayBuffer());
+    return track(gen, y, t.title, setLevel(y, musicTarget()));
+  }
   const list = await myMusicList();
   if (!list.length) throw new Error('Add audio files to play your own music.');
-  mIndex = mPrefs.order === 'shuffle' && list.length > 1 ? (mIndex + 1 + Math.floor(Math.random() * (list.length - 1))) % list.length : (mIndex + 1) % list.length;
+  mIndex = pickIndex(list.length);
   const f = list[mIndex], y = await renderFileSamples(await myMusicData(f.key));
   const lv = setLevel(y, musicTarget());
   return track(gen, y, f.name, lv);
+}
+/** Index of the next item of a list of n: the following one, or a different random one when shuffling. */
+function pickIndex(n) {
+  if (n < 2) return 0;
+  if (mPrefs.order !== 'shuffle') return (mIndex + 1) % n;
+  return mIndex < 0 ? Math.floor(Math.random() * n) : (mIndex + 1 + Math.floor(Math.random() * (n - 1))) % n;
+}
+// Built-in lofi library: MP3 files in music/lofi/ of this site, listed in music/lofi/tracks.json.
+const LOFI_DIR = 'music/lofi/';
+let lofiP = null;
+function lofiList() {
+  if (!lofiP) {
+    lofiP = fetch(LOFI_DIR + 'tracks.json').then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))).then((d) => d.tracks || []);
+    lofiP.catch(() => { lofiP = null; });
+  }
+  return lofiP;
+}
+async function renderLofiSelect() {
+  let list = [];
+  try { list = await lofiList(); } catch (e) {}
+  const sel = $('mLofi');
+  if (sel.options.length !== list.length + 1) {
+    sel.textContent = ''; sel.appendChild(el('option', null, 'All tracks (' + list.length + ')')).value = 'all';
+    list.forEach((t) => { const o = el('option', null, t.title + (t.collection ? ' · ' + t.collection : '')); o.value = t.file; sel.appendChild(o); });
+  }
+  sel.value = list.some((t) => t.file === mPrefs.lofi) ? mPrefs.lofi : 'all';
 }
 function track(gen, y, label, lv) {
   const blob = wavBlob(y, MUSIC_RATE);
@@ -2711,7 +2750,11 @@ function renderMusicPanel() {
   $('mOn').checked = mPrefs.on; $('mSource').value = mPrefs.source; $('mPreset').value = mPrefs.preset;
   $('mLevel').value = mPrefs.level; $('mOrder').value = mPrefs.order;
   $('mGenRow').classList.toggle('hidden', mPrefs.source !== 'gen');
+  $('mLofiRow').classList.toggle('hidden', mPrefs.source !== 'lofi');
+  $('mLofiNote').classList.toggle('hidden', mPrefs.source !== 'lofi');
+  $('mOrderRow').classList.toggle('hidden', mPrefs.source === 'gen' || (mPrefs.source === 'lofi' && mPrefs.lofi !== 'all'));
   $('mMine').classList.toggle('hidden', mPrefs.source !== 'mine');
+  if (mPrefs.source === 'lofi') renderLofiSelect();
   $('pMusic').classList.toggle('on', mPrefs.on);
   if (!mPrefs.on) setStatus($('mStatus'), '');
   if (mPrefs.source === 'mine') renderMyMusic();
@@ -2742,7 +2785,7 @@ $('pMusic').onclick = () => {
   if (open) renderMusicPanel();
 };
 $('mOn').onchange = () => { mPrefs.on = $('mOn').checked; saveMusicPrefs(); unlockMusic(); renderMusicPanel(); resetMusic(); };
-[['mSource', 'source'], ['mPreset', 'preset'], ['mLevel', 'level'], ['mOrder', 'order']].forEach(([id, k]) => {
+[['mSource', 'source'], ['mLofi', 'lofi'], ['mPreset', 'preset'], ['mLevel', 'level'], ['mOrder', 'order']].forEach(([id, k]) => {
   $(id).onchange = () => { mPrefs[k] = $(id).value; saveMusicPrefs(); renderMusicPanel(); if (k !== 'order') resetMusic(); };
 });
 $('mAddBtn').onclick = () => $('mAdd').click();
