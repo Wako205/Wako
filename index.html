@@ -156,7 +156,6 @@
   #pChapter { width:auto; max-width:60%; }
   #pSleepBtn .sl { font-variant-numeric:tabular-nums; }
   #pSleepBtn .sl:empty { display:none; }
-  #pSleepBtn:has(.sl:not(:empty)) { width:auto; padding:var(--s1) var(--s3); }
   #pSleepBtn.on, #pMusic.on { background:var(--accent); color:var(--on-accent); border-color:var(--accent); }
   #player { display:block; width:100%; margin-top:var(--s3); }
   .pset { margin-top:var(--s2); font-size:var(--f2); color:var(--muted); }
@@ -2433,7 +2432,7 @@ function setSleep(choice) {
 }
 function renderSleep() {
   const btn = $('pSleepBtn'), left = sleepLeft();
-  btn.classList.toggle('on', !!sleepT);
+  btn.classList.toggle('on', !!sleepT); btn.classList.toggle('icon', !sleepT);   // with a time shown, the button widens
   let label = 'Sleep timer';
   const sl = btn.querySelector('.sl');
   if (!sleepT) sl.textContent = '';
