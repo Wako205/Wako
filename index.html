@@ -1551,7 +1551,7 @@ $('audioBtn').onclick = async () => {
 // ---------------------------------------------------------------------------
 // 9. Audio: library
 // ---------------------------------------------------------------------------
-const libUsage = { used: 0, cap: 0, azUsed: 0, azCap: 0, azReady: false, s0Used: 0, s0Cap: 0, s0Mine: 0, s0UserCap: 0, s0Until: 0 };
+const libUsage = { used: 0, cap: 0, azUsed: 0, azCap: 0, azReady: false, s0Used: 0, s0Cap: 0, s0Mine: 0, s0UserCap: 0, s0Until: 0, gtUsed: 0, gtCap: 0, gtMine: 0, gtUserCap: 0, gtUntil: 0 };
 /** Short display name of a voice value. */
 function voiceLabel(v) { const o = Array.from($('avoice').options).find((x) => x.value === v); return o ? o.textContent.replace(/\s*\(.*\)$/, '') : v; }
 $('avoice').addEventListener('change', () => bookSummary());
@@ -1560,7 +1560,11 @@ $('avoice').addEventListener('change', () => bookSummary());
  * Microsoft: the free monthly tier is used first, then the trial credit while it lasts (`trial` = its rest).
  */
 function allowance(voice) {
-  if (!/^az:/.test(voice || '')) return { used: libUsage.used, cap: libUsage.cap, trial: 0 };
+  if (!/^az:/.test(voice || '')) {
+    let gt = libUsage.gtUntil ? Math.max(0, libUsage.gtCap - libUsage.gtUsed) : 0;
+    if (libUsage.gtUserCap) gt = Math.min(gt, Math.max(0, libUsage.gtUserCap - libUsage.gtMine));
+    return { used: libUsage.used, cap: libUsage.cap, trial: gt };
+  }
   let trial = libUsage.s0Until ? Math.max(0, libUsage.s0Cap - libUsage.s0Used) : 0;
   if (libUsage.s0UserCap) trial = Math.min(trial, Math.max(0, libUsage.s0UserCap - libUsage.s0Mine));   // limit per account
   return { used: libUsage.azUsed, cap: libUsage.azCap, trial };
@@ -1592,11 +1596,12 @@ async function loadLibrary() {
   }
   libItems = (d.items || []).filter((x) => x && x.id); libUsage.used = d.ttsUsed || 0; libUsage.cap = d.ttsCap || 0;
   libUsage.azUsed = d.azUsed || 0; libUsage.azCap = d.azCap || 0; libUsage.azReady = !!d.azReady;
-  libUsage.s0Used = d.s0Used || 0; libUsage.s0Cap = d.s0Cap || 0; libUsage.s0Mine = d.s0Mine || 0; libUsage.s0UserCap = d.s0UserCap || 0; libUsage.s0Until = d.azTier === 's0' && d.azUntil ? d.azUntil : 0;
+  libUsage.s0Used = d.s0Used || 0; libUsage.s0Cap = d.s0Cap || 0; libUsage.s0Mine = d.s0Mine || 0; libUsage.s0UserCap = d.s0UserCap || 0;
+  libUsage.gtUsed = d.gtUsed || 0; libUsage.gtCap = d.gtCap || 0; libUsage.gtMine = d.gtMine || 0; libUsage.gtUserCap = d.gtUserCap || 0; libUsage.gtUntil = d.gtUntil || 0; libUsage.s0Until = d.azTier === 's0' && d.azUntil ? d.azUntil : 0;
   const az = $('azVoices'); az.disabled = !libUsage.azReady; az.classList.toggle('hidden', !libUsage.azReady);
   if (!libUsage.azReady && /^az:/.test($('avoice').value)) $('avoice').value = 'Kore';
   // Google's monthly allowance used up: its voices are greyed out and Microsoft is used (free tier, then the trial credit).
-  const googleOut = !!libUsage.cap && libUsage.cap - libUsage.used < 5000, gg = $('ggVoices');
+  const googleOut = !!libUsage.cap && allowanceLeft(allowance('Kore')) < 5000, gg = $('ggVoices');
   gg.label = googleOut ? 'Google (used up this month; back on the 1st)' : 'Google (best for English)';
   Array.from(gg.querySelectorAll('option')).forEach((o) => { o.disabled = googleOut; });
   if (googleOut && libUsage.azReady && !/^az:/.test($('avoice').value)) $('avoice').value = 'az:zh-CN-YunxiNeural';
@@ -1682,6 +1687,8 @@ function ownerOf(it) { return it && it.owner && !it.mine ? { owner: it.owner } :
 /** Column chart of the speech allowances: Google, Microsoft free tier, Microsoft trial credit. */
 function renderUsage(d) {
   const bars = [{ name: 'Google', used: libUsage.used, cap: libUsage.cap, sub: 'this month' }];
+  if (libUsage.gtUntil) bars.push(libUsage.gtUserCap ? { name: 'Google trial', used: libUsage.gtMine, cap: libUsage.gtUserCap, sub: 'for this account' }
+                                                     : { name: 'Google trial', used: libUsage.gtUsed, cap: libUsage.gtCap, sub: 'in total' });
   if (libUsage.azReady) bars.push({ name: 'Microsoft free', used: libUsage.azUsed, cap: libUsage.azCap, sub: 'this month' });
   if (libUsage.s0Until) bars.push(libUsage.s0UserCap ? { name: 'Microsoft trial', used: libUsage.s0Mine, cap: libUsage.s0UserCap, sub: 'for this account' }
                                                : { name: 'Microsoft trial', used: libUsage.s0Used, cap: libUsage.s0Cap, sub: 'in total' });
@@ -1700,7 +1707,8 @@ function renderUsage(d) {
     box.appendChild(col);
   });
   $('usageNote').textContent = 'Contact the administrator to raise the limit.';
-  $('usageCard').title = 'Free allowances reset on the 1st.' + (libUsage.s0Until ? ' Trial credit through ' + fmtDay(libUsage.s0Until - 1) + '.' : '');
+  $('usageCard').title = 'Free allowances reset on the 1st.' + (libUsage.gtUntil ? ' Google trial through ' + fmtDay(libUsage.gtUntil - 1) + '.' : '') +
+    (libUsage.s0Until ? ' Microsoft trial credit through ' + fmtDay(libUsage.s0Until - 1) + '.' : '');
   $('usageCard').classList.remove('hidden');
   $('usageCard').parentElement.classList.remove('nousage');
 }

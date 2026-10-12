@@ -102,3 +102,21 @@ test('each account may use at most 2M characters of the trial credit', async ({ 
   await expect(panel).toContainText('then 1k trial credit');
   await expect(panel).toContainText('not enough');
 });
+
+test('Google: after the free month allowance, the Google trial credit is used, per account, before its voices are greyed out', async ({ page, backend }) => {
+  const lib = (gtMine) => ({ items: JSON.parse(JSON.stringify(backend.library)), ttsUsed: 1000000, ttsCap: 1000000,
+    gtUsed: 1200000, gtCap: 3000000, gtMine, gtUserCap: 1000000, gtUntil: new Date(2027, 0, 5).getTime(),
+    azReady: true, azUsed: 0, azCap: 500000, s0Used: 0, s0Cap: 12000000, azTier: 'f0', azUntil: null });
+  let mine = 400000;
+  backend.on('audio_library', () => lib(mine));
+  await page.setViewportSize({ width: 1100, height: 900 });
+  await login(page);
+  await openAudio(page);
+  const bar = page.locator('#usageBars .ubar', { hasText: 'Google trial' });
+  await expect(bar).toHaveAttribute('aria-label', 'Google trial: 400k of 1,000k characters for this account');
+  expect(await page.locator('#ggVoices option').evaluateAll((os) => os.some((o) => o.disabled))).toBe(false);
+  await expect(page.locator('#usageCard')).toHaveAttribute('title', /Google trial through 4 Jan 2027/);
+  mine = 999000;                                                                    // this account's share is used up
+  await page.evaluate(() => loadLibrary());
+  await expect.poll(() => page.locator('#ggVoices option').evaluateAll((os) => os.every((o) => o.disabled))).toBe(true);
+});
