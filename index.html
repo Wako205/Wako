@@ -7,10 +7,10 @@
 <script>try { var t = localStorage.getItem('mp_theme'); if (t === 'night') document.documentElement.setAttribute('data-theme', t); else if (t === 'day') document.documentElement.removeAttribute('data-theme'); } catch (e) {}</script>
 <style>
   /* Themes: day (default), night, eye care (warm paper tones, low blue light). Chosen in the top bar. */
-  :root { --ink:#1c1c28; --muted:#666a7a; --line:#dcdde6; --accent:#4b2e83; --on-accent:#ffffff; --bg:#ffffff; --field:#ffffff; --soft:#f6f6fa;
-          --del:#fdecec; --ins:#e9f7ec; --user:#eef0fb; --err:#b3261e; --hl:#fff1b8; --hl2:#ffd84d; --pend:#aaaaaa; color-scheme: light; }
-  :root[data-theme="night"] { --ink:#e6e6ee; --muted:#9a9eb0; --line:#353849; --accent:#b8a2f0; --on-accent:#17161f; --bg:#16171d; --field:#20222b; --soft:#23252f;
-          --del:#4a2326; --ins:#1f3d29; --user:#2a2d3e; --err:#ff8a80; --hl:#5a4a12; --hl2:#8a6d10; --pend:#5c6070; color-scheme: dark; }
+  :root { --ink:#0b0b12; --muted:#474b59; --line:#dcdde6; --accent:#4b2e83; --on-accent:#ffffff; --bg:#ffffff; --field:#ffffff; --soft:#f6f6fa;
+          --del:#fdecec; --ins:#e9f7ec; --user:#eef0fb; --err:#b3261e; --hl:#fff1b8; --hl2:#ffd84d; --pend:#8a8a8a; color-scheme: light; }
+  :root[data-theme="night"] { --ink:#f8f8fc; --muted:#c3c6d4; --line:#3a3d4f; --accent:#c4b2f5; --on-accent:#121318; --bg:#111217; --field:#20222b; --soft:#23252f;
+          --del:#4a2326; --ins:#1f3d29; --user:#2a2d3e; --err:#ff8a80; --hl:#5a4a12; --hl2:#8a6d10; --pend:#7c8193; color-scheme: dark; }
   :root[data-theme="eye"] { --ink:#3b3226; --muted:#7a6d5a; --line:#ddd0b3; --accent:#6b5a2e; --on-accent:#fbf3df; --bg:#f6edd6; --field:#fbf5e4; --soft:#efe3c4;
           --del:#f3d9cc; --ins:#dfe8c8; --user:#ece0bf; --err:#a33a24; --hl:#e9d48a; --hl2:#dcbc55; --pend:#b3a68c; color-scheme: light; }
   .themes { display:inline-flex; border:1px solid var(--line); border-radius:999px; overflow:hidden; }
@@ -2798,12 +2798,13 @@ async function myMusicData(key) { const db = await musicDb(); const f = await mu
 // State: the choices (per user, in this browser), and the track playing.
 const music = $('music');
 let mPrefs = { on: true, source: 'lofi', lofi: 'all', preset: 'rain', level: 'louder', order: 'shuffle' };
-let mTrack = null, mNext = null, mNextReady = null, mSeed = 1, mIndex = -1, mGen = 0, mUnlocked = false;
+let mTrack = null, mNext = null, mNextReady = null, mSeed = 1, mIndex = -1, mGen = 0, mUnlocked = false, mFresh = true;
 function musicPrefsKey() { return 'mp_music_' + (username || ''); }
 function loadMusicPrefs() {
   // The music starts by itself when the page opens, unless it was paused with ❚❚ last time.
   mPrefs = { on: true, source: 'lofi', lofi: 'all', preset: 'rain', level: 'louder', order: 'shuffle' };
   try { Object.assign(mPrefs, JSON.parse(lsGet(musicPrefsKey()) || '{}')); } catch (e) {}
+  mFresh = true;
   if (!MUSIC_PRESETS[mPrefs.preset]) mPrefs.preset = 'rain';
   if (!(mPrefs.level in MUSIC_LEVELS)) mPrefs.level = 'normal';
   if (['lofi', 'mine', 'gen'].indexOf(mPrefs.source) < 0) mPrefs.source = 'lofi';
@@ -2820,13 +2821,24 @@ async function makeTrack(gen) {
     return track(gen, y, MUSIC_PRESETS[mPrefs.preset].name, lv);
   }
   if (mPrefs.source === 'lofi') {
-    const all = await lofiList(), one = all.find((t) => t.file === mPrefs.lofi), list = one ? [one] : all;
+    // "All lofi": shuffled. A chosen song: it plays first, then the list continues in order and starts over at the end.
+    const list = await lofiList();
     if (!list.length) throw new Error('The lofi library could not be loaded.');
-    mIndex = pickIndex(list.length);
+    const start = list.findIndex((t) => t.file === mPrefs.lofi);
+    if (mFresh) {                                       // a new visit: a random song, not the one the last visit began with
+      mFresh = false;
+      const last = list.findIndex((t) => t.file === mPrefs.last);
+      let i = Math.floor(Math.random() * list.length);
+      if (list.length > 1 && i === last) i = (i + 1 + Math.floor(Math.random() * (list.length - 1))) % list.length;
+      mIndex = i; mPrefs.last = list[i].file;
+      if (start >= 0) mPrefs.lofi = list[i].file;      // a chosen song: the list continues from the new one
+      saveMusicPrefs(); renderMini();
+    } else if (start < 0) mIndex = pickIndex(list.length);
+    else mIndex = mIndex < 0 ? start : (mIndex + 1) % list.length;
     const t = list[mIndex], r = await fetch(LOFI_DIR + encodeURIComponent(t.file));
     if (!r.ok) throw new Error('Could not load "' + t.title + '".');
     const y = await renderFileSamples(await r.arrayBuffer());
-    return track(gen, y, t.title, setLevel(y, musicTarget()));
+    return Object.assign(track(gen, y, t.title, setLevel(y, musicTarget())), { file: t.file });
   }
   const list = await myMusicList();
   if (!list.length) throw new Error('Add audio files to play your own music.');
@@ -2874,7 +2886,8 @@ async function prepareFirst() {
 function prepareNext() {
   if (mNext || mNextReady || !mTrack) return;
   const gen = mGen;
-  mNext = makeTrack(gen).then((t) => { if (t.gen === mGen) mNextReady = t; else dropTrack(t); }, () => {}).then(() => { mNext = null; });
+  mNext = makeTrack(gen).then((t) => { if (t.gen === mGen) mNextReady = t; else dropTrack(t); }, () => {})
+    .then(() => { mNext = null; if (gen !== mGen) prepareNext(); });     // the choice changed meanwhile: prepare for the new one
 }
 /** Forgets the tracks after a change of the choices; the music starts again with the new ones. */
 function resetMusic() {
@@ -2911,7 +2924,11 @@ async function musicSync() {
 // if it is not ready, the current one plays again.
 music.addEventListener('ended', () => {
   const t = mNextReady; mNextReady = null;
-  if (t && t.gen === mGen) { dropTrack(mTrack); mTrack = t; music.src = t.url; setStatus($('mStatus'), 'Playing: ' + t.label + '.'); renderMini(); }
+  if (t && t.gen === mGen) {
+    dropTrack(mTrack); mTrack = t; music.src = t.url; setStatus($('mStatus'), 'Playing: ' + t.label + '.');
+    if (mPrefs.lofi !== 'all' && t.file) { mPrefs.lofi = t.file; saveMusicPrefs(); }   // the list shows the song playing now
+    renderMini();
+  }
   else music.currentTime = 0;
   if (musicWanted()) musicPlay();
   prepareNext();

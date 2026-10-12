@@ -95,7 +95,7 @@ test('mini player: plays by itself at login, ❚❚ pauses, ▶ resumes, indepen
   await expect(page.locator('#mmPlay')).toHaveText('▶');
 });
 
-test('choosing one track plays it; the next track follows at the end; the choice is per user', async ({ page, backend }) => {
+test('choosing one song plays it, then the list continues in order; all tracks shuffle; the choice is per user', async ({ page, backend }) => {
   test.setTimeout(90000);
   const list = tracks();
   await login(page);
@@ -103,6 +103,11 @@ test('choosing one track plays it; the next track follows at the end; the choice
   await page.selectOption('#mmTrack', list[2].file);
   await expect(page.locator('#mStatus')).toHaveText('Playing: ' + list[2].title + '.', { timeout: 30000 });
   await expect.poll(async () => (await st(page)).music).toBe(true);
+  // At the end of a chosen song the next song of the list follows, and the list shows it.
+  await expect.poll(() => page.evaluate(() => !!mNextReady), { timeout: 30000 }).toBe(true);
+  await page.evaluate(() => { music.currentTime = music.duration - 0.2; });
+  await expect(page.locator('#mStatus')).toHaveText('Playing: ' + list[3].title + '.', { timeout: 10000 });
+  await expect(page.locator('#mmTrack')).toHaveValue(list[3].file);
   // All tracks: at the end of one, the prepared next one starts.
   await page.selectOption('#mmTrack', 'all');
   await expect(page.locator('#mStatus')).toHaveText(/^Playing: /, { timeout: 30000 });
@@ -158,3 +163,29 @@ for (const theme of ['eye', 'day', 'night']) {
     await page.click('#mmPlay');
   });
 }
+
+test('the list starts over after its last song', async ({ page, backend }) => {
+  test.setTimeout(90000);
+  const list = tracks();
+  await login(page);
+  await page.selectOption('#mmTrack', list[list.length - 1].file);
+  await expect(page.locator('#mStatus')).toHaveText('Playing: ' + list[list.length - 1].title + '.', { timeout: 30000 });
+  await expect.poll(() => page.evaluate(() => !!mNextReady), { timeout: 30000 }).toBe(true);
+  await page.evaluate(() => { music.currentTime = music.duration - 0.2; });
+  await expect(page.locator('#mStatus')).toHaveText('Playing: ' + list[0].title + '.', { timeout: 10000 });
+  await expect(page.locator('#mmTrack')).toHaveValue(list[0].file);
+  await page.click('#mmPlay');
+});
+
+test('each visit starts with a random song, never the one the last visit began with', async ({ page, backend }) => {
+  test.setTimeout(120000);
+  await login(page);
+  const firsts = [];
+  for (let k = 0; k < 4; k++) {
+    if (k) await page.reload();
+    await expect(page.locator('#mStatus')).toHaveText(/^(Playing|Ready): /, { timeout: 30000 });
+    firsts.push(await page.evaluate(() => JSON.parse(localStorage.getItem('mp_music_tester')).last));
+  }
+  for (let k = 1; k < firsts.length; k++) expect(firsts[k]).not.toBe(firsts[k - 1]);
+  await page.click('#mmPlay');
+});
