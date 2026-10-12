@@ -48,7 +48,9 @@ self.addEventListener('fetch', (e) => {
   }
   const scope = self.registration.scope;
   if (req.mode === 'navigate' && (url.split('?')[0] === scope || url.split('?')[0] === PAGE)) {
-    e.respondWith(fetch(req).then((r) => {
+    // cache: 'no-cache' asks the server every time (a cheap check), so a new version shows on the next visit
+    // instead of after the browser's 10-minute cache.
+    e.respondWith(fetch(url, { cache: 'no-cache', credentials: 'same-origin' }).then((r) => {
       if (r.ok) { const copy = r.clone(); caches.open(SHELL).then((c) => c.put(PAGE, copy)); }
       return r;
     }).catch(() => caches.match(PAGE).then((hit) => hit || Response.error())));
