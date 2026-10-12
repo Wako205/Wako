@@ -231,7 +231,7 @@
   <div id="appView" class="hidden" style="display:flex;flex-direction:column;flex:1">
     <div class="tabs">
       <button id="tabAudio" class="active">PDF to audio</button>
-      <button id="tabTools">Polish / Review<span class="wide-only"> (Word &amp; LaTeX)</span></button>
+      <button id="tabTools" class="hidden" hidden>Polish / Review<span class="wide-only"> (Word &amp; LaTeX)</span></button>
       <button id="tabChat">Chat</button>
     </div>
 
@@ -401,12 +401,10 @@
             <option value="az:en-US-AvaMultilingualNeural">Ava (English, female)</option>
           </optgroup>
           <optgroup label="Google (best for English)">
-            <option value="Charon" selected>Charon (male, calm)</option>
-            <option value="Kore">Kore (female, clear)</option>
+            <option value="Kore" selected>Kore (female, clear)</option>
             <option value="Aoede">Aoede (female, light)</option>
             <option value="Orus">Orus (male, firm)</option>
             <option value="Puck">Puck (male, lively)</option>
-            <option value="Leda">Leda (female, youthful)</option>
           </optgroup>
         </select>
         <button class="ghost" id="previewBtn" type="button" data-net="1" title="Hear the first sentences of the selected text in this voice (uses about 0.1k characters of the allowance)">试听 Preview</button>
@@ -661,10 +659,11 @@ function getPdfjs() {
 }
 
 /** Text lines of every page (see pageLines), read with the given pdf.js library. */
-async function pdfLines(lib, data, onPage) {
+async function pdfLines(lib, data, onPage, info) {
   const doc = await lib.getDocument({ data, isEvalSupported: false }).promise;   // never compile font data to code
   const pages = [];
   try {
+    if (info) { try { info.outline = await pdfOutline(doc); } catch (e) { info.outline = null; } }
     for (let i = 1; i <= doc.numPages; i++) {
       const page = await doc.getPage(i);
       pages.push(pageLines((await page.getTextContent()).items));
@@ -672,6 +671,26 @@ async function pdfLines(lib, data, onPage) {
     }
   } finally { doc.destroy(); }
   return pages;
+}
+
+/** The PDF's bookmarks as [{title, page (1-based), items}], or null. */
+async function pdfOutline(doc) {
+  const raw = await doc.getOutline();
+  if (!raw || !raw.length) return null;
+  const pageOf = async (dest) => {
+    try {
+      const d = typeof dest === 'string' ? await doc.getDestination(dest) : dest;
+      if (!d || !d[0]) return 0;
+      return (typeof d[0] === 'number' ? d[0] : await doc.getPageIndex(d[0])) + 1;
+    } catch (e) { return 0; }
+  };
+  const walk = async (items, depth) => {
+    const out = [];
+    for (const it of items || []) out.push({ title: String(it.title || '').replace(/\s+/g, ' ').trim(), page: await pageOf(it.dest),
+                                             items: depth < 3 ? await walk(it.items, depth + 1) : [] });
+    return out;
+  };
+  return walk(raw, 0);
 }
 
 async function splitPdf(bytes) {
@@ -773,8 +792,19 @@ function splitChapters(pages) {
     const nx = chapters[k + 1];
     c.endPage = nx ? Math.max(c.startPage, nx.atTop ? nx.startPage - 1 : nx.startPage) : pages.length;
   });
-  const out = chapters.map((c) => ({ title: c.title, text: joinLines(c.lines).trim(), startPage: c.startPage, endPage: c.endPage }))
+  let out = chapters.map((c) => ({ title: c.title, text: joinLines(c.lines).trim(), startPage: c.startPage, endPage: c.endPage }))
     .filter((c) => c.text.length > 20);
+  // Parts and chapters: offer the chapters; the text of a part's title page goes to its first chapter.
+  if (out.some((c) => PART_RE.test(c.title)) && out.filter((c) => !PART_RE.test(c.title)).length >= 2) {
+    const merged = [];
+    let carry = '';
+    out.forEach((c) => {
+      if (PART_RE.test(c.title)) { carry += c.title + '\n\n' + c.text + '\n\n'; return; }
+      merged.push(carry ? Object.assign({}, c, { text: carry + c.text }) : c); carry = '';
+    });
+    if (carry && merged.length) merged[merged.length - 1].text += '\n\n' + carry.trim();
+    out = merged;
+  }
   if (out.length) {
     const ft = joinLines(front.lines).trim();
     if (ft.length > 20) {
@@ -852,10 +882,69 @@ async function extractBook(file) {
   const st = $('audioStatus');
   setStatus(st, 'Reading the PDF text...');
   const lib = await getPdfjs();
+  const info = {};
   const pages = await pdfLines(lib, new Uint8Array(await file.arrayBuffer()),
-    (i, n) => { if (i % 40 === 0) setStatus(st, 'Reading the PDF text: page ' + i + ' of ' + n); });
+    (i, n) => { if (i % 40 === 0) setStatus(st, 'Reading the PDF text: page ' + i + ' of ' + n); }, info);
   setStatus(st, '');
-  return { chapters: splitChapters(pages), pages: pages.length, lines: pages };
+  const byOutline = info.outline ? chaptersFromOutline(info.outline, pages) : null;
+  return { chapters: byOutline || splitChapters(pages), pages: pages.length, lines: pages, outline: !!byOutline };
+}
+
+// A part of a book (a group of chapters), not a chapter: "Part II", "Book 1", "II", "第一部", "上卷", "第二篇".
+const PART_RE = /^((part|book|volume)\s+([0-9]+|[ivxlc]+|one|two|three|four|five|six)\b.*|[ivxlc]{1,5}\.?|第[0-9０-９一二三四五六七八九十]+[部卷篇]\S*|[上中下]卷.*)$/i;
+const SKIP_RE = /^(contents|table of contents|目录|目錄|maps?|list of (figures|tables|illustrations)|copyright|版权|cover|title page)$/i;
+
+/**
+ * Chapters from the PDF bookmarks. A part with chapters inside is replaced by its chapters, so a
+ * book of parts and chapters is offered chapter by chapter; sections inside chapters are not split.
+ * Returns null when the bookmarks do not describe at least three chapters.
+ */
+function chaptersFromOutline(outline, pages) {
+  const marks = [];                               // {title, page, skip}: chapter starts, and pages that only end the one before
+  const add = (items) => items.forEach((it) => {
+    if (!it.page) return;
+    const kids = (it.items || []).filter((k) => k.page);
+    const sections = kids.every((k) => /^[0-9]+\.[0-9]+/.test(k.title));   // "1.1 ...": sections of a chapter, not chapters
+    if (kids.length >= 2 && !sections && (PART_RE.test(it.title) || outline.length <= 3)) {
+      if (it.page < kids[0].page) marks.push({ title: it.title, page: it.page, skip: true });   // the part's title page
+      add(kids);
+    } else marks.push({ title: it.title || 'Chapter', page: it.page, skip: SKIP_RE.test(it.title) });
+  });
+  add(outline);
+  marks.sort((a, b) => a.page - b.page);
+  const starts = marks.filter((m, i) => !marks.slice(0, i).some((p) => p.page === m.page && !p.skip) );
+  const chs = starts.filter((m) => !m.skip);
+  if (chs.length < 3) return null;
+  const clean = cleanPages(pages);
+  const text = (a, b) => joinLines([].concat.apply([], clean.slice(a - 1, b))).trim();
+  const out = [];
+  const first = starts[0].page;
+  if (first > 1) {
+    const ft = text(1, first - 1);
+    if (ft.length > 20) out.push({ title: 'Front matter (before the first chapter)', text: ft, startPage: 1, endPage: first - 1, front: true });
+  }
+  starts.forEach((m, k) => {
+    if (m.skip) return;
+    const end = k + 1 < starts.length ? Math.max(m.page, starts[k + 1].page - 1) : pages.length;
+    const t = text(m.page, end);
+    if (t.length > 20) out.push({ title: m.title.slice(0, 80), text: t, startPage: m.page, endPage: end });
+  });
+  return out.filter((c) => !c.front).length >= 3 ? out : null;
+}
+
+/** Page lines without running headers and page numbers, with paragraph starts marked (as in splitChapters). */
+function cleanPages(pages) {
+  const firstCount = {};
+  pages.forEach((L) => { if (L[0]) firstCount[L[0].s] = (firstCount[L[0].s] || 0) + 1; });
+  return pages.map((L0) => {
+    const L = L0.slice();
+    while (L.length && PAGENUM_RE.test(L[L.length - 1].s)) L.pop();
+    while (L.length && PAGENUM_RE.test(L[0].s)) L.shift();
+    if (L.length && (firstCount[L[0].s] || 0) >= 3) L.shift();
+    while (L.length && PAGENUM_RE.test(L[0].s)) L.shift();
+    const left = Math.min.apply(null, L.map((l) => l.x).concat([1e9]));
+    return L.map((l) => ({ s: l.s, para: l.x - left > 0.8 * l.h }));
+  });
 }
 
 /**
@@ -1161,7 +1250,7 @@ async function loadLibrary() {
   libUsage.azUsed = d.azUsed || 0; libUsage.azCap = d.azCap || 0; libUsage.azReady = !!d.azReady;
   libUsage.s0Used = d.s0Used || 0; libUsage.s0Cap = d.s0Cap || 0; libUsage.s0Until = d.azTier === 's0' && d.azUntil ? d.azUntil : 0;
   const az = $('azVoices'); az.disabled = !libUsage.azReady; az.classList.toggle('hidden', !libUsage.azReady);
-  if (!libUsage.azReady && /^az:/.test($('avoice').value)) $('avoice').value = 'Charon';
+  if (!libUsage.azReady && /^az:/.test($('avoice').value)) $('avoice').value = 'Kore';
   $('libUsage').textContent = 'Speech used this month: ' + (libUsage.azReady ? 'Google ' : '') + fmtK(libUsage.used, true) + ' of ' + fmtK(libUsage.cap) +
     (libUsage.azReady ? ' · Microsoft ' + (libUsage.s0Until ? 'free ' : '') + fmtK(libUsage.azUsed, true) + ' of ' + fmtK(libUsage.azCap, !!libUsage.s0Until) +
       (libUsage.s0Until ? ', then trial credit ' + fmtK(libUsage.s0Used, true) + ' of ' + fmtK(libUsage.s0Cap) +
@@ -1340,9 +1429,9 @@ function toggleAddPanel(it, row) {
   });
   box.appendChild(list);
   const row2 = el('div', 'row'); row2.style.marginTop = '10px';
-  const voice = $('avoice').cloneNode(true); voice.removeAttribute('id'); voice.style.width = 'auto'; voice.value = it.voice || 'Charon';
+  const voice = $('avoice').cloneNode(true); voice.removeAttribute('id'); voice.style.width = 'auto'; voice.value = it.voice || 'Kore';
   voice.querySelectorAll('[id]').forEach((x) => x.removeAttribute('id'));
-  if (!voice.value) voice.value = 'Charon';
+  if (!voice.value) voice.value = 'Kore';
   voice.onchange = () => sum();
   const go = el('button', null, 'Convert selected'); const st = el('span', 'status');
   const sum = () => {

@@ -7,7 +7,8 @@ const overflow = (page) => page.evaluate(() => document.documentElement.scrollWi
 
 test('no horizontal scrolling at 390 px in the Polish and Audio tabs and the player', async ({ page, backend }) => {
   await login(page);
-  await page.click('#tabTools');
+  await page.evaluate(() => { const b = document.getElementById('tabTools'); b.hidden = false; b.classList.remove('hidden'); });   // the tab is hidden for now; its layout is still checked
+      await page.click('#tabTools');
   expect(await overflow(page)).toBeLessThanOrEqual(0);
   await openAudio(page);
   expect(await overflow(page)).toBeLessThanOrEqual(0);
