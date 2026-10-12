@@ -138,7 +138,7 @@ test('a result in a part that is still loading plays once the chapter is complet
   const gate = new Promise((r) => { release = r; });
   backend.on('audio_part', (b) => (b.chapter !== 0 || b.index < 2 ? { data: backend.mp3.toString('base64') } : gate.then(() => ({ data: backend.mp3.toString('base64') }))));
   await openBook(page, backend, { 0: texts, 1: TEXTS[1] });
-  await expect.poll(() => page.evaluate(() => P && P.partial && P.partial.parts)).toBe(2);
+  await expect.poll(() => page.evaluate(() => P && P.partial && P.partial.parts)).toBe(1);
   await search(page, 'target');
   await hits(page).first().click();
   await expect(page.locator('#pStatus')).toHaveText('Loading the rest of this chapter...');

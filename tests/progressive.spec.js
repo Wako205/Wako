@@ -12,7 +12,7 @@ test('playback starts after the first parts while the rest of the chapter is sti
   await page.locator('#library .libitem').first().getByRole('button', { name: 'Listen' }).click();
 
   // Playing before the slow parts arrive: two parts ready, the rest shown as pending text.
-  await expect.poll(() => page.evaluate(() => P && P.partial && P.partial.parts)).toBe(2);
+  await expect.poll(() => page.evaluate(() => P && P.partial && P.partial.parts)).toBe(1);
   await page.evaluate(() => document.getElementById('player').play());
   await expect.poll(() => page.evaluate(() => document.getElementById('player').currentTime)).toBeGreaterThan(0.5);
   expect(await page.locator('#pText span.s.pend').count()).toBeGreaterThan(0);

@@ -143,7 +143,7 @@ test('"End of chapter" waits for the rest of a chapter that is still loading', a
   await login(page);
   await openAudio(page);
   await page.locator('#library .libitem').first().getByRole('button', { name: 'Listen' }).click();
-  await expect.poll(() => page.evaluate(() => P && P.partial && P.partial.parts)).toBe(2);
+  await expect.poll(() => page.evaluate(() => P && P.partial && P.partial.parts)).toBe(1);
   await choose(page, 'End of chapter');
   // The end of the first parts is not the end of the chapter: no fade, and the timer stays set.
   await page.evaluate(() => { player.currentTime = player.duration - 2; player.play(); });

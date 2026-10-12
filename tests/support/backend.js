@@ -83,6 +83,7 @@ class MockBackend {
       case 'audio_part': return { data: this.mp3.toString('base64') };
       case 'audio_progress': {
         const it = this.item(body.id), m = { c: body.chapter, t: body.time, at: Date.now(), label: body.label };
+        if (!it) return {};                                  // an item another account shared
         if (body.slot && body.slot !== 'last') it.marks[body.slot] = m; else it.pos = m;
         return {};
       }

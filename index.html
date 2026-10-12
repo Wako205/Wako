@@ -99,6 +99,11 @@
   .libitem .t { font-weight:600; cursor:pointer; color:var(--accent); }
   .libitem .m { font-size:13px; color:var(--muted); }
   .libitem .grow { flex:1; min-width:200px; }
+  /* Library buttons: right-aligned in fixed columns, so the same button lines up from row to row
+     (a missing button leaves its column empty; "Offline ✓" fits its column). */
+  .libacts { display:grid; grid-template-columns: 84px 92px 112px 84px 72px; gap:8px; justify-content:end; margin-left:auto; }
+  .libacts button { width:100%; white-space:nowrap; }
+  .libacts .a1 { grid-column:1; } .libacts .a2 { grid-column:2; } .libacts .a3 { grid-column:3; } .libacts .a4 { grid-column:4; } .libacts .a5 { grid-column:5; }
   .bar { height:4px; background:var(--soft); border-radius:2px; margin-top:6px; overflow:hidden; } .bar i { display:block; height:100%; background:var(--accent); }
   .readtext { margin-top:14px; max-height: 55vh; overflow-y:auto; border-top:1px solid var(--line); padding-top:10px; line-height:1.9; font-size:17px; }
   .readtext p { margin:0 0 12px; }
@@ -118,10 +123,13 @@
   .readtext span.s:hover { background:var(--soft); }
   .readtext span.s.cur { background:var(--hl); }
   .readtext span.s.flash { background:var(--hl2); }
-  .marks { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
-  .mark { border:1px solid var(--line); border-radius:8px; padding:6px 10px; font-size:13px; display:flex; gap:8px; align-items:center; background:var(--soft); }
-  .mark { min-width:0; max-width:100%; box-sizing:border-box; }
-  .mark b { font-weight:600; } .mark .w { color:var(--muted); max-width:220px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  /* Last position and the two bookmarks: three equal cards side by side, each in three rows. */
+  .marks { display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:8px; margin-top:10px; }
+  .mark { border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:13px; display:flex; flex-direction:column; gap:4px; background:var(--soft); min-width:0; box-sizing:border-box; }
+  .mark b { font-weight:600; }
+  .mark .mi { display:flex; gap:6px; min-width:0; color:var(--ink); white-space:nowrap; }
+  .mark .w { color:var(--muted); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .mark .mbtn { display:flex; gap:6px; flex-wrap:wrap; margin-top:auto; min-height:26px; }
   .mark button { padding:3px 8px; font-size:12px; }
   .readtext span.s.pend { color:var(--pend); cursor:default; }
   h2 { font-size: 18px; margin: 24px 0 12px; }
@@ -181,6 +189,8 @@
     .chlist .n { flex-basis: 100%; margin-left: 30px; white-space: normal; }
     .libitem { padding: 10px 12px; gap: 8px; }
     .libitem .grow { min-width: 100%; }
+    .libacts { display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-start; margin-left:0; width:100%; }
+    .libacts button { width:auto; }
     .pnav select { flex: 1; min-width: 0; max-width: none !important; }
     .pnav button { min-width: 44px; }
     .pnav .status { flex-basis: 100%; }
@@ -192,8 +202,9 @@
     .pset .follow { white-space: nowrap; min-height: 44px; gap: 1px !important; }
     .pset #pRead { flex: none; padding: 5px 8px; }
     .pset .follow input { width: 20px; height: 20px; }
-    .mark { flex-wrap: wrap; flex: 1 1 100%; }
-    .mark .w { max-width: 100%; flex: 1 1 100%; order: 3; }
+    .marks { gap: 6px; }
+    .mark { padding: 6px 8px; }
+    .mark .mi { flex-direction: column; gap: 0; }
     .readtext { max-height: 60vh; font-size: 18px; }
     .topmid { order: 3; width: 100%; }               /* phones: name and Log out on the first row, themes and music below */
     .minimusic { flex: 1; min-width: 0; }
@@ -1424,14 +1435,15 @@ function renderLibrary() {
     const open = el('button', 'small', it.pos ? 'Resume' : 'Listen'); open.onclick = () => openItem(it.id);
     open.disabled = !(it.chapters || []).some((ch, i) => chapterReadyCount(it, i) > 0) || (!isOnline() && !nOff);
     if (open.disabled && !isOnline()) open.title = 'Not saved for offline listening';
-    row.appendChild(open);
+    const acts = el('div', 'libacts'); row.appendChild(acts);
+    open.classList.add('a1'); acts.appendChild(open);
     if (savableChapters(it).length && (isOnline() || nOff)) {
       const off = el('button', 'ghost small', nOff ? 'Offline ✓' : 'Offline'); off.title = 'Save for offline listening, or remove the offline copy';
-      off.onclick = () => toggleOfflinePanel(it, row); row.appendChild(off);
+      off.classList.add('a2'); off.onclick = () => toggleOfflinePanel(it, row); acts.appendChild(off);
     }
     if (it.kind === 'book' && it.state !== 'processing') {
       const add = el('button', 'ghost small', chaptersDone(it) < it.chapters.length ? 'Add chapters' : 'Chapters'); add.dataset.net = '1';
-      add.onclick = () => toggleAddPanel(it, row); row.appendChild(add);
+      add.classList.add('a3'); add.onclick = () => toggleAddPanel(it, row); acts.appendChild(add);
     }
     if (it.state !== 'processing') {
       const sh = el('button', 'ghost small', it.shared ? 'Unshare' : 'Share'); sh.dataset.net = '1';
@@ -1441,14 +1453,14 @@ function renderLibrary() {
         try { await api({ action: 'audio_share', token, id: it.id, shared: !it.shared }); await loadLibrary(); }
         catch (e) { setStatus($('audioStatus'), e.message, true); sh.disabled = false; }
       };
-      row.appendChild(sh);
+      sh.classList.add('a4'); acts.appendChild(sh);
       const del = el('button', 'ghost small', 'Delete'); del.dataset.net = '1';
       del.onclick = async () => {
         if (!window.confirm('Delete "' + it.title + '" and its audio from Drive?')) return;
         try { await api({ action: 'audio_delete', token, id: it.id }); if (P && P.item.id === it.id) closePlayer(); loadLibrary(); }
         catch (e) { setStatus($('audioStatus'), e.message, true); }
       };
-      row.appendChild(del);
+      del.classList.add('a5'); acts.appendChild(del);
     }
     box.appendChild(row);
     if (openPanels.includes('|' + it.id)) toggleOfflinePanel(it, row);
@@ -1959,7 +1971,7 @@ function chapterData(texts, bufs, parts) {
   const blob = new Blob(bufs.slice(0, parts), { type: 'audio/mpeg' });
   return { texts, segs, parts, blob, bufs: bufs.slice(0, parts), url: URL.createObjectURL(blob) };
 }
-const EARLY_PARTS = 2;   // playback starts once this many parts (several minutes of speech) are in
+const EARLY_PARTS = 1;   // playback starts as soon as the first part (one to three minutes of speech) is in
 
 /**
  * Downloads chapter c. onEarly(data), if given, is called once with the first EARLY_PARTS
@@ -3002,12 +3014,15 @@ function renderMarks() {
   if (!P) return;
   const marks = P.item.marks || {};
   [['last', 'Last position', P.item.pos], ['b1', 'Bookmark 1', marks.b1], ['b2', 'Bookmark 2', marks.b2]].forEach(([slot, name, m]) => {
-    const d = el('div', 'mark');
+    // Three rows: the name; chapter, time and the start of the sentence; the buttons.
+    const d = el('div', 'mark'), info = el('div', 'mi'), btns = el('div', 'mbtn');
     d.appendChild(el('b', null, name));
-    d.appendChild(el('span', null, m ? markText(m) : 'empty'));
-    if (m && m.label) { const w = el('span', 'w', shortLabel(m.label)); w.title = m.label; d.appendChild(w); }
-    if (m) { const go = el('button', 'small', 'Go'); go.onclick = () => goToMark(m); d.appendChild(go); }
-    if (slot !== 'last') { const sv = el('button', 'ghost small', m ? 'Replace' : 'Save here'); sv.title = 'Save the current position as ' + name; sv.onclick = () => saveMark(slot); d.appendChild(sv); }
+    info.appendChild(el('span', null, m ? markText(m) : 'empty'));
+    if (m && m.label) { const w = el('span', 'w', shortLabel(m.label)); w.title = m.label; info.appendChild(w); }
+    d.appendChild(info);
+    if (m) { const go = el('button', 'small', 'Go'); go.onclick = () => goToMark(m); btns.appendChild(go); }
+    if (slot !== 'last') { const sv = el('button', 'ghost small', m ? 'Replace' : 'Save here'); sv.title = 'Save the current position as ' + name; sv.onclick = () => saveMark(slot); btns.appendChild(sv); }
+    d.appendChild(btns);
     box.appendChild(d);
   });
 }
