@@ -40,3 +40,27 @@ test('without bookmarks, "Part" headings give way to the chapters inside them', 
   });
   expect(titles).toEqual(['Chapter 1', 'Chapter 2', 'Chapter 3']);
 });
+
+test('a book whose chapters are only titles in the table of contents is split at those titles', async ({ page: p }) => {
+  await p.goto(INDEX_URL);
+  const r = await p.evaluate(() => {
+    const L = (s, h) => ({ s, x: 72, h: h || 10 });
+    const text = (n) => Array.from({ length: 3 }, (_, i) => L('Body sentence ' + i + ' of section ' + n + ', long enough to be read.'));
+    const toc = [L('Contents', 14), L('Establishing Your Authority 3'), L('Developing a Theme 10'), L('Using “On-the-Body” Physical Sensation 20'),
+                 L('Submerging the “I” 28'), L('Nuts and Bolts: Hiding a Gun 41'), L('Discon nected Dialogue – Part One 113'), L('2')];
+    const pages = [
+      [L('The Book Title', 18)], toc,
+      [L('Establishing Your Authority', 14)].concat(text(1)),
+      text(2),
+      [L('Developing a Theme', 14)].concat(text(3), [L('Using “On-the-Body” Physical Sensation', 14)], text(4)),   // a chapter starting mid-page
+      [L('Submerging the “I”', 14)].concat(text(5)),
+      [L('Nuts and Bolts: Hiding a Gun', 14)].concat(text(6)),
+      [L('Disconnected Dialogue – Part One', 14)].concat(text(7)),
+    ];
+    return chaptersFromToc(pages).map((c) => [c.title, c.startPage, c.text.split('\n\n')[0], c.text.length > 60]);
+  });
+  expect(r.map((x) => x[0])).toEqual(['Establishing Your Authority', 'Developing a Theme', 'Using “On-the-Body” Physical Sensation',
+    'Submerging the “I”', 'Nuts and Bolts: Hiding a Gun', 'Discon nected Dialogue – Part One']);
+  expect(r[2][1]).toBe(5);                                   // starts on the same page as the chapter before it
+  r.forEach((x) => expect(x[3]).toBe(true));
+});

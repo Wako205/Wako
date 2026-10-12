@@ -708,13 +708,19 @@ function pageLines(items) {
     const y = it.transform[5], x = it.transform[4];
     let row = rows.find((r) => Math.abs(r.y - y) < 2.5);
     if (!row) { row = { y, parts: [] }; rows.push(row); }
-    row.parts.push({ x, s: it.str, h: Math.abs(it.transform[3]) || 10 });
+    row.parts.push({ x, s: it.str, h: Math.abs(it.transform[3]) || 10, w: it.width || 0 });
   });
   rows.sort((a, b) => b.y - a.y);
   return rows.map((r) => {
     r.parts.sort((a, b) => a.x - b.x);
-    return { x: r.parts[0].x, h: r.parts[0].h,
-             s: r.parts.map((p) => p.s).join(' ').replace(CJK_GAP, '$1').replace(/\s+/g, ' ').trim() };
+    // Pieces that touch belong to one word (ligatures such as "fi", "ff", "Th" often come as separate pieces).
+    let s = '';
+    r.parts.forEach((p, i) => {
+      const q = r.parts[i - 1];
+      const touch = q && q.w > 0 && p.x - (q.x + q.w) < 0.12 * Math.min(p.h, q.h) && /\S$/.test(q.s) && /^\S/.test(p.s);
+      s += (i && !touch ? ' ' : '') + p.s;
+    });
+    return { x: r.parts[0].x, h: r.parts[0].h, s: s.replace(CJK_GAP, '$1').replace(/\s+/g, ' ').trim() };
   }).filter((l) => l.s);
 }
 
@@ -869,7 +875,67 @@ async function extractBook(file) {
     (i, n) => { if (i % 40 === 0) setStatus(st, 'Reading the PDF text: page ' + i + ' of ' + n); }, info);
   setStatus(st, '');
   const byOutline = info.outline ? chaptersFromOutline(info.outline, pages) : null;
-  return { chapters: byOutline || splitChapters(pages), pages: pages.length, lines: pages, outline: !!byOutline };
+  if (byOutline) return { chapters: byOutline, pages: pages.length, lines: pages, outline: true };
+  // No bookmarks: chapter headings by rule, or the titles listed in the table of contents, whichever finds more.
+  const byRule = splitChapters(pages), byToc = chaptersFromToc(pages);
+  const n = (list) => (list || []).filter((c) => !c.front && c.title !== 'Full text').length;
+  return { chapters: byToc && n(byToc) > n(byRule) ? byToc : byRule, pages: pages.length, lines: pages, toc: !!(byToc && n(byToc) > n(byRule)) };
+}
+
+/** A title reduced to letters and digits, for matching a contents entry with its heading in the text. */
+const normTitle = (t) => String(t).normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+
+/**
+ * Chapters from a table of contents whose entries are titles with page numbers ("Developing a Theme  10"),
+ * for books that do not number their chapters. Each title is looked up as a heading line in the text,
+ * in order; the chapter starts at that line. Returns null when fewer than three titles are found.
+ */
+function chaptersFromToc(pages) {
+  const ENTRY = /^(.{2,100}?)[\s.·…_]*\s([0-9]{1,4})$/;
+  const entries = [];
+  let tocEnd = -1;
+  for (let pi = 0; pi < Math.min(pages.length, 30); pi++) {
+    const found = pages[pi].map((l) => l.s.match(ENTRY)).filter((m) => m && /\p{L}{2}/u.test(m[1]));
+    if (found.length >= 5) {
+      found.forEach((m) => entries.push({ title: m[1].replace(/[\s.·…_]+$/, '').trim(), printed: Number(m[2]) }));
+      tocEnd = pi;
+    } else if (tocEnd >= 0 && pi > tocEnd + 1) break;
+  }
+  // Chapters only: no "1.1" sections, no parts, no contents or copyright entries.
+  const list = entries.filter((e) => !/^[0-9]+\.[0-9]+/.test(e.title) && !PART_RE.test(e.title) && !SKIP_RE.test(e.title) && normTitle(e.title).length >= 3);
+  if (list.length < 3) return null;
+  const clean = cleanPages(pages);
+  let pi = tocEnd + 1, li = 0;
+  const marks = [];
+  list.forEach((e) => {
+    const want = normTitle(e.title);
+    for (let p = pi; p < clean.length; p++) {
+      const L = clean[p];
+      for (let l = p === pi ? li : 0; l < L.length; l++) {
+        const got = normTitle(L[l].s);
+        if (got && (got === want || (got.startsWith(want) && got.length <= want.length + 4))) {
+          marks.push({ title: e.title, p, l }); pi = p; li = l + 1; return;
+        }
+      }
+    }
+  });
+  if (marks.length < 3 || marks.length < 0.6 * list.length) return null;
+  const slice = (a, b) => {                       // lines from mark a up to (not including) mark b
+    const out = [];
+    for (let p = a.p; p <= (b ? b.p : clean.length - 1); p++) {
+      const L = clean[p], from = p === a.p ? a.l + 1 : 0, to = b && p === b.p ? b.l : L.length;
+      for (let l = from; l < to; l++) out.push(L[l]);
+    }
+    return joinLines(out).trim();
+  };
+  const out = [];
+  const front = joinLines([].concat.apply([], clean.slice(tocEnd + 1, marks[0].p)).concat(clean[marks[0].p].slice(0, marks[0].l))).trim();
+  if (front.length > 20) out.push({ title: 'Front matter (before the first chapter)', text: front, startPage: 1, endPage: marks[0].p + 1, front: true });
+  marks.forEach((m, k) => {
+    const nx = marks[k + 1], text = slice(m, nx);
+    if (text.length > 20) out.push({ title: m.title.slice(0, 80), text: m.title + '\n\n' + text, startPage: m.p + 1, endPage: nx ? nx.p + 1 : pages.length });
+  });
+  return out.filter((c) => !c.front).length >= 3 ? out : null;
 }
 
 // A part of a book (a group of chapters), not a chapter: "Part II", "Book 1", "II", "第一部", "上卷", "第二篇".
