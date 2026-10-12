@@ -189,3 +189,34 @@ test('each visit starts with a random song, never the one the last visit began w
   for (let k = 1; k < firsts.length; k++) expect(firsts[k]).not.toBe(firsts[k - 1]);
   await page.click('#mmPlay');
 });
+
+test('"BGM with book": the music plays and pauses with the book; unbound, it is independent again', async ({ page, backend }) => {
+  test.setTimeout(90000);
+  await login(page);
+  await expect.poll(async () => (await st(page)).music, { timeout: 30000 }).toBe(true);   // playing on its own after login
+  await openAudio(page);
+  await page.locator('#library .libitem').first().getByRole('button', { name: 'Listen' }).click();
+  await expect.poll(() => page.evaluate(() => player.duration)).toBeGreaterThan(8);
+  await page.check('#pBgm');
+  await expect.poll(async () => (await st(page)).music).toBe(false);                     // the book is paused: so is the music
+  await page.click('#pPlay');
+  await expect.poll(async () => { const s = await st(page); return s.player && s.music; }).toBe(true);
+  await expect(page.locator('#mmPlay')).toHaveText('❚❚');
+  await page.click('#pPlay');
+  await expect.poll(async () => { const s = await st(page); return !s.player && !s.music; }).toBe(true);
+  // The header button plays both together while bound.
+  await page.click('#mmPlay');
+  await expect.poll(async () => { const s = await st(page); return s.player && s.music; }).toBe(true);
+  // Across the end of a chapter the music goes on.
+  await page.evaluate(() => { player.currentTime = player.duration - 0.3; });
+  await expect(page.locator('#pChapter')).toHaveValue('1');
+  expect((await st(page)).music).toBe(true);
+  await page.evaluate(() => player.pause());
+  await expect.poll(async () => (await st(page)).music).toBe(false);
+  expect(JSON.parse(await page.evaluate(() => localStorage.getItem('mp_music_tester'))).bind).toBe(true);
+  // Unbound: the music is independent again (it was switched on at login).
+  await page.uncheck('#pBgm');
+  await expect.poll(async () => (await st(page)).music).toBe(true);
+  expect((await st(page)).player).toBe(false);
+  await page.click('#mmPlay');
+});

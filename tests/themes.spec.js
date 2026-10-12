@@ -9,7 +9,7 @@ test('eye care is the default and listed first; white and night are kept after a
   await expect(page.locator('#themes button.on')).toHaveText('护眼');
   expect(await page.locator('#themes button').allTextContents()).toEqual(['护眼', '白天', '黑夜']);
 
-  for (const [label, theme, color] of [['黑夜', 'night', 'rgb(17, 18, 23)'], ['护眼', 'eye', 'rgb(246, 237, 214)']]) {
+  for (const [label, theme, color] of [['黑夜', 'night', 'rgb(0, 0, 0)'], ['护眼', 'eye', 'rgb(246, 237, 214)']]) {
     await page.click('#themes button:text("' + label + '")');
     expect(await page.evaluate(() => document.documentElement.getAttribute('data-theme'))).toBe(theme);
     expect(await bg(page)).toBe(color);

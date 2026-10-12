@@ -66,3 +66,20 @@ test('the allowances are shown as a column chart beside the conversion form', as
   expect(chart.x).toBeGreaterThan(form.right - 1);
   expect(Math.abs(chart.y - form.top)).toBeLessThan(2);
 });
+
+test('when Google is used up, its voices are greyed out and a Microsoft voice is chosen', async ({ page, backend }) => {
+  backend.on('audio_library', () => ({ items: JSON.parse(JSON.stringify(backend.library)), ttsUsed: 1030000, ttsCap: 1030000,
+                                       azReady: true, azUsed: 500000, azCap: 500000, s0Used: 200, s0Cap: 12000000, azTier: 's0', azUntil: Date.now() + 864e5 }));
+  await login(page);
+  await openAudio(page);
+  await expect(page.locator('#avoice')).toHaveValue('az:zh-CN-YunxiNeural');
+  expect(await page.locator('#ggVoices option').evaluateAll((os) => os.every((o) => o.disabled))).toBe(true);
+  expect(await page.locator('#ggVoices').getAttribute('label')).toContain('used up');
+  // The Microsoft free tier is also used up: the trial credit is what is left.
+  await page.locator('#library .libitem').first().getByRole('button', { name: 'Add chapters' }).click();
+  const panel = page.locator('.addpanel');
+  await panel.locator('.chlist input:not([disabled])').first().check();
+  await expect(panel.locator('select')).toHaveValue('az:zh-CN-YunxiNeural');
+  await expect(panel).toContainText('0k of 500k free, then 12,000k trial credit');
+  await expect(panel).not.toContainText('not enough');
+});
