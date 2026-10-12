@@ -137,14 +137,12 @@
   .results button.hit:hover { background: var(--soft); }
   .results .hit b { display: block; font-size: 12px; color: var(--muted); font-weight: 600; }
   .results mark { background: var(--hl2); color: var(--ink); border-radius: 3px; padding: 0 1px; }
-  .musicpanel { margin-top:8px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--soft); font-size:13px; color:var(--muted); display:flex; flex-direction:column; gap:6px; }
-  .musicpanel label { margin:0; color:var(--ink); font-size:13px; }
-  .musicpanel .mon { display:flex; gap:6px; align-items:center; font-size:14px; min-height:32px; }
-  .musicpanel select { width:auto; padding:4px 8px; font-size:13px; }
-  .musicpanel .mfile { display:flex; gap:8px; align-items:center; padding:4px 0; border-bottom:1px solid var(--line); }
-  .musicpanel .mname { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ink); }
-  .musicpanel .mnote { font-size:12px; }
-  #pMusic.on { background:var(--accent); color:var(--on-accent); }
+  .topmid { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .minimusic { display:inline-flex; gap:6px; align-items:center; }
+  .minimusic select { width:auto; max-width:200px; padding:4px 8px; font-size:13px; }
+  .minimusic button { min-width:36px; padding:4px 10px; font-variant-numeric:tabular-nums; }
+  .minimusic button.on { background:var(--accent); color:var(--on-accent); }
+  .minimusic.err select { border-color:var(--err); }
   .banner { font-size:14px; background:var(--soft); border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:8px; padding:8px 12px; margin-bottom:12px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
   body.offline [data-net] { opacity:.45; pointer-events:none; }
   .offctl { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:6px; font-size:13px; }
@@ -197,9 +195,11 @@
     .mark { flex-wrap: wrap; flex: 1 1 100%; }
     .mark .w { max-width: 100%; flex: 1 1 100%; order: 3; }
     .readtext { max-height: 60vh; font-size: 18px; }
-    .musicpanel .mon { min-height: 44px; }
-    .musicpanel .mon input { width: 22px; height: 22px; }
-    details.pron summary { min-height: 44px; display: flex; align-items: center; }
+    .topmid { order: 3; width: 100%; }               /* phones: name and Log out on the first row, themes and music below */
+    .minimusic { flex: 1; min-width: 0; }
+    .minimusic select { flex: 1; min-width: 0; max-width: none; }
+    .minimusic button { min-width: 44px; }
+        details.pron summary { min-height: 44px; display: flex; align-items: center; }
     .pron td:last-child button { min-height: 44px; }
   }
 </style>
@@ -209,8 +209,15 @@
   <div id="netBanner" class="banner hidden" role="status"></div>
   <div class="top">
     <h1 id="brand">Wako205</h1>
+    <div class="topmid">
     <div class="themes" id="themes" role="group" aria-label="Color theme">
       <button data-theme="eye" title="Warm paper tones, less blue light">护眼</button><button data-theme="day" title="White background">白天</button><button data-theme="night" title="Dark background">黑夜</button>
+    </div>
+    <div class="minimusic hidden" id="miniMusic" role="group" aria-label="Background music">
+      <select id="mmTrack" aria-label="Background music" title="Background music (lofi by Holizna, CC0)"></select>
+      <button class="ghost small" id="mmPlay" type="button" aria-label="Play music" aria-pressed="false" title="Play or pause the music">▶</button>
+      <span class="sr-only" id="mStatus" aria-live="polite"></span>
+    </div>
     </div>
     <div class="who hidden" id="who"><span id="whoUsage"></span><button class="ghost small" id="logoutBtn">Log out</button></div>
   </div>
@@ -322,34 +329,8 @@
             <option value="1.3">1.3×</option><option value="1.5">1.5×</option><option value="1.75">1.75×</option><option value="2">2×</option>
           </select>
           <label class="follow" style="margin:0;display:flex;gap:4px;align-items:center" title="Keep the screen on (no auto-lock) while audio plays"><input type="checkbox" id="pAwake" checked aria-label="Keep the screen on while audio plays"> <span aria-hidden="true">☀</span><span class="wide-only">Screen on</span></label>
-          <button class="ghost small" id="pMusic" title="Background music" aria-label="Background music" aria-expanded="false" aria-controls="pMusicPanel">♪<span class="wide-only"> Music</span></button>
           <button class="ghost small" id="pJump" style="margin-left:auto" title="Scroll the text to the sentence being read">Jump<span class="wide-only"> to current</span></button>
           <button class="ghost small" id="pRead" title="Show only the text, with a small progress bar">Full<span class="wide-only"> screen</span></button>
-        </div>
-        <div id="pMusicPanel" class="musicpanel hidden" role="group" aria-label="Background music">
-          <label class="mon"><input type="checkbox" id="mOn"> Music under the narration</label>
-          <div class="row">
-            <label for="mSource">Source</label>
-            <select id="mSource"><option value="lofi">Lofi library</option><option value="mine">My music</option><option value="gen">Generated</option></select>
-            <span id="mLofiRow" class="row"><label for="mLofi">Track</label>
-            <select id="mLofi"><option value="all">All tracks</option></select></span>
-            <span id="mGenRow" class="row"><label for="mPreset">Style</label>
-            <select id="mPreset"><option value="rain">Rain</option><option value="night">Night</option><option value="cafe">Café</option></select></span>
-            <span id="mOrderRow" class="row"><label for="mOrder">Order</label>
-            <select id="mOrder"><option value="order">In order</option><option value="shuffle">Shuffle</option></select></span>
-            <label for="mLevel">Level</label>
-            <select id="mLevel"><option value="quiet">Quiet</option><option value="normal">Normal</option><option value="louder">Louder</option></select>
-          </div>
-          <div id="mLofiNote" class="mnote hidden">Lofi music by Holizna, public domain (CC0), loaded from this site as needed.</div>
-          <div id="mMine" class="hidden">
-            <div id="mFiles"></div>
-            <div class="row">
-              <input type="file" id="mAdd" accept="audio/*" multiple class="hidden">
-              <button class="ghost small" type="button" id="mAddBtn">Add files</button>
-            </div>
-            <div class="mnote">Your files stay in this browser and are never uploaded.</div>
-          </div>
-          <div class="status" id="mStatus" aria-live="polite"></div>
         </div>
         <div id="pMarks" class="marks"></div>
         <form class="row psearch" id="pSearchForm" role="search" style="margin-top:10px">
@@ -565,6 +546,7 @@ function showApp() {
   $('who').classList.remove('hidden'); $('brand').textContent = username + '@Wako205';
   renderChat();
   loadMusicPrefs();
+  musicSync();                                      // loads the first track, ready for ▶
   switchTab('audio');
 }
 /**
@@ -585,7 +567,7 @@ function logout() {
   offWipe(user).then(renderNet);
   offlineMode = false;
   token = username = null; store('mp_token', null); store('mp_user', null); $('brand').textContent = 'Wako205';
-  mPrefs.on = false; resetMusic(); $('pMusicPanel').classList.add('hidden');
+  mPrefs.on = false; resetMusic(); $('miniMusic').classList.add('hidden');
   clearTimeout(libTimer); libItems = []; sharedItems = []; $('library').textContent = ''; $('libUsage').textContent = ''; $('usageCard').classList.add('hidden'); $('usageCard').parentElement.classList.add('nousage');
   $('sharedLib').textContent = ''; $('sharedCard').classList.add('hidden');
   chat = { convId: null, messages: [] }; pendingDoc = null; currentFile = null; store('mp_chat', null);
@@ -2430,6 +2412,7 @@ function sleepStop() {
   player.pause();                                     // the pause event saves the position
   saveProgress(true);
   setFade(1);
+  if (mPrefs.on) { mPrefs.on = false; music.pause(); renderMini(); }   // the music stops too
   setStatus($('pStatus'), 'Sleep timer: playback stopped.');
   renderSleep();
 }
@@ -2706,16 +2689,17 @@ async function myMusicData(key) { const db = await musicDb(); const f = await mu
 
 // State: the choices (per user, in this browser), and the track playing.
 const music = $('music');
-let mPrefs = { on: false, source: 'lofi', lofi: 'all', preset: 'rain', level: 'normal', order: 'shuffle' };
+let mPrefs = { on: false, source: 'lofi', lofi: 'all', preset: 'rain', level: 'louder', order: 'shuffle' };
 let mTrack = null, mNext = null, mNextReady = null, mSeed = 1, mIndex = -1, mGen = 0, mUnlocked = false;
 function musicPrefsKey() { return 'mp_music_' + (username || ''); }
 function loadMusicPrefs() {
-  mPrefs = { on: false, source: 'lofi', lofi: 'all', preset: 'rain', level: 'normal', order: 'shuffle' };
+  mPrefs = { on: false, source: 'lofi', lofi: 'all', preset: 'rain', level: 'louder', order: 'shuffle' };
   try { Object.assign(mPrefs, JSON.parse(lsGet(musicPrefsKey()) || '{}')); } catch (e) {}
+  mPrefs.on = false;                                   // the music starts only with a tap on ▶
   if (!MUSIC_PRESETS[mPrefs.preset]) mPrefs.preset = 'rain';
   if (!(mPrefs.level in MUSIC_LEVELS)) mPrefs.level = 'normal';
   if (['lofi', 'mine', 'gen'].indexOf(mPrefs.source) < 0) mPrefs.source = 'lofi';
-  renderMusicPanel();
+  renderMini();
 }
 function saveMusicPrefs() { lsSet(musicPrefsKey(), JSON.stringify(mPrefs)); }
 const musicTarget = () => SPEECH_DB + MUSIC_LEVELS[mPrefs.level];
@@ -2759,21 +2743,25 @@ function lofiList() {
   }
   return lofiP;
 }
-async function renderLofiSelect() {
-  let list = [];
-  try { list = await lofiList(); } catch (e) {}
-  const sel = $('mLofi');
-  if (sel.options.length !== list.length + 1) {
-    sel.textContent = ''; sel.appendChild(el('option', null, 'All tracks (' + list.length + ')')).value = 'all';
-    list.forEach((t) => { const o = el('option', null, t.title + (t.collection ? ' · ' + t.collection : '')); o.value = t.file; sel.appendChild(o); });
-  }
-  sel.value = list.some((t) => t.file === mPrefs.lofi) ? mPrefs.lofi : 'all';
-}
 function track(gen, y, label, lv) {
   const blob = wavBlob(y, MUSIC_RATE);
   return { gen, blob, url: URL.createObjectURL(blob), label, seconds: y.length / MUSIC_RATE, retried: false, ...lv };
 }
 function dropTrack(t) { if (t && t.url) URL.revokeObjectURL(t.url); }
+/** Loads the first track after login, so ▶ starts at once (nothing plays). */
+function musicPrepare() { if (!mTrack && !musicSync.busy && username) prepareFirst(); }
+async function prepareFirst() {
+  if (prepareFirst.busy) return;
+  prepareFirst.busy = true;
+  const gen = mGen;
+  try {
+    const t = await makeTrack(gen);
+    if (gen !== mGen || mTrack) dropTrack(t);
+    else { mTrack = t; music.src = t.url; setStatus($('mStatus'), (musicWanted() ? 'Playing: ' : 'Ready: ') + t.label + '.'); if (musicWanted()) music.play().catch(() => {}); prepareNext(); }
+  } catch (e) { if (gen === mGen) setStatus($('mStatus'), e.message, true); }
+  prepareFirst.busy = false;
+  renderMini();
+}
 /** Prepares the following track while the current one plays, so the switch needs no work in the background. */
 function prepareNext() {
   if (mNext || mNextReady || !mTrack) return;
@@ -2788,11 +2776,11 @@ function resetMusic() {
   mIndex = -1;
   musicSync();
 }
-/** The music plays while the narration plays, if it is switched on. */
-function musicWanted() { return mPrefs.on && !!P && !player.paused; }
+/** The music plays on its own, from ▶ to ❚❚, independently of the narration (both can play together). */
+function musicWanted() { return mPrefs.on && !!username; }
 async function musicSync() {
-  if (!musicWanted()) { if (!music.paused) music.pause(); return; }
-  if (mTrack) { if (music.paused) music.play().catch(() => {}); return; }
+  if (!musicWanted()) { if (!music.paused) music.pause(); renderMini(); if (!mTrack && username) musicPrepare(); return; }
+  if (mTrack) { if (music.paused) music.play().catch(() => {}); renderMini(); return; }
   if (musicSync.busy) return;
   musicSync.busy = true;
   const gen = mGen;
@@ -2802,11 +2790,12 @@ async function musicSync() {
     if (gen !== mGen) dropTrack(t);                       // the choices changed meanwhile: rendered again below
     else {
       mTrack = t; music.src = t.url; music.loop = false;
-      setStatus($('mStatus'), 'Playing: ' + t.label + '.');
+      setStatus($('mStatus'), (musicWanted() ? 'Playing: ' : 'Ready: ') + t.label + '.');
       if (musicWanted()) music.play().catch(() => {});
       prepareNext();
     }
-  } catch (e) { if (gen === mGen) setStatus($('mStatus'), e.message, true); }
+  } catch (e) { if (gen === mGen) { setStatus($('mStatus'), e.message, true); $('mmPlay').title = e.message; } }
+  renderMini();
   musicSync.busy = false;
   if (gen !== mGen) musicSync();
 }
@@ -2814,7 +2803,7 @@ async function musicSync() {
 // if it is not ready, the current one plays again.
 music.addEventListener('ended', () => {
   const t = mNextReady; mNextReady = null;
-  if (t && t.gen === mGen) { dropTrack(mTrack); mTrack = t; music.src = t.url; setStatus($('mStatus'), 'Playing: ' + t.label + '.'); }
+  if (t && t.gen === mGen) { dropTrack(mTrack); mTrack = t; music.src = t.url; setStatus($('mStatus'), 'Playing: ' + t.label + '.'); renderMini(); }
   else music.currentTime = 0;
   if (musicWanted()) music.play().catch(() => {});
   prepareNext();
@@ -2835,65 +2824,33 @@ function unlockMusic() {
 }
 ['touchend', 'click'].forEach((ev) => document.addEventListener(ev, unlockMusic, true));
 
-function renderMusicPanel() {
-  $('mOn').checked = mPrefs.on; $('mSource').value = mPrefs.source; $('mPreset').value = mPrefs.preset;
-  $('mLevel').value = mPrefs.level; $('mOrder').value = mPrefs.order;
-  $('mGenRow').classList.toggle('hidden', mPrefs.source !== 'gen');
-  $('mLofiRow').classList.toggle('hidden', mPrefs.source !== 'lofi');
-  $('mLofiNote').classList.toggle('hidden', mPrefs.source !== 'lofi');
-  $('mOrderRow').classList.toggle('hidden', mPrefs.source === 'gen' || (mPrefs.source === 'lofi' && mPrefs.lofi !== 'all'));
-  $('mMine').classList.toggle('hidden', mPrefs.source !== 'mine');
-  if (mPrefs.source === 'lofi') renderLofiSelect();
-  $('pMusic').classList.toggle('on', mPrefs.on);
-  if (!mPrefs.on) setStatus($('mStatus'), '');
-  if (mPrefs.source === 'mine') renderMyMusic();
-}
-async function renderMyMusic() {
-  const box = $('mFiles');
+/** The small music player next to the themes: a track list and ▶ / ❚❚. */
+async function renderMini() {
+  $('miniMusic').classList.toggle('hidden', !username);
+  const on = mPrefs.on, btn = $('mmPlay');
+  btn.textContent = on ? '❚❚' : '▶'; btn.classList.toggle('on', on);
+  btn.setAttribute('aria-pressed', String(on)); btn.setAttribute('aria-label', on ? 'Pause music' : 'Play music');
+  $('miniMusic').classList.toggle('err', $('mStatus').classList.contains('err'));
   let list = [];
-  try { list = await myMusicList(); } catch (e) {}
-  box.textContent = '';
-  if (!list.length) box.appendChild(el('div', 'status', 'No files yet.'));
-  list.forEach((f) => {
-    const r = el('div', 'mfile');
-    r.appendChild(el('span', 'mname', f.name));
-    r.appendChild(el('span', 'm', fmtMB(f.size)));
-    const x = el('button', 'ghost small', 'Remove'); x.setAttribute('aria-label', 'Remove ' + f.name);
-    x.onclick = async () => {
-      const db = await musicDb(), tx = db.transaction('files', 'readwrite'); tx.objectStore('files').delete(f.key);
-      await new Promise((res) => { tx.oncomplete = res; tx.onerror = res; });
-      renderMyMusic(); resetMusic();
-    };
-    r.appendChild(x); box.appendChild(r);
-  });
+  try { list = await lofiList(); } catch (e) {}
+  const sel = $('mmTrack');
+  if (sel.options.length !== list.length + 1) {
+    sel.textContent = '';
+    sel.appendChild(el('option', null, '♪ All lofi (' + list.length + ')')).value = 'all';
+    list.forEach((t) => { const o = el('option', null, '♪ ' + t.title); o.value = t.file; sel.appendChild(o); });
+  }
+  sel.value = list.some((t) => t.file === mPrefs.lofi) ? mPrefs.lofi : 'all';
+  if (mTrack && mPrefs.on) sel.title = 'Playing: ' + mTrack.label;
 }
+$('mmPlay').onclick = () => {
+  mPrefs.on = !mPrefs.on; saveMusicPrefs();
+  mUnlocked = true;
+  if (mPrefs.on && mTrack) { music.play().catch(() => {}); setStatus($('mStatus'), 'Playing: ' + mTrack.label + '.'); }   // inside the tap, as iOS requires
+  if (!mPrefs.on) { music.pause(); if (mTrack) setStatus($('mStatus'), 'Paused: ' + mTrack.label + '.'); }
+  renderMini(); musicSync();
+};
+$('mmTrack').onchange = () => { mPrefs.source = 'lofi'; mPrefs.lofi = $('mmTrack').value; saveMusicPrefs(); resetMusic(); };
 function fmtMB(n) { return n >= 1e6 ? (n / 1e6).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1e3)) + ' kB'; }
-$('pMusic').onclick = () => {
-  const open = $('pMusicPanel').classList.toggle('hidden') === false;
-  $('pMusic').setAttribute('aria-expanded', String(open));
-  if (open) renderMusicPanel();
-};
-$('mOn').onchange = () => { mPrefs.on = $('mOn').checked; saveMusicPrefs(); unlockMusic(); renderMusicPanel(); resetMusic(); };
-[['mSource', 'source'], ['mLofi', 'lofi'], ['mPreset', 'preset'], ['mLevel', 'level'], ['mOrder', 'order']].forEach(([id, k]) => {
-  $(id).onchange = () => { mPrefs[k] = $(id).value; saveMusicPrefs(); renderMusicPanel(); if (k !== 'order') resetMusic(); };
-});
-$('mAddBtn').onclick = () => $('mAdd').click();
-$('mAdd').onchange = async () => {
-  const files = Array.from($('mAdd').files || []);
-  $('mAdd').value = '';
-  if (!files.length) return;
-  try {
-    const db = await musicDb();
-    for (const f of files) {
-      const data = await f.arrayBuffer(), tx = db.transaction('files', 'readwrite');
-      tx.objectStore('files').put({ key: (username || '') + '|' + Date.now() + Math.random().toString(36).slice(2, 6), user: username || '', name: f.name, type: f.type, size: f.size, data, at: Date.now() });
-      await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
-    }
-    setStatus($('mStatus'), files.length === 1 ? 'Added "' + files[0].name + '".' : 'Added ' + files.length + ' files.');
-  } catch (e) { setStatus($('mStatus'), 'The files could not be stored in this browser: ' + e.message, true); }
-  renderMyMusic();
-  if (!mTrack) musicSync();
-};
 
 ['wheel', 'touchmove', 'keydown'].forEach((ev) => $('pText').addEventListener(ev, () => { lastUserScroll = Date.now(); }, { passive: true }));
 $('arate').onchange = () => { player.playbackRate = Number($('arate').value); lsSet('mp_rate', $('arate').value); };
