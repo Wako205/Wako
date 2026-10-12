@@ -668,9 +668,12 @@ function getPdfjs() {
   return pdfjsModule;
 }
 
+const CMAP_URL = 'https://wako205.github.io/Wako/pdfjs/cmaps/';
 /** Text lines of every page (see pageLines), read with the given pdf.js library. */
 async function pdfLines(lib, data, onPage, info) {
-  const doc = await lib.getDocument({ data, isEvalSupported: false }).promise;   // never compile font data to code
+  // cMapUrl: character maps (served with this site) for PDFs whose Chinese or Japanese fonts are not embedded;
+  // without them pdf.js finds no text at all in such files.
+  const doc = await lib.getDocument({ data, isEvalSupported: false, cMapUrl: CMAP_URL, cMapPacked: true }).promise;   // never compile font data to code
   const pages = [];
   try {
     if (info) { try { info.outline = await pdfOutline(doc); } catch (e) { info.outline = null; } }
@@ -931,11 +934,12 @@ function chaptersFromToc(pages) {
       tocEnd = pi;
     } else if (tocEnd >= 0 && pi > tocEnd + 1) break;
   }
-  // Chapters only: no "1.1" sections, no parts, no contents or copyright entries.
-  const list = entries.filter((e) => !/^[0-9]+\.[0-9]+/.test(e.title) && !PART_RE.test(e.title) && !SKIP_RE.test(e.title) && normTitle(e.title).length >= 3);
-  if (list.length < 3) return null;
   const clean = cleanPages(pages);
-  let pi = tocEnd + 1, li = 0;
+  let pi = tocEnd + 1, li = 0, plain = null;
+  if (!entries.length && (plain = plainToc(clean))) { plain.titles.forEach((t) => entries.push({ title: t })); pi = plain.p; li = plain.l; tocEnd = plain.p - 1; }
+  // Chapters only: no "1.1" sections, no parts, no contents or copyright entries.
+  const list = entries.filter((e) => !/^[0-9]+\.[0-9]+/.test(e.title) && !PART_RE.test(e.title) && !SKIP_RE.test(e.title) && normTitle(e.title).length >= (plain ? 1 : 3));
+  if (list.length < 3) return null;
   const marks = [];
   list.forEach((e) => {
     const want = normTitle(e.title);
@@ -943,7 +947,7 @@ function chaptersFromToc(pages) {
       const L = clean[p];
       for (let l = p === pi ? li : 0; l < L.length; l++) {
         const got = normTitle(L[l].s);
-        if (got && (got === want || (got.startsWith(want) && got.length <= want.length + 4))) {
+        if (got && (got === want || (want.length >= 3 && got.startsWith(want) && got.length <= want.length + 4))) {
           marks.push({ title: e.title, p, l }); pi = p; li = l + 1; return;
         }
       }
@@ -959,13 +963,39 @@ function chaptersFromToc(pages) {
     return joinLines(out).trim();
   };
   const out = [];
-  const front = joinLines([].concat.apply([], clean.slice(tocEnd + 1, marks[0].p)).concat(clean[marks[0].p].slice(0, marks[0].l))).trim();
+  const front = marks[0].p === tocEnd + 1 && plain ? clean[marks[0].p].slice(plain.l, marks[0].l).map((x) => x.s).join('').trim()
+    : joinLines([].concat.apply([], clean.slice(tocEnd + 1, marks[0].p)).concat(clean[marks[0].p].slice(0, marks[0].l))).trim();
   if (front.length > 20) out.push({ title: 'Front matter (before the first chapter)', text: front, startPage: 1, endPage: marks[0].p + 1, front: true });
   marks.forEach((m, k) => {
     const nx = marks[k + 1], text = slice(m, nx);
     if (text.length > 20) out.push({ title: m.title.slice(0, 80), text: m.title + '\n\n' + text, startPage: m.p + 1, endPage: nx ? nx.p + 1 : pages.length });
   });
   return out.filter((c) => !c.front).length >= 3 ? out : null;
+}
+
+/**
+ * A table of contents without page numbers: the short lines after a "目录" or "Contents" heading, up to
+ * the first line that repeats the first title (where the text begins) or a line too long to be a title.
+ * Returns the titles and where the text begins ({titles, p, l}), or null.
+ */
+function plainToc(clean) {
+  for (let p = 0; p < Math.min(clean.length, 30); p++) {
+    for (let l = 0; l < clean[p].length; l++) {
+      if (!/^[\s【\[(（]*(目录|目錄|目次|contents|table of contents)[\s】\])）]*$/i.test(clean[p][l].s)) continue;
+      const titles = [];
+      let q = p, m = l + 1;
+      for (; q < Math.min(clean.length, p + 4); q++, m = 0) {
+        for (; m < clean[q].length; m++) {
+          const t = clean[q][m].s.trim(), n = normTitle(t);
+          if (!n) continue;
+          if (n.length > 30 || (titles.length && n === normTitle(titles[0]))) return titles.length >= 5 ? { titles, p: q, l: m } : null;
+          if (/\p{L}/u.test(n)) titles.push(t);
+        }
+      }
+      return null;
+    }
+  }
+  return null;
 }
 
 // A part of a book (a group of chapters), not a chapter: "Part II", "Book 1", "II", "第一部", "上卷", "第二篇".

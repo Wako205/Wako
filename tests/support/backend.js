@@ -113,10 +113,11 @@ class MockBackend {
       const url = route.request().url();
       if (/^(file|data|blob):|^http:\/\/127\.0\.0\.1[:/]/.test(url)) return route.continue();      // the page, and the local test server
       // The site's own files that the page fetches by the published address (the built-in lofi library).
-      const site = url.match(/^https:\/\/wako205\.github\.io\/Wako\/(music\/lofi\/[^?#]+)/);
+      const site = url.match(/^https:\/\/wako205\.github\.io\/Wako\/((?:music\/lofi|pdfjs\/cmaps)\/[^?#]+)/);
       if (site) {
         const f = path.join(__dirname, '..', '..', decodeURIComponent(site[1]));
-        if (fs.existsSync(f)) return route.fulfill({ status: 200, path: f, headers: { 'content-type': f.endsWith('.json') ? 'application/json' : 'audio/mpeg', 'access-control-allow-origin': '*' } });
+        const type = f.endsWith('.json') ? 'application/json' : f.endsWith('.bcmap') ? 'application/octet-stream' : 'audio/mpeg';
+        if (fs.existsSync(f)) return route.fulfill({ status: 200, path: f, headers: { 'content-type': type, 'access-control-allow-origin': '*' } });
       }
       const file = cdnFile(url);
       if (file && fs.existsSync(file)) {
