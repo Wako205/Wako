@@ -91,3 +91,21 @@ test('long text goes in requests of at most 10,000 characters, at most 30,000 a 
   calls.forEach((c) => expect(c.paras.join('').length).toBeLessThanOrEqual(10000));
   await expect(page.locator('#trOut .dst')).toHaveCount(10);
 });
+
+test('Chinese returned unchanged by automatic detection is sent again as Chinese; the source can also be chosen', async ({ page, backend }) => {
+  backend.on('translate', (body) => ({
+    translations: body.paras.map((p) => (body.from ? '[' + body.from + '>' + body.to + '] ' + p : p)),   // auto: unchanged, as Azure did
+    detected: body.paras.map(() => 'en'), used: 0, cap: 2000000 }));
+  await login(page);
+  await page.click('#tabTrans');
+  await page.selectOption('#trTo', 'en');
+  await page.fill('#trText', '被大火烧了万寿宫而迁居到玉熙宫的嘉靖帝。\n\nAlready English here.');
+  await page.click('#trBtn');
+  await expect(page.locator('#trStatus')).toHaveText('Done.');
+  await expect(page.locator('#trOut .dst')).toHaveText(['[zh-Hans>en] 被大火烧了万寿宫而迁居到玉熙宫的嘉靖帝。', 'Already English here.']);
+  expect(backend.callsOf('translate').map((c) => c.from || '')).toEqual(['', 'zh-Hans']);
+  await page.selectOption('#trFrom', 'ja');
+  await page.click('#trBtn');
+  await expect.poll(() => backend.callsOf('translate').length).toBe(3);
+  expect(backend.callsOf('translate')[2].from).toBe('ja');
+});

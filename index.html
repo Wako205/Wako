@@ -313,6 +313,8 @@
     <section id="transView" class="hidden">
       <div class="card">
         <div class="row trhead">
+          <label for="trFrom" style="margin:0">From</label>
+          <select id="trFrom"><option value="">Auto</option></select>
           <label for="trTo" style="margin:0">To</label>
           <select id="trTo"></select>
           <label for="trFile" style="margin:0" class="trfile"><input type="file" id="trFile" accept=".txt,.md,.tex,.docx,.pdf,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" class="hidden"><button class="ghost small" type="button" id="trAttach">Open file</button></label>
@@ -3442,9 +3444,11 @@ const trSent = [];                              // [time, characters] of recent 
 let trDoc = null, trResult = null;              // trDoc: {name, kind, paras, docx?}; trResult: {to, out: [string]}
 (() => {
   const sel = $('trTo');
-  TR_LANGS.forEach(([v, n]) => { const o = el('option', null, n); o.value = v; sel.appendChild(o); });
+  TR_LANGS.forEach(([v, n]) => { const o = el('option', null, n); o.value = v; sel.appendChild(o); $('trFrom').appendChild(o.cloneNode(true)); });
   sel.value = lsGet('mp_tr_to') || 'zh-Hans';
   sel.onchange = () => lsSet('mp_tr_to', sel.value);
+  $('trFrom').value = lsGet('mp_tr_from') || '';
+  $('trFrom').onchange = () => lsSet('mp_tr_from', $('trFrom').value);
 })();
 $('trAttach').onclick = () => $('trFile').click();
 $('trBoth').onclick = () => {
@@ -3493,7 +3497,7 @@ async function trLoadUsage() {
 }
 
 $('trBtn').onclick = async () => {
-  const st = $('trStatus'), to = $('trTo').value;
+  const st = $('trStatus'), to = $('trTo').value, from = $('trFrom').value;
   // A file read here keeps its paragraphs (and Word layout) unless the text was edited by hand.
   const doc = trDoc && $('trText').value === trDoc.paras.filter((p) => p.trim()).join('\n\n') ? trDoc
     : { name: 'translation.txt', kind: 'text', paras: textParas($('trText').value) };
@@ -3513,8 +3517,22 @@ $('trBtn').onclick = async () => {
     for (let b = 0; b < batches.length; b++) {
       const label = 'Translating' + (batches.length > 1 ? ' part ' + (b + 1) + ' of ' + batches.length : '');
       const paras = batches[b].map((i) => doc.paras[i].slice(0, TR_BATCH));
-      const d = await trSend(paras, to, (msg) => setStatus(st, label + (msg ? ' (' + msg + ')' : '') + '...'));
+      const say = (msg) => setStatus(st, label + (msg ? ' (' + msg + ')' : '') + '...');
+      const d = await trSend(paras, to, say, from);
       batches[b].forEach((i, k) => { out[i] = d.translations[k] || ''; });
+      // Automatic detection sometimes takes Chinese for the target language and returns it unchanged:
+      // those paragraphs are sent again with the language their script shows.
+      if (!from) {
+        const again = {};
+        batches[b].forEach((i, k) => {
+          const g = scriptLang(doc.paras[i]);
+          if (g && g !== to && out[i].trim() === doc.paras[i].slice(0, TR_BATCH).trim()) (again[g] = again[g] || []).push(i);
+        });
+        for (const g of Object.keys(again)) {
+          const d2 = await trSend(again[g].map((i) => doc.paras[i].slice(0, TR_BATCH)), to, say, g);
+          again[g].forEach((i, k) => { out[i] = d2.translations[k] || out[i]; });
+        }
+      }
       $('trUsage').textContent = fmtK(d.used, true) + ' of ' + fmtK(d.cap) + ' this month';
     }
     trResult = { to, doc, out };
@@ -3530,7 +3548,16 @@ const trWait = (ms, say) => new Promise((ok) => {
   tick();
 });
 /** One request, kept under the per-minute limit and retried after a 429 refusal. */
-async function trSend(paras, to, say) {
+/** Language suggested by the script of a text: Korean, Japanese (kana), Chinese (Han), or null. */
+function scriptLang(t) {
+  const n = (re) => (t.match(re) || []).length;
+  const han = n(/\p{Script=Han}/gu), kana = n(/[\u3040-\u30ff]/g), hangul = n(/\p{Script=Hangul}/gu), latin = n(/[A-Za-z]/g);
+  if (hangul > 5 && hangul >= han) return 'ko';
+  if (kana > 5) return 'ja';
+  if (han > 5 && han > latin) return /[們這說會來時為與從當過個麼裡國]/.test(t) && !/[们这说会来时为与从当过个么里国]/.test(t) ? 'zh-Hant' : 'zh-Hans';
+  return null;
+}
+async function trSend(paras, to, say, from) {
   const n = paras.reduce((a, p) => a + p.length, 0);
   for (let attempt = 0; ; attempt++) {
     const now = Date.now();
@@ -3539,7 +3566,7 @@ async function trSend(paras, to, say) {
     if (recent && recent + n > TR_PER_MIN) await trWait(60000 - (now - trSent[0][0]) + 500, say);
     say('');
     try {
-      const d = await api({ action: 'translate', token, to, paras }, 90000);
+      const d = await api(Object.assign({ action: 'translate', token, to, paras }, from ? { from } : {}), 90000);
       trSent.push([Date.now(), n]);
       return d;
     } catch (e) {
