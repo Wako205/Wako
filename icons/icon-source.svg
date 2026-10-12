@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="46%" r="50%">
+      <stop offset="0" stop-color="#ffd27a" stop-opacity="0.95"/>
+      <stop offset="0.45" stop-color="#f3b54f" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#f6edd6" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" fill="#f6edd6"/>
+  <circle cx="256" cy="240" r="230" fill="url(#glow)"/>
+  <text x="256" y="318" text-anchor="middle" font-family="Noto Serif CJK JP" font-weight="900" font-size="200" fill="#1f170c" letter-spacing="-6">和光</text>
+  <rect x="196" y="392" width="120" height="8" rx="4" fill="#6b5a2e" opacity="0.85"/>
+</svg>
