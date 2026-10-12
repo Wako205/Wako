@@ -422,8 +422,8 @@
       <!-- New conversion, with the speech allowance beside it -->
       <div class="genrow nousage">
       <div class="card">
-        <label for="apdf">PDF</label>
-        <input type="file" id="apdf" accept=".pdf,application/pdf">
+        <label for="apdf">PDF or text file</label>
+        <input type="file" id="apdf" accept=".pdf,.txt,application/pdf,text/plain">
         <div id="kindLine" class="notice hidden" style="margin-top:12px;color:var(--ink)"></div>
         <label for="atitle" id="atitleLab" class="hidden" style="margin-top:12px">Title</label>
         <input type="text" id="atitle" class="hidden" maxlength="150" autocomplete="off">
@@ -991,6 +991,7 @@ function renderKind() {
   }[docKind];
   line.appendChild(el('b', null, msg[0])); line.appendChild(document.createTextNode(msg[1]));
   line.appendChild(el('span', 'm', '(' + docWhy + ') '));
+  if (isTextFile($('apdf').files[0])) return;           // paper and thesis modes need a PDF
   const alt = docKind === 'book' ? (docPages <= 160 ? 'paper' : 'thesis') : 'book';
   const sw = el('a', null, alt === 'book' ? 'Read as written instead' : alt === 'thesis' ? 'Use Claude per chapter instead' : 'Use paper mode instead');
   sw.href = '#'; sw.style.color = 'var(--accent)'; sw.style.fontSize = '13px';
@@ -998,13 +999,54 @@ function renderKind() {
   line.appendChild(sw);
 }
 
+/** A plain-text file is read as a book. */
+const isTextFile = (f) => !!f && (/\.txt$/i.test(f.name) || f.type === 'text/plain');
+
+/** Text of a .txt file: UTF-8, or GB18030 (common for Chinese books), or Shift_JIS. */
+async function readTextFile(file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  for (const enc of ['utf-8', 'gb18030', 'shift_jis']) {
+    try { return new TextDecoder(enc, { fatal: true }).decode(bytes).replace(/^\uFEFF/, ''); } catch (e) { /* next */ }
+  }
+  return new TextDecoder('utf-8').decode(bytes);
+}
+
+/**
+ * Lines of a text file in the shape pdf.js pages have ({s, x, h}), so the same chapter rules apply.
+ * A line after a blank line, or one indented, starts a paragraph (x = 20). Pages of about 40 lines
+ * end at a blank line where possible.
+ */
+function textPages(text) {
+  const pages = [];
+  let page = [], blank = true;
+  String(text).replace(/\r\n?/g, '\n').split('\n').forEach((raw) => {
+    const s = raw.replace(/[\s\u3000]+$/, '');
+    if (!s.trim()) { blank = true; if (page.length >= 40) { pages.push(page); page = []; } return; }
+    const indented = /^[ \t\u3000]/.test(s);
+    page.push({ s: s.trim(), x: blank || indented ? 20 : 0, h: 10 });
+    blank = false;
+    if (page.length >= 80) { pages.push(page); page = []; }
+  });
+  if (page.length) pages.push(page);
+  return pages;
+}
+
 async function extractBook(file) {
   const st = $('audioStatus');
-  setStatus(st, 'Reading the PDF text...');
-  const lib = await getPdfjs();
   const info = {};
-  const pages = await pdfLines(lib, new Uint8Array(await file.arrayBuffer()),
-    (i, n) => { if (i % 40 === 0) setStatus(st, 'Reading the PDF text: page ' + i + ' of ' + n); }, info);
+  let pages;
+  if (isTextFile(file)) {
+    pages = textPages(await readTextFile(file));
+    // The first line of a text file is usually its title, unless it is already a chapter heading.
+    const first = pages[0] && pages[0][0] ? pages[0][0].s : '';
+    if (first.length <= 60 && !CHAPTER_RE.test(first)) info.title = first;
+  }
+  else {
+    setStatus(st, 'Reading the PDF text...');
+    const lib = await getPdfjs();
+    pages = await pdfLines(lib, new Uint8Array(await file.arrayBuffer()),
+      (i, n) => { if (i % 40 === 0) setStatus(st, 'Reading the PDF text: page ' + i + ' of ' + n); }, info);
+  }
   setStatus(st, '');
   const title = docTitle(info.title, pages, file.name);
   const byOutline = info.outline ? chaptersFromOutline(info.outline, pages) : null;
@@ -1037,7 +1079,7 @@ function docTitle(meta, pages, filename) {
     const t = joinLines(L.slice(a, b + 1).map((l) => ({ s: l.s }))).replace(/\s+/g, ' ').trim();
     if (ok(t)) return t;
   }
-  return String(filename || '').replace(/\.pdf$/i, '').replace(/[-_ ]*pdf[-_ ]*free[-_ ]*download/i, '')
+  return String(filename || '').replace(/\.(pdf|txt)$/i, '').replace(/[-_ ]*pdf[-_ ]*free[-_ ]*download/i, '')
     .replace(/[(（\[]\s*\d{4}\s*[)）\]]/g, '').replace(/[_.]+|(?<=[a-z])-(?=[A-Za-z])|-(?=[A-Z])/g, ' ').replace(/\s+/g, ' ').trim() || 'Untitled';
 }
 
@@ -1303,7 +1345,8 @@ async function prepareBook() {
   $('audioBtn').disabled = true;
   try {
     const d = await extractBook(f);
-    const c = classifyDoc(d.lines, d.chapters);
+    const c = isTextFile(f) ? { kind: 'book', why: 'text file, ' + fmtK(d.chapters.reduce((n, x) => n + x.text.length, 0)) }
+      : classifyDoc(d.lines, d.chapters);
     docKind = c.kind; docWhy = c.why; docPages = d.pages;
     // A long book in which fewer than five chapters were recognized: Claude looks at the lines that could be
     // headings, in case the chapters are marked in a way the rules do not know.
