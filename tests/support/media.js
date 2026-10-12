@@ -124,4 +124,29 @@ async function makePaperPdf() {
   return Buffer.from(await doc.save({ useObjectStreams: false }));
 }
 
-module.exports = { makeMp3, makeBookPdf, makeRichBookPdf, makePaperPdf, NM };
+/**
+ * A book whose chapters are headed only by a number ("1", "2", ...) in the running text, with no contents
+ * page; every page also has a page number at the bottom. Chapter c starts on page 2c-1, after some text
+ * of the previous chapter (except chapter 1, which starts at the top).
+ */
+async function makeNumberedBookPdf({ chapters = 4, roman = false } = {}) {
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'];
+  const lines = [];
+  for (let c = 1; c <= chapters; c++) {
+    if (c > 1) for (let k = 0; k < 5; k++) lines.push({ t: 'The last lines of chapter ' + (c - 1) + ', line ' + k + '.' });
+    lines.push({ t: roman ? ROMAN[c - 1] : String(c), head: true });
+    for (let k = 0; k < 80; k++) lines.push({ t: 'Text of chapter ' + c + ', line ' + k + ', going on quietly.' });
+  }
+  let page = null, y = 0, n = 0;
+  const newPage = () => { page = doc.addPage([420, 595]); y = 540; n++; page.drawText(String(n), { x: 205, y: 30, size: 9, font }); };
+  for (const l of lines) {
+    if (!page || y < 60) newPage();
+    page.drawText(l.t, { x: l.head ? 200 : 40, y, size: l.head ? 14 : 10, font });
+    y -= l.head ? 26 : 14;
+  }
+  return Buffer.from(await doc.save({ useObjectStreams: false }));
+}
+
+module.exports = { makeMp3, makeBookPdf, makeNumberedBookPdf, makeRichBookPdf, makePaperPdf, NM };
