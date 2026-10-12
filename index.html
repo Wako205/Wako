@@ -1413,7 +1413,8 @@ function renderUsage(d) {
     const amt = el('div', 'amt'); amt.append(short(b.used), el('br'), 'of ' + short(b.cap)); col.appendChild(amt);
     box.appendChild(col);
   });
-  $('usageNote').textContent = 'Free: resets on the 1st.' + (libUsage.s0Until ? ' Trial: through ' + fmtDay(libUsage.s0Until - 1) + '.' : '');
+  $('usageNote').textContent = 'Contact the administrator to raise the limit.';
+  $('usageCard').title = 'Free allowances reset on the 1st.' + (libUsage.s0Until ? ' Trial credit through ' + fmtDay(libUsage.s0Until - 1) + '.' : '');
   $('usageCard').classList.remove('hidden');
   $('usageCard').parentElement.classList.remove('nousage');
 }

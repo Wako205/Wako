@@ -59,7 +59,8 @@ test('the allowances are shown as a column chart beside the conversion form', as
   await expect(bars.nth(2)).toContainText('Microsoft trial');
   const h = await bars.nth(1).locator('.fill').evaluate((e) => e.getBoundingClientRect().height / e.parentElement.getBoundingClientRect().height);
   expect(h).toBeGreaterThan(0.28); expect(h).toBeLessThan(0.34);
-  await expect(page.locator('#usageNote')).toContainText('through 7 Nov 2026');
+  await expect(page.locator('#usageNote')).toHaveText('Contact the administrator to raise the limit.');
+  await expect(page.locator('#usageCard')).toHaveAttribute('title', /through 7 Nov 2026/);
   // Beside the form on a wide screen.
   const form = await page.locator('#apdf').evaluate((e) => e.closest('.card').getBoundingClientRect());
   const chart = await page.locator('#usageCard').boundingBox();
