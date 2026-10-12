@@ -85,7 +85,7 @@ for (const [width, ctl] of [[1280, 36], [390, 44]]) {
       expect(r.unlabelled).toEqual([]);
       expect(r.small).toBe(0);
       // Icons for the actions named in the brief.
-      for (const [sel, name] of [['#pPrev', 'prev'], ['#pNext', 'next'], ['#pClose', 'close'], ['#mmPlay', 'play'], ['#pSleepBtn', 'sleep'], ['#pSearchBtn', 'search'], ['#mPlay', 'play'], ['#mExit', 'close']])
+      for (const [sel, name] of [['#pPrev', 'prev'], ['#pNext', 'next'], ['#pClose', 'close'], ['#mmPlay', 'pause'], ['#pSleepBtn', 'sleep'], ['#pSearchBtn', 'search'], ['#mPlay', 'play'], ['#mExit', 'close']])
         expect(await page.locator(sel + ' use').getAttribute('href'), sel).toBe('#i-' + name);
       const book = page.locator('#library .libitem').first();
       for (const [name, ic] of [['Listen', 'play'], ['Offline', 'offline'], ['Share', 'share'], ['Delete', 'delete']])

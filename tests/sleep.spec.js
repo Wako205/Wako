@@ -191,9 +191,7 @@ test('"End of chapter" stops instead of waiting for a chapter still being conver
 
 test('the background music stops with the sleep timer', async ({ page, backend }) => {
   await openBook(page);
-  await expect(page.locator('#mStatus')).toHaveText(/^Ready: /, { timeout: 30000 });
-  await page.click('#mmPlay');
-  await expect.poll(() => page.evaluate(() => !music.paused)).toBe(true);
+  await expect.poll(() => page.evaluate(() => !music.paused), { timeout: 30000 }).toBe(true);   // plays by itself after login
   await choose(page, 'End of chapter');
   await page.evaluate(() => { player.currentTime = player.duration - 3; player.play(); });
   await expect(page.locator('#pStatus')).toHaveText('Sleep timer: playback stopped.', { timeout: 15000 });

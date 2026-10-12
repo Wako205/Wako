@@ -55,7 +55,7 @@ test('the allowances are shown as a column chart beside the conversion form', as
   await expect(bars).toHaveCount(3);
   await expect(bars.nth(0)).toHaveAttribute('aria-label', 'Google: 20k of 1,030k characters this month');
   await expect(bars.nth(1)).toContainText('31%');
-  await expect(bars.nth(1)).toContainText('154k / 500k');
+  await expect(bars.nth(1)).toContainText('154kof 500k');
   await expect(bars.nth(2)).toContainText('Microsoft trial');
   const h = await bars.nth(1).locator('.fill').evaluate((e) => e.getBoundingClientRect().height / e.parentElement.getBoundingClientRect().height);
   expect(h).toBeGreaterThan(0.28); expect(h).toBeLessThan(0.34);

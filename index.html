@@ -123,14 +123,14 @@
   .genrow.nousage { grid-template-columns:minmax(0,1fr); }
   .usage { padding:var(--s4); }
   .usage .uh { font-weight:600; font-size:var(--f2); margin-bottom:var(--s3); }
-  .ubars { display:flex; gap:var(--s3); align-items:flex-end; justify-content:space-around; }
+  .ubars { display:flex; gap:var(--s3); align-items:flex-start; justify-content:space-around; }
   .ubar { flex:1; display:flex; flex-direction:column; align-items:center; min-width:0; font-size:var(--f1); text-align:center; }
   .ubar .pct { font-weight:600; margin-bottom:var(--s1); font-variant-numeric:tabular-nums; }
   .ubar .col { width:100%; max-width:40px; height:144px; border-radius:var(--r); background:var(--soft); border:1px solid var(--line); display:flex; align-items:flex-end; overflow:hidden; }
   .ubar .fill { width:100%; background:var(--accent); min-height:2px; transition:height .4s; }
   .ubar .fill.warn { background:var(--warn); }
-  .ubar .lbl { margin-top:var(--s2); }
-  .ubar .amt { color:var(--muted); font-variant-numeric:tabular-nums; }
+  .ubar .lbl { margin-top:var(--s2); min-height:3em; display:flex; align-items:flex-start; justify-content:center; }   /* two lines, so the columns line up */
+  .ubar .amt { color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
   .usage .un { font-size:var(--f1); color:var(--muted); margin-top:var(--s3); }
   .chlist { max-height:264px; overflow-y:auto; border:1px solid var(--line); border-radius:var(--r); margin-top:var(--s2); padding:var(--s1) var(--s3); font-size:var(--f2); }
   .chlist label { display:flex; gap:var(--s2); align-items:center; margin:0; min-height:32px; color:var(--ink); font-size:var(--f2); }
@@ -798,8 +798,10 @@ function pageLines(items) {
       const touch = q && q.w > 0 && p.x - (q.x + q.w) < 0.12 * Math.min(p.h, q.h) && /\S$/.test(q.s) && /^\S/.test(p.s);
       s += (i && !touch ? ' ' : '') + p.s;
     });
+    // Runs of a repeated symbol (separator rules such as ═════ or ------) are not read.
+    s = s.replace(/([^\p{L}\p{N}\s.。．…])\1{2,}/gu, ' ');
     return { x: r.parts[0].x, h: r.parts[0].h, s: s.replace(CJK_GAP, '$1').replace(/\s+/g, ' ').trim() };
-  }).filter((l) => l.s);
+  }).filter((l) => /[\p{L}\p{N}]/u.test(l.s));     // a line of symbols only (= = =, * * *) is a separator
 }
 
 /** Joins wrapped lines into paragraphs (blank line between them); no space between CJK characters. */
@@ -1451,7 +1453,8 @@ function renderUsage(d) {
     const c = el('div', 'col'), fill = el('div', 'fill' + (f > 0.9 ? ' warn' : ''));
     fill.style.height = (f * 100) + '%'; c.appendChild(fill); col.appendChild(c);
     col.appendChild(el('div', 'lbl', b.name));
-    col.appendChild(el('div', 'amt', fmtK(b.used, true) + ' / ' + fmtK(b.cap, true)));
+    const short = (n) => (n >= 1e7 ? Math.round(n / 1e6) + 'M' : fmtK(n, true));
+    const amt = el('div', 'amt'); amt.append(short(b.used), el('br'), 'of ' + short(b.cap)); col.appendChild(amt);
     box.appendChild(col);
   });
   $('usageNote').textContent = 'Characters. Google and Microsoft free reset on the 1st' +
@@ -2833,13 +2836,13 @@ async function myMusicData(key) { const db = await musicDb(); const f = await mu
 
 // State: the choices (per user, in this browser), and the track playing.
 const music = $('music');
-let mPrefs = { on: false, source: 'lofi', lofi: 'all', preset: 'rain', level: 'louder', order: 'shuffle' };
+let mPrefs = { on: true, source: 'lofi', lofi: 'all', preset: 'rain', level: 'louder', order: 'shuffle' };
 let mTrack = null, mNext = null, mNextReady = null, mSeed = 1, mIndex = -1, mGen = 0, mUnlocked = false;
 function musicPrefsKey() { return 'mp_music_' + (username || ''); }
 function loadMusicPrefs() {
-  mPrefs = { on: false, source: 'lofi', lofi: 'all', preset: 'rain', level: 'louder', order: 'shuffle' };
+  // The music starts by itself when the page opens, unless it was paused with ❚❚ last time.
+  mPrefs = { on: true, source: 'lofi', lofi: 'all', preset: 'rain', level: 'louder', order: 'shuffle' };
   try { Object.assign(mPrefs, JSON.parse(lsGet(musicPrefsKey()) || '{}')); } catch (e) {}
-  mPrefs.on = false;                                   // the music starts only with a tap on ▶
   if (!MUSIC_PRESETS[mPrefs.preset]) mPrefs.preset = 'rain';
   if (!(mPrefs.level in MUSIC_LEVELS)) mPrefs.level = 'normal';
   if (['lofi', 'mine', 'gen'].indexOf(mPrefs.source) < 0) mPrefs.source = 'lofi';
@@ -2901,7 +2904,7 @@ async function prepareFirst() {
   try {
     const t = await makeTrack(gen);
     if (gen !== mGen || mTrack) dropTrack(t);
-    else { mTrack = t; music.src = t.url; setStatus($('mStatus'), (musicWanted() ? 'Playing: ' : 'Ready: ') + t.label + '.'); if (musicWanted()) music.play().catch(() => {}); prepareNext(); }
+    else { mTrack = t; music.src = t.url; setStatus($('mStatus'), (musicWanted() ? 'Playing: ' : 'Ready: ') + t.label + '.'); if (musicWanted()) musicPlay(); prepareNext(); }
   } catch (e) { if (gen === mGen) setStatus($('mStatus'), e.message, true); }
   prepareFirst.busy = false;
   renderMini();
@@ -2924,7 +2927,7 @@ function resetMusic() {
 function musicWanted() { return mPrefs.on && !!username; }
 async function musicSync() {
   if (!musicWanted()) { if (!music.paused) music.pause(); renderMini(); if (!mTrack && username) musicPrepare(); return; }
-  if (mTrack) { if (music.paused) music.play().catch(() => {}); renderMini(); return; }
+  if (mTrack) { if (music.paused) musicPlay(); renderMini(); return; }
   if (musicSync.busy) return;
   musicSync.busy = true;
   const gen = mGen;
@@ -2935,7 +2938,7 @@ async function musicSync() {
     else {
       mTrack = t; music.src = t.url; music.loop = false;
       setStatus($('mStatus'), (musicWanted() ? 'Playing: ' : 'Ready: ') + t.label + '.');
-      if (musicWanted()) music.play().catch(() => {});
+      if (musicWanted()) musicPlay();
       prepareNext();
     }
   } catch (e) { if (gen === mGen) { setStatus($('mStatus'), e.message, true); $('mmPlay').title = e.message; } }
@@ -2949,7 +2952,7 @@ music.addEventListener('ended', () => {
   const t = mNextReady; mNextReady = null;
   if (t && t.gen === mGen) { dropTrack(mTrack); mTrack = t; music.src = t.url; setStatus($('mStatus'), 'Playing: ' + t.label + '.'); renderMini(); }
   else music.currentTime = 0;
-  if (musicWanted()) music.play().catch(() => {});
+  if (musicWanted()) musicPlay();
   prepareNext();
 });
 // WebKit sometimes refuses a file it can play (seen under load); the track gets one more try under a new address.
@@ -2958,8 +2961,15 @@ music.addEventListener('error', () => {
   if (!t || t.retried || music.getAttribute('src') !== t.url) return;
   t.retried = true; URL.revokeObjectURL(t.url); t.url = URL.createObjectURL(t.blob);
   music.src = t.url;
-  if (musicWanted()) music.play().catch(() => {});
+  if (musicWanted()) musicPlay();
 });
+/** Starts the music; a browser that blocks sound before the first tap gets it started on that tap. */
+function musicPlay() {
+  music.play().catch(() => {
+    const go = () => { ['pointerdown', 'keydown', 'touchend'].forEach((ev) => document.removeEventListener(ev, go, true)); if (musicWanted()) musicPlay(); };
+    ['pointerdown', 'keydown', 'touchend'].forEach((ev) => document.addEventListener(ev, go, true));
+  });
+}
 // iOS lets an element play by itself only after it has played once in a tap.
 function unlockMusic() {
   if (mUnlocked || !mPrefs.on) return;
