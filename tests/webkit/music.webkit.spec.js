@@ -85,8 +85,7 @@ test('WebKit decodes and renders a file of "My music"', async ({ page, backend }
 test('WebKit: the mini player plays the music together with the narration', async ({ page, backend }) => {
   backend.mp3 = toneWav(9, 220);                               // the mock serves WAV segments here
   await login(page);
-  await expect(page.locator('#mStatus')).toHaveText(/^Ready: /, { timeout: 30000 });
-  await page.click('#mmPlay');                                 // a real tap, as iOS requires
+  await expect(page.locator('#mStatus')).toHaveText(/^(Ready|Playing): /, { timeout: 30000 });   // WebKit may wait for a tap to start it
   await openAudio(page);
   await page.locator('#library .libitem').first().getByRole('button', { name: 'Listen' }).click();
   await expect(page.locator('#pText span.s').first()).toBeVisible();

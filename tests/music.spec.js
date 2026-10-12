@@ -48,7 +48,7 @@ test('the lofi tracks are in the site and listed in tracks.json', async () => {
   for (const t of list) { expect(fs.existsSync(path.join(LOFI, t.file))).toBe(true); expect(t.title).toBeTruthy(); }
 });
 
-test('mini player: loaded at login, ▶ plays, a second tap pauses, independent of the book', async ({ page, backend }) => {
+test('mini player: plays by itself at login, ❚❚ pauses, ▶ resumes, independent of the book', async ({ page, backend }) => {
   test.setTimeout(90000);
   await page.addInitScript(() => { window.__ac = 0; const A = window.AudioContext; window.AudioContext = function (...a) { window.__ac++; return new A(...a); }; });
   const list = tracks();
@@ -56,13 +56,10 @@ test('mini player: loaded at login, ▶ plays, a second tap pauses, independent 
   await expect(page.locator('#miniMusic')).toBeVisible();
   await expect(page.locator('#mmTrack option')).toHaveCount(list.length + 1);
   await expect(page.locator('#mmTrack option').first()).toHaveText('♪ All lofi (' + list.length + ')');
-  // Loaded at login, nothing plays yet.
-  await expect(page.locator('#mStatus')).toHaveText(/^Ready: /, { timeout: 30000 });
-  expect((await st(page)).music).toBe(false);
-  await expect(page.locator('#mmPlay')).toHaveAttribute('aria-label', 'Play music');
-
-  await page.click('#mmPlay');
+  // Plays by itself after login.
+  await expect(page.locator('#mStatus')).toHaveText(/^Playing: /, { timeout: 30000 });
   await expect.poll(async () => (await st(page)).music).toBe(true);
+  await expect(page.locator('#mmPlay')).toHaveAttribute('aria-label', 'Pause music');
   await expect(page.locator('#mmPlay')).toHaveText('❚❚');
   await expect(page.locator('#mStatus')).toHaveText(/^Playing: /);
 
@@ -90,18 +87,21 @@ test('mini player: loaded at login, ▶ plays, a second tap pauses, independent 
   expect(await st(page)).toMatchObject({ src });
   expect((await st(page)).t).toBeGreaterThanOrEqual(t - 0.05);
   expect(await page.evaluate(() => window.__ac)).toBe(0);         // no Web Audio while playing
+  // Paused with ❚❚: after a reload it does not start by itself.
   await page.click('#mmPlay');
+  await page.reload();
+  await expect(page.locator('#mStatus')).toHaveText(/^Ready: /, { timeout: 30000 });
+  expect((await st(page)).music).toBe(false);
+  await expect(page.locator('#mmPlay')).toHaveText('▶');
 });
 
 test('choosing one track plays it; the next track follows at the end; the choice is per user', async ({ page, backend }) => {
   test.setTimeout(90000);
   const list = tracks();
   await login(page);
-  await expect(page.locator('#mStatus')).toHaveText(/^Ready: /, { timeout: 30000 });
+  await expect(page.locator('#mStatus')).toHaveText(/^Playing: /, { timeout: 30000 });
   await page.selectOption('#mmTrack', list[2].file);
-  await expect(page.locator('#mStatus')).toHaveText('Ready: ' + list[2].title + '.', { timeout: 30000 });
-  await page.click('#mmPlay');
-  await expect(page.locator('#mStatus')).toHaveText('Playing: ' + list[2].title + '.');
+  await expect(page.locator('#mStatus')).toHaveText('Playing: ' + list[2].title + '.', { timeout: 30000 });
   await expect.poll(async () => (await st(page)).music).toBe(true);
   // All tracks: at the end of one, the prepared next one starts.
   await page.selectOption('#mmTrack', 'all');
@@ -120,15 +120,14 @@ test('choosing one track plays it; the next track follows at the end; the choice
   await expect(page.locator('#miniMusic')).toBeHidden();
   await login(page, 'bob');
   await expect(page.locator('#mmTrack')).toHaveValue('all');
-  await expect(page.locator('#mmPlay')).toHaveText('▶');          // after a login nothing plays by itself
+  await expect(page.locator('#mmPlay')).toHaveText('❚❚');         // plays by itself for a new user too
+  await page.click('#mmPlay');
 });
 
 test('after a media error the music tries the same track once more under a new address', async ({ page, backend }) => {
   test.setTimeout(90000);
   await login(page);
-  await expect(page.locator('#mStatus')).toHaveText(/^Ready: /, { timeout: 30000 });
-  await page.click('#mmPlay');
-  await expect.poll(async () => (await st(page)).music).toBe(true);
+  await expect.poll(async () => (await st(page)).music, { timeout: 30000 }).toBe(true);
   const breakIt = () => page.evaluate(() => { URL.revokeObjectURL(music.src); music.load(); });
   const first = (await st(page)).src;
   await breakIt();
@@ -148,8 +147,7 @@ for (const theme of ['eye', 'day', 'night']) {
     await login(page);
     await page.evaluate((t) => setTheme(t), theme);
     await expect(page.locator('#miniMusic')).toBeVisible();
-    await expect(page.locator('#mStatus')).toHaveText(/^Ready: /, { timeout: 30000 });
-    await page.click('#mmPlay');
+    await expect(page.locator('#mStatus')).toHaveText(/^Playing: /, { timeout: 30000 });
     const r = await page.evaluate(() => ({
       overflow: document.documentElement.scrollWidth - 360,
       small: [...document.querySelectorAll('#miniMusic button, #miniMusic select')].filter((b) => b.getBoundingClientRect().height < 44).map((b) => b.id),
