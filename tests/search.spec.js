@@ -17,6 +17,7 @@ async function openBook(page, backend, texts = TEXTS) {
   await expect(page.locator('#pText span.s').first()).toBeVisible();
 }
 async function search(page, q) {
+  if (!(await page.locator('#pSearch').isVisible())) await page.click('#pSearchToggle');   // the magnifier opens the search box
   await page.fill('#pSearch', q);
   await page.press('#pSearch', 'Enter');
   await expect(page.locator('#pSearchInfo')).not.toHaveText(/^$|Searching/);

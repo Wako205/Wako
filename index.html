@@ -138,6 +138,7 @@
   .sleepmenu button.last { border-width:2px; font-weight:600; }
   #pSleepBtn.on { background:var(--accent); color:var(--on-accent); font-variant-numeric:tabular-nums; }
   .psearch { flex-wrap: nowrap; }
+  #pSearchToggle.on { background:var(--accent); color:var(--on-accent); }
   .psearch input { flex: 1; min-width: 0; padding: 7px 10px; }
   .results { max-height: 40vh; overflow-y: auto; }
   .results:empty { display: none; }
@@ -192,7 +193,8 @@
     .libacts { display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-start; margin-left:0; width:100%; }
     .libacts button { width:auto; }
     .pnav select { flex: 1; min-width: 0; max-width: none !important; }
-    .pnav button { min-width: 44px; }
+    .pnav { gap: 4px; }
+    .pnav button { min-width: 38px; padding-left: 6px; padding-right: 6px; }
     .pnav .status { flex-basis: 100%; }
     .pset { flex-wrap: nowrap; gap: 4px; }
     .pset #pJump { margin-left: 0 !important; flex: none; padding: 5px 8px; }
@@ -322,8 +324,15 @@
           <select id="pChapter" style="width:auto;max-width:60%;padding:5px 8px" aria-label="Chapter"></select>
           <button class="ghost small" id="pNext" title="Next chapter" aria-label="Next chapter">▶</button>
           <button class="ghost small" id="pSleepBtn" title="Sleep timer" aria-label="Sleep timer" aria-haspopup="true" aria-expanded="false" aria-controls="pSleepMenu">☾</button>
+          <button class="ghost small" id="pSearchToggle" type="button" title="Search this book" aria-label="Search this book" aria-expanded="false" aria-controls="pSearchForm"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" style="vertical-align:-3px"><circle cx="6.8" cy="6.8" r="4.8" fill="none" stroke="currentColor" stroke-width="1.6"/><line x1="10.4" y1="10.4" x2="14.5" y2="14.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
           <span class="status" id="pStatus"></span>
         </div>
+        <form class="row psearch hidden" id="pSearchForm" role="search" style="margin-top:8px">
+          <input type="search" id="pSearch" placeholder="Search this book" aria-label="Search this book" autocomplete="off" enterkeyhint="search">
+          <button class="ghost small" type="submit" id="pSearchBtn">Search</button>
+        </form>
+        <div class="status" id="pSearchInfo" aria-live="polite"></div>
+        <div id="pResults" class="results"></div>
         <div id="pSleepMenu" class="sleepmenu hidden" role="group" aria-label="Sleep timer">
           <span class="sleepnote" id="pSleepNote">Stop playback after:</span>
           <button class="ghost small" data-sleep="15">15 min</button>
@@ -333,7 +342,8 @@
           <button class="small" data-sleep="off" id="pSleepCancel">Cancel timer</button>
         </div>
         <audio id="player" controls preload="auto" style="width:100%;margin-top:10px"></audio>
-        <div class="row pset" style="margin-top:6px;font-size:13px;color:var(--muted)">
+        <div id="pMarks" class="marks" style="margin-top:6px"></div>
+        <div class="row pset" style="margin-top:10px;font-size:13px;color:var(--muted)">
           <label for="arate" style="margin:0">Speed</label>
           <select id="arate" style="width:auto;padding:4px 8px;font-size:13px">
             <option value="0.85">0.85×</option><option value="1" selected>1×</option><option value="1.15">1.15×</option>
@@ -343,13 +353,6 @@
           <button class="ghost small" id="pJump" style="margin-left:auto" title="Scroll the text to the sentence being read">Jump<span class="wide-only"> to current</span></button>
           <button class="ghost small" id="pRead" title="Show only the text, with a small progress bar">Full<span class="wide-only"> screen</span></button>
         </div>
-        <div id="pMarks" class="marks"></div>
-        <form class="row psearch" id="pSearchForm" role="search" style="margin-top:10px">
-          <input type="search" id="pSearch" placeholder="Search this book" aria-label="Search this book" autocomplete="off" enterkeyhint="search">
-          <button class="ghost small" type="submit" id="pSearchBtn">Search</button>
-        </form>
-        <div class="status" id="pSearchInfo" aria-live="polite"></div>
-        <div id="pResults" class="results"></div>
         <div id="pText" class="readtext"></div>
         <div id="pMini" class="pmini" role="group" aria-label="Playback">
           <button class="small" id="mPlay" aria-label="Play">▶</button>
@@ -2132,6 +2135,12 @@ async function openHit(h) {
   if (player.readyState >= 1) go(); else player.addEventListener('loadedmetadata', go, { once: true });
 }
 $('pSearchForm').onsubmit = (e) => { e.preventDefault(); runSearch(); };
+// The magnifier next to the sleep timer shows the search box; a second tap hides it and clears the results.
+$('pSearchToggle').onclick = () => {
+  const open = $('pSearchForm').classList.toggle('hidden') === false;
+  $('pSearchToggle').setAttribute('aria-expanded', String(open)); $('pSearchToggle').classList.toggle('on', open);
+  if (open) $('pSearch').focus(); else clearSearch();
+};
 $('pSearch').addEventListener('input', () => { if (!$('pSearch').value.trim()) { searchRun++; $('pResults').textContent = ''; setStatus($('pSearchInfo'), ''); } });
 
 /** Next chapter after c that has audio, or -1. */
