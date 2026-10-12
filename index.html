@@ -1985,12 +1985,13 @@ function fetchChapter(c, onStatus, onEarly) {
       bufs = new Array(ch.n);
     }
     let next = 0;
+    const it = P.item, total = ch.chars ? fmtDur(ch.chars / (it.lang && it.lang !== 'en-US' ? 270 : 900)) : '';
     const worker = async () => {
       while (next < stop) {
         const k = next++;
         try { bufs[k] = unb64((await partWithRetry({ action: 'audio_part', token, id, chapter: c, index: k, ...from })).data); }
         catch (e) { if (/not ready/i.test(e.message)) { stop = Math.min(stop, k); continue; } throw e; }
-        say('Loading audio: ' + bufs.filter(Boolean).length + ' of ' + ch.n);
+        say('Loading audio: ' + bufs.filter(Boolean).length + ' of ' + ch.n + ' parts' + (total ? ' (the chapter is about ' + total + ' long; the player shows the loaded part)' : ''));
         const cb = job.early;
         if (cb && !earlyDone) {
           let pre = 0; while (pre < ch.n && bufs[pre]) pre++;
@@ -1998,7 +1999,7 @@ function fetchChapter(c, onStatus, onEarly) {
         }
       }
     };
-    await Promise.all([worker(), worker(), worker(), worker()]);
+    await Promise.all([worker(), worker(), worker(), worker(), worker(), worker()]);
     let parts = 0; while (parts < ch.n && bufs[parts]) parts++;
     if (!parts) throw new Error('This chapter has not been converted yet.');
     if (cache[c]) URL.revokeObjectURL(cache[c].url);
