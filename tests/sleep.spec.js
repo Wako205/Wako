@@ -30,12 +30,12 @@ test('stops after 15 minutes of listening, fading out over the last 10 seconds',
   // A long chapter, so the audio does not end during the test.
   await page.evaluate(() => { player.loop = true; });
   await choose(page, '15 min');
-  await expect(page.locator('#pSleepBtn')).toHaveText('☾ 15:00');
+  await expect(page.locator('#pSleepBtn')).toHaveText('15:00');
   await page.evaluate(() => player.play());
   await expect.poll(async () => (await state(page)).paused).toBe(false);
 
   await page.clock.fastForward(870000);
-  await expect.poll(() => page.locator('#pSleepBtn').textContent()).toMatch(/^☾ 0:(2|3)\d$/);
+  await expect.poll(() => page.locator('#pSleepBtn').textContent()).toMatch(/^0:(2|3)\d$/);
   expect((await state(page)).volume).toBe(1);
 
   await page.clock.fastForward(25000);
@@ -47,7 +47,7 @@ test('stops after 15 minutes of listening, fading out over the last 10 seconds',
   await page.clock.fastForward(12000);
   await expect.poll(async () => (await state(page)).paused).toBe(true);
   expect((await state(page)).volume).toBe(1);                  // restored for the next play
-  await expect(page.locator('#pSleepBtn')).toHaveText('☾');
+  await expect(page.locator('#pSleepBtn')).toHaveText('');
   await expect(page.locator('#pStatus')).toHaveText('Sleep timer: playback stopped.');
   await expect.poll(() => backend.callsOf('audio_progress').length).toBeGreaterThan(saved);
   expect(backend.callsOf('audio_progress').at(-1)).toMatchObject({ id: 'book1', chapter: 0 });
@@ -60,34 +60,34 @@ test('the countdown pauses while playback is paused', async ({ page, backend }) 
   await page.evaluate(() => { player.loop = true; });
   await choose(page, '30 min');
   await page.clock.fastForward(600000);                            // not playing: nothing counted
-  await expect(page.locator('#pSleepBtn')).toHaveText('☾ 30:00');
+  await expect(page.locator('#pSleepBtn')).toHaveText('30:00');
   await page.evaluate(() => player.play());
   await page.clock.fastForward(300000);
-  await expect.poll(() => page.locator('#pSleepBtn').textContent()).toMatch(/^☾ 2[45]:\d\d$/);
+  await expect.poll(() => page.locator('#pSleepBtn').textContent()).toMatch(/^2[45]:\d\d$/);
   await page.evaluate(() => player.pause());
 });
 
 test('stops at the end of the chapter instead of moving to the next one', async ({ page, backend }) => {
   await openBook(page);
   await choose(page, 'End of chapter');
-  await expect(page.locator('#pSleepBtn')).toHaveText('☾ End');
+  await expect(page.locator('#pSleepBtn')).toHaveText('End');
   await page.evaluate(() => { window.__minFade = 1; setInterval(() => { window.__minFade = Math.min(window.__minFade, sleepFade); }, 50); player.currentTime = player.duration - 3; player.play(); });
   await expect.poll(async () => (await state(page)).paused, { timeout: 15000 }).toBe(true);
   const s = await state(page);
   expect(s.chapter).toBe('0');
   expect(s.volume).toBe(1);
   expect(await page.evaluate(() => window.__minFade)).toBeLessThan(0.5);   // it faded out
-  await expect(page.locator('#pSleepBtn')).toHaveText('☾');
+  await expect(page.locator('#pSleepBtn')).toHaveText('');
 });
 
 test('can be cancelled, and the last choice is remembered', async ({ page, backend }) => {
   await page.clock.install();
   await openBook(page);
   await choose(page, '60 min');
-  await expect(page.locator('#pSleepBtn')).toHaveText('☾ 1:00:00');
+  await expect(page.locator('#pSleepBtn')).toHaveText('1:00:00');
   await expect(page.locator('#pSleepBtn')).toHaveAttribute('aria-label', 'Sleep timer: stops in 1:00:00');
   await choose(page, 'Cancel timer');
-  await expect(page.locator('#pSleepBtn')).toHaveText('☾');
+  await expect(page.locator('#pSleepBtn')).toHaveText('');
   await page.evaluate(() => { player.loop = true; player.play(); });
   await page.clock.fastForward(3660000);
   expect((await state(page)).paused).toBe(false);
@@ -149,13 +149,13 @@ test('"End of chapter" waits for the rest of a chapter that is still loading', a
   await page.evaluate(() => { player.currentTime = player.duration - 2; player.play(); });
   await expect.poll(() => page.evaluate(() => P.waitFull)).toBe(true);
   expect(await page.evaluate(() => sleepFade)).toBe(1);
-  await expect(page.locator('#pSleepBtn')).toHaveText('☾ End');
+  await expect(page.locator('#pSleepBtn')).toHaveText('End');
   // The rest arrives and playback continues within the same chapter.
   release();
   await expect.poll(() => page.evaluate(() => P.partial)).toBeNull();
   await expect.poll(() => page.evaluate(() => !player.paused)).toBe(true);
   await expect(page.locator('#pChapter')).toHaveValue('0');
-  await expect(page.locator('#pSleepBtn')).toHaveText('☾ End');
+  await expect(page.locator('#pSleepBtn')).toHaveText('End');
   await page.evaluate(() => player.pause());
 });
 
@@ -182,7 +182,7 @@ test('"End of chapter" stops instead of waiting for a chapter still being conver
   await expect(page.locator('#pStatus')).toHaveText('Sleep timer: playback stopped.', { timeout: 10000 });
   expect(await page.evaluate(() => [player.paused, P.waitConv, sleepFade])).toEqual([true, null, 1]);
   expect(await page.evaluate(() => window.__minFade)).toBeLessThan(0.5);     // it faded out
-  await expect(page.locator('#pSleepBtn')).toHaveText('☾');
+  await expect(page.locator('#pSleepBtn')).toHaveText('');
   // More audio arriving later does not start playback again.
   ready = [3, 2, 0];
   await page.waitForTimeout(9000);                                          // one library poll
@@ -196,5 +196,5 @@ test('the background music stops with the sleep timer', async ({ page, backend }
   await page.evaluate(() => { player.currentTime = player.duration - 3; player.play(); });
   await expect(page.locator('#pStatus')).toHaveText('Sleep timer: playback stopped.', { timeout: 15000 });
   await expect.poll(() => page.evaluate(() => [player.paused, music.paused])).toEqual([true, true]);
-  await expect(page.locator('#mmPlay')).toHaveText('▶');
+  await expect(page.locator('#mmPlay')).toHaveAttribute('aria-label', 'Play music');
 });

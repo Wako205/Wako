@@ -60,7 +60,6 @@ test('mini player: plays by itself at login, ❚❚ pauses, ▶ resumes, indepen
   await expect(page.locator('#mStatus')).toHaveText(/^Playing: /, { timeout: 30000 });
   await expect.poll(async () => (await st(page)).music).toBe(true);
   await expect(page.locator('#mmPlay')).toHaveAttribute('aria-label', 'Pause music');
-  await expect(page.locator('#mmPlay')).toHaveText('❚❚');
   await expect(page.locator('#mStatus')).toHaveText(/^Playing: /);
 
   // The book plays at the same time; pausing the book leaves the music on.
@@ -80,7 +79,7 @@ test('mini player: plays by itself at login, ❚❚ pauses, ▶ resumes, indepen
   // Second tap: pause; the same track continues on the next tap.
   await page.click('#mmPlay');
   await expect.poll(async () => (await st(page)).music).toBe(false);
-  await expect(page.locator('#mmPlay')).toHaveText('▶');
+  await expect(page.locator('#mmPlay')).toHaveAttribute('aria-label', 'Play music');
   const t = (await st(page)).t, src = (await st(page)).src;
   await page.click('#mmPlay');
   await expect.poll(async () => (await st(page)).music).toBe(true);
@@ -92,7 +91,7 @@ test('mini player: plays by itself at login, ❚❚ pauses, ▶ resumes, indepen
   await page.reload();
   await expect(page.locator('#mStatus')).toHaveText(/^Ready: /, { timeout: 30000 });
   expect((await st(page)).music).toBe(false);
-  await expect(page.locator('#mmPlay')).toHaveText('▶');
+  await expect(page.locator('#mmPlay')).toHaveAttribute('aria-label', 'Play music');
 });
 
 test('choosing one track plays it; the next track follows at the end; the choice is per user', async ({ page, backend }) => {
@@ -120,7 +119,7 @@ test('choosing one track plays it; the next track follows at the end; the choice
   await expect(page.locator('#miniMusic')).toBeHidden();
   await login(page, 'bob');
   await expect(page.locator('#mmTrack')).toHaveValue('all');
-  await expect(page.locator('#mmPlay')).toHaveText('❚❚');         // plays by itself for a new user too
+  await expect(page.locator('#mmPlay')).toHaveAttribute('aria-label', 'Pause music');         // plays by itself for a new user too
   await page.click('#mmPlay');
 });
 

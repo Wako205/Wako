@@ -118,7 +118,7 @@ test('a whole book is saved from the library, with sizes, marks and removal', as
   await panel.getByRole('button', { name: /^Save all for offline \(about/ }).click();
   await expect(panel.locator('.offctl').first()).toContainText('✓ 2 of 2 saved offline');
   await expect(book(page)).toContainText('✓ saved offline');
-  await expect(book(page).getByRole('button', { name: 'Offline ✓' })).toBeVisible();
+  await expect(book(page).getByRole('button', { name: 'Offline', exact: true })).toBeVisible();
   expect((await stored(page)).meta).toEqual(['tester||book1|0', 'tester||book1|1']);
   expect(backend.callsOf('audio_part').length).toBe(4);
 
