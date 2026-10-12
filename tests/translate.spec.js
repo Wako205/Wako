@@ -67,15 +67,27 @@ test('a PDF is read in the browser and translated as text', async ({ page, backe
   expect(dl.suggestedFilename()).toBe('mill_zh-Hans.txt');
 });
 
-test('long text is sent in several requests of at most 40,000 characters', async ({ page, backend }) => {
+test('long text goes in requests of at most 10,000 characters, at most 30,000 a minute; a 429 refusal is retried', async ({ page, backend }) => {
+  await page.clock.install();
   await login(page);
   await page.click('#tabTrans');
-  const para = 'x'.repeat(9000);
-  await page.fill('#trText', Array.from({ length: 10 }, () => para).join('\n\n'));
+  const para = 'x'.repeat(4000);
+  await page.fill('#trText', Array.from({ length: 10 }, () => para).join('\n\n'));   // 40,000 characters
+  let refused = 0;
+  backend.on('translate', (body) => {
+    if (backend.callsOf('translate').length === 2 && !refused++) return { ok: false, error: 'Azure Translator error 429: The server rejected the request because the client has exceeded request limits.' };
+    return { translations: body.paras.map((p) => '[t] ' + p), detected: [], used: 0, cap: 2000000 };
+  });
   await page.click('#trBtn');
+  await expect.poll(() => backend.callsOf('translate').length).toBe(2);             // the second one is refused
+  await expect(page.locator('#trStatus')).toContainText('waiting');
+  await page.clock.runFor(21000);
+  await expect.poll(() => backend.callsOf('translate').length).toBe(3);             // retried
+  await expect.poll(() => backend.callsOf('translate').length, { timeout: 3000 }).toBe(3);   // 30,000 sent within the minute: the fourth waits
+  await page.clock.runFor(61000);
   await expect(page.locator('#trStatus')).toHaveText('Done.');
   const calls = backend.callsOf('translate');
-  expect(calls.length).toBe(3);
-  calls.forEach((c) => expect(c.paras.join('').length).toBeLessThanOrEqual(40000));
+  expect(calls.length).toBe(6);                                                       // 5 requests of 8,000 characters, one of them twice
+  calls.forEach((c) => expect(c.paras.join('').length).toBeLessThanOrEqual(10000));
   await expect(page.locator('#trOut .dst')).toHaveCount(10);
 });

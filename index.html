@@ -3391,7 +3391,11 @@ async function readAnyFile(f) {
 const TR_LANGS = [['zh-Hans', '中文（简体）'], ['zh-Hant', '中文（繁體）'], ['en', 'English'], ['ja', '日本語'], ['ko', '한국어'],
   ['fr', 'Français'], ['de', 'Deutsch'], ['es', 'Español'], ['it', 'Italiano'], ['pt', 'Português'], ['ru', 'Русский'],
   ['ar', 'العربية'], ['vi', 'Tiếng Việt'], ['th', 'ไทย'], ['id', 'Bahasa Indonesia']];
-const TR_BATCH = 40000;                         // characters per request (the server accepts 45,000)
+// Azure's free tier accepts about 33,000 characters a minute: requests of at most 10,000 characters,
+// paced to 30,000 per minute, and a request refused with 429 (too many) is tried again after a pause.
+const TR_BATCH = 10000;
+const TR_PER_MIN = 30000;
+const trSent = [];                              // [time, characters] of recent requests
 let trDoc = null, trResult = null;              // trDoc: {name, kind, paras, docx?}; trResult: {to, out: [string]}
 (() => {
   const sel = $('trTo');
@@ -3464,8 +3468,9 @@ $('trBtn').onclick = async () => {
   $('trBtn').disabled = true;
   try {
     for (let b = 0; b < batches.length; b++) {
-      setStatus(st, 'Translating' + (batches.length > 1 ? ' part ' + (b + 1) + ' of ' + batches.length : '') + '...');
-      const d = await api({ action: 'translate', token, to, paras: batches[b].map((i) => doc.paras[i].slice(0, TR_BATCH)) }, 90000);
+      const label = 'Translating' + (batches.length > 1 ? ' part ' + (b + 1) + ' of ' + batches.length : '');
+      const paras = batches[b].map((i) => doc.paras[i].slice(0, TR_BATCH));
+      const d = await trSend(paras, to, (msg) => setStatus(st, label + (msg ? ' (' + msg + ')' : '') + '...'));
       batches[b].forEach((i, k) => { out[i] = d.translations[k] || ''; });
       $('trUsage').textContent = fmtK(d.used, true) + ' of ' + fmtK(d.cap) + ' this month';
     }
@@ -3475,6 +3480,32 @@ $('trBtn').onclick = async () => {
   } catch (e) { setStatus(st, e.message, true); }
   $('trBtn').disabled = false;
 };
+
+const trWait = (ms, say) => new Promise((ok) => {
+  const end = Date.now() + ms;
+  const tick = () => { const left = Math.ceil((end - Date.now()) / 1000); if (left <= 0) return ok(); say('waiting ' + left + ' s for the free tier'); setTimeout(tick, 1000); };
+  tick();
+});
+/** One request, kept under the per-minute limit and retried after a 429 refusal. */
+async function trSend(paras, to, say) {
+  const n = paras.reduce((a, p) => a + p.length, 0);
+  for (let attempt = 0; ; attempt++) {
+    const now = Date.now();
+    while (trSent.length && now - trSent[0][0] > 60000) trSent.shift();
+    const recent = trSent.reduce((a, x) => a + x[1], 0);
+    if (recent && recent + n > TR_PER_MIN) await trWait(60000 - (now - trSent[0][0]) + 500, say);
+    say('');
+    try {
+      const d = await api({ action: 'translate', token, to, paras }, 90000);
+      trSent.push([Date.now(), n]);
+      return d;
+    } catch (e) {
+      if (!/error 429/.test(e.message) || attempt >= 4) throw e;
+      trSent.push([Date.now(), n]);
+      await trWait(20000 * (attempt + 1), say);
+    }
+  }
+}
 
 function renderTrResult() {
   const box = $('trOut'); box.textContent = '';
