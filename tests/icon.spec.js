@@ -17,3 +17,14 @@ test('the page names a Home Screen icon and a manifest, and the files exist', as
   const png = fs.readFileSync(path.join(root, hrefs.apple));
   expect(png.readUInt32BE(16)).toBe(180);                       // width from the PNG header
 });
+
+test('the Home Screen guide is linked from the login screen and has its four annotated pictures', async ({ page, backend }) => {
+  await page.goto(require('./support/backend').INDEX_URL);
+  await expect(page.locator('#installLink')).toHaveAttribute('href', 'install/');
+  await page.goto('file://' + path.join(__dirname, '..', 'install', 'index.html'));
+  await expect(page.locator('li')).toHaveCount(5);
+  const imgs = page.locator('li img');
+  await expect(imgs).toHaveCount(4);
+  for (let i = 0; i < 4; i++) expect(await imgs.nth(i).evaluate((e) => e.complete && e.naturalWidth)).toBeGreaterThan(300);
+  expect(await page.locator('header img').evaluate((e) => e.naturalWidth)).toBe(180);
+});

@@ -269,6 +269,7 @@
     <label for="pass">Password</label>
     <input type="password" id="pass" autocomplete="current-password">
     <div class="row" style="margin-top:16px"><button id="loginBtn">Log in</button><span class="status" id="loginStatus"></span></div>
+    <p class="status" style="margin-top:14px"><a href="install/" id="installLink" style="color:var(--accent)">添加到主屏幕 · Add to Home Screen</a></p>
     <div id="offlineEntry" class="hidden" style="margin-top:14px">
       <div class="notice" id="offlineEntryNote"></div>
       <button class="ghost" id="offlineBtn" style="margin-top:8px">Listen offline</button>
@@ -2093,8 +2094,9 @@ async function renderStorage() {
   let kept = false;
   try { kept = !!(navigator.storage && navigator.storage.persisted && await navigator.storage.persisted()); } catch (e) {}
   if (offIndex.size && !kept) parts.push('Saved chapters may be deleted when space runs low.');
-  parts.push('iPhone: add to Home Screen to keep them.');
-  box.textContent = parts.join(' ');
+  box.textContent = parts.join(' ') + ' ';
+  const a = el('a', null, 'iPhone: add to Home Screen to keep them.'); a.href = 'install/'; a.style.color = 'var(--accent)';
+  box.appendChild(a);
 }
 
 // Listening positions and bookmarks are sent with audio_progress; while offline they wait here.

@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>把和光添加到主屏幕</title>
+<link rel="apple-touch-icon" href="../icons/icon-180.png">
+<link rel="icon" type="image/png" sizes="32x32" href="../icons/icon-32.png">
+<style>
+  :root { --ink:#1f170c; --muted:#4a3f2e; --line:#ddd0b3; --accent:#6b5a2e; --bg:#f6edd6; --card:#fbf5e4; --red:#e0201b; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:17px/1.7 -apple-system, "PingFang SC", "Hiragino Sans", "Noto Sans CJK SC", sans-serif; }
+  main { max-width:720px; margin:0 auto; padding:24px 16px 48px; }
+  header { display:flex; align-items:center; gap:14px; margin-bottom:8px; }
+  header img { width:64px; height:64px; border-radius:15px; box-shadow:0 1px 4px rgba(0,0,0,.15); }
+  h1 { font-size:24px; margin:0; line-height:1.3; }
+  .sub { color:var(--muted); margin:4px 0 20px; }
+  ol { list-style:none; padding:0; margin:0; counter-reset:s; }
+  li { counter-increment:s; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin:0 0 16px; }
+  li h2 { font-size:18px; margin:0 0 6px; display:flex; gap:10px; align-items:baseline; }
+  li h2::before { content:counter(s); flex:none; width:28px; height:28px; border-radius:50%; background:var(--accent); color:#fbf3df; font-size:15px; display:inline-flex; align-items:center; justify-content:center; }
+  li p { margin:0 0 10px; }
+  li img { display:block; width:100%; max-width:320px; margin:6px auto 0; border-radius:12px; border:1px solid var(--line); }
+  b.red { color:var(--red); }
+  .note { font-size:15px; color:var(--muted); }
+  .box { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin:0 0 16px; }
+  h3 { font-size:17px; margin:24px 0 8px; }
+  a { color:var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="../icons/icon-180.png" alt="和光 图标">
+    <div>
+      <h1>把「和光」添加到主屏幕</h1>
+    </div>
+  </header>
+  <p class="sub">添加后，在 iPhone 主屏幕上点图标就能直接打开，像一个小 App。离线保存的章节也更不容易被 Safari 清理。</p>
+
+  <ol>
+    <li>
+      <h2>用 Safari 打开网站</h2>
+      <p>在 iPhone 的 <b>Safari</b> 里打开 <a href="https://wako205.github.io/Wako/">wako205.github.io/Wako</a>，等页面加载完。必须用 Safari，微信或其他 App 里打开的页面不能添加到主屏幕。</p>
+      <p>然后点地址栏右边的 <b class="red">「⋯」</b>（旧版 iOS 是屏幕底部的分享按钮 <b class="red">⬆︎</b>，点了直接跳到第 3 步）。</p>
+    </li>
+    <li>
+      <h2>点「共享」</h2>
+      <p>在弹出的菜单里点红框中的 <b class="red">共享</b>（Share）。</p>
+      <img src="step2.jpg" alt="菜单中红框标出「共享」">
+    </li>
+    <li>
+      <h2>点「查看更多」</h2>
+      <p>共享面板打开后，点右下角红框中的 <b class="red">查看更多</b>（More），展开全部选项。</p>
+      <img src="step3.jpg" alt="共享面板中红框标出「查看更多」">
+    </li>
+    <li>
+      <h2>点「添加到主屏幕」</h2>
+      <p>在展开的列表里点红框中的 <b class="red">添加到主屏幕</b>（Add to Home Screen）。</p>
+      <img src="step4.jpg" alt="列表中红框标出「添加到主屏幕」">
+    </li>
+    <li>
+      <h2>改名（可选），点「添加」</h2>
+      <p>名字可以改成 <b>和光</b>（细红框）。「作为网页 App 打开」保持<b>开启</b>。最后点右上角粗红框中的 <b class="red">添加</b>（Add）。</p>
+      <p class="note">截图里的图标还是旧的「W」，现在添加时会显示「和光」图标。</p>
+      <img src="step5.jpg" alt="添加到主屏幕页面，红框标出名字和「添加」按钮">
+    </li>
+  </ol>
+
+  <h3>以前添加过的旧图标（W）</h3>
+  <div class="box">iPhone 会把添加时的图标存在手机上，不会自动更新。请先长按旧图标，选 <b>删除书签</b>（只删快捷方式，登录和书库不受影响），再按上面的步骤重新添加一次。</div>
+
+  <h3>Android 手机</h3>
+  <div class="box">用 <b>Chrome</b> 打开网站，点右上角 <b>⋮</b>，选 <b>添加到主屏幕</b>（或 <b>安装应用</b>），再点 <b>添加</b>。</div>
+
+  <p class="note"><a href="../">← 返回和光</a></p>
+</main>
+</body>
+</html>
