@@ -83,3 +83,21 @@ test('when Google is used up, its voices are greyed out and a Microsoft voice is
   await expect(panel).toContainText('0k of 500k free, then 12,000k trial credit');
   await expect(panel).not.toContainText('not enough');
 });
+
+test('each account may use at most 2M characters of the trial credit', async ({ page, backend }) => {
+  backend.on('audio_library', () => ({ items: JSON.parse(JSON.stringify(backend.library)), ttsUsed: 1030000, ttsCap: 1030000,
+                                       azReady: true, azUsed: 500000, azCap: 500000, s0Used: 5000000, s0Cap: 12000000,
+                                       s0Mine: 1999000, s0UserCap: 2000000, azTier: 's0', azUntil: Date.now() + 864e5 }));
+  await page.setViewportSize({ width: 1100, height: 900 });
+  await login(page);
+  await openAudio(page);
+  const trial = page.locator('#usageBars .ubar').nth(2);
+  await expect(trial).toHaveAttribute('aria-label', 'Microsoft trial: 1,999k of 2,000k characters for this account');
+  await expect(trial).toContainText('of 2M');
+  // Only this account's rest (1k) is available, although the shared credit has 7M left.
+  await page.locator('#library .libitem').first().getByRole('button', { name: 'Add chapters' }).click();
+  const panel = page.locator('.addpanel');
+  await panel.locator('.chlist input:not([disabled])').first().check();
+  await expect(panel).toContainText('then 1k trial credit');
+  await expect(panel).toContainText('not enough');
+});

@@ -430,7 +430,6 @@
           <div class="status" id="pronStatus"></div>
         </details>
         <div class="row" style="margin-top:16px"><button data-net="1" id="audioBtn">Generate audio</button><span class="status" id="audioStatus"></span></div>
-        <div class="notice" style="margin-top:14px">The type of document is detected automatically. Papers: Claude rewrites the PDF into a listening script (references and citation numbers skipped; equations and units read in words), then Google Chirp 3 HD reads it. Books and other text: read as written, chapter by chapter, with running headers and page numbers removed. English, Japanese and Chinese are detected automatically. Every conversion is saved to your library below, together with your listening position, so it never has to be converted twice. You can close this page while a conversion runs.</div>
       </div>
       <aside class="card usage hidden" id="usageCard" aria-label="Speech used">
         <div class="uh">Speech used</div>
@@ -444,7 +443,7 @@
       <div id="libNote" class="status"></div>
       <div id="library"><div class="status">Loading...</div></div>
       <div id="sharedCard" class="hidden">
-        <h2 style="margin-top:22px">Shared library <span class="status" style="font-weight:normal;font-size:13px;margin-left:8px">Shared by accounts of this site; listen only</span></h2>
+        <h2 style="margin-top:22px">Shared library</h2>
         <div id="sharedLib"></div>
       </div>
       <div id="offlineInfo" class="notice" style="margin-top:12px"></div>
@@ -1287,7 +1286,7 @@ $('audioBtn').onclick = async () => {
 // ---------------------------------------------------------------------------
 // 9. Audio: library
 // ---------------------------------------------------------------------------
-const libUsage = { used: 0, cap: 0, azUsed: 0, azCap: 0, azReady: false, s0Used: 0, s0Cap: 0, s0Until: 0 };
+const libUsage = { used: 0, cap: 0, azUsed: 0, azCap: 0, azReady: false, s0Used: 0, s0Cap: 0, s0Mine: 0, s0UserCap: 0, s0Until: 0 };
 /** Short display name of a voice value. */
 function voiceLabel(v) { const o = Array.from($('avoice').options).find((x) => x.value === v); return o ? o.textContent.replace(/\s*\(.*\)$/, '') : v; }
 $('avoice').addEventListener('change', () => bookSummary());
@@ -1297,7 +1296,8 @@ $('avoice').addEventListener('change', () => bookSummary());
  */
 function allowance(voice) {
   if (!/^az:/.test(voice || '')) return { used: libUsage.used, cap: libUsage.cap, trial: 0 };
-  const trial = libUsage.s0Until ? Math.max(0, libUsage.s0Cap - libUsage.s0Used) : 0;
+  let trial = libUsage.s0Until ? Math.max(0, libUsage.s0Cap - libUsage.s0Used) : 0;
+  if (libUsage.s0UserCap) trial = Math.min(trial, Math.max(0, libUsage.s0UserCap - libUsage.s0Mine));   // limit per account
   return { used: libUsage.azUsed, cap: libUsage.azCap, trial };
 }
 /** Characters left for a voice, free tier and trial together. */
@@ -1327,7 +1327,7 @@ async function loadLibrary() {
   }
   libItems = (d.items || []).filter((x) => x && x.id); libUsage.used = d.ttsUsed || 0; libUsage.cap = d.ttsCap || 0;
   libUsage.azUsed = d.azUsed || 0; libUsage.azCap = d.azCap || 0; libUsage.azReady = !!d.azReady;
-  libUsage.s0Used = d.s0Used || 0; libUsage.s0Cap = d.s0Cap || 0; libUsage.s0Until = d.azTier === 's0' && d.azUntil ? d.azUntil : 0;
+  libUsage.s0Used = d.s0Used || 0; libUsage.s0Cap = d.s0Cap || 0; libUsage.s0Mine = d.s0Mine || 0; libUsage.s0UserCap = d.s0UserCap || 0; libUsage.s0Until = d.azTier === 's0' && d.azUntil ? d.azUntil : 0;
   const az = $('azVoices'); az.disabled = !libUsage.azReady; az.classList.toggle('hidden', !libUsage.azReady);
   if (!libUsage.azReady && /^az:/.test($('avoice').value)) $('avoice').value = 'Kore';
   // Google's monthly allowance used up: its voices are greyed out and Microsoft is used (free tier, then the trial credit).
@@ -1372,9 +1372,8 @@ function renderShared() {
     const t = el('div', 't', it.title); t.onclick = () => openItem(it.id, it.owner);
     g.appendChild(t);
     const meta = ['Shared by ' + it.owner, it.kind === 'book' ? 'Book' : 'Paper'];
-    if (it.kind === 'book') meta.push(chaptersDone(it) + ' of ' + it.chapters.length + ' chapters converted');
-    if (it.chars) meta.push('about ' + fmtDur(itemMinutes(it)));
-    if (it.voice) meta.push('voice ' + voiceLabel(it.voice));
+    if (it.kind === 'book') meta.push(chaptersDone(it) + '/' + it.chapters.length + ' chapters');
+    if (it.chars) meta.push(fmtDur(itemMinutes(it)));
     if (it.pos && it.chapters && it.chapters[it.pos.c]) meta.push('resume at ' + (it.chapters.length > 1 ? it.chapters[it.pos.c].title + ' ' : '') + fmtTime(it.pos.t));
     g.appendChild(el('div', 'm', meta.join(' · ')));
     row.appendChild(g);
@@ -1398,7 +1397,8 @@ function ownerOf(it) { return it && it.owner && !it.mine ? { owner: it.owner } :
 function renderUsage(d) {
   const bars = [{ name: 'Google', used: libUsage.used, cap: libUsage.cap, sub: 'this month' }];
   if (libUsage.azReady) bars.push({ name: 'Microsoft free', used: libUsage.azUsed, cap: libUsage.azCap, sub: 'this month' });
-  if (libUsage.s0Until) bars.push({ name: 'Microsoft trial', used: libUsage.s0Used, cap: libUsage.s0Cap, sub: 'in total' });
+  if (libUsage.s0Until) bars.push(libUsage.s0UserCap ? { name: 'Microsoft trial', used: libUsage.s0Mine, cap: libUsage.s0UserCap, sub: 'for this account' }
+                                               : { name: 'Microsoft trial', used: libUsage.s0Used, cap: libUsage.s0Cap, sub: 'in total' });
   const box = $('usageBars'); box.textContent = '';
   bars.forEach((b) => {
     const f = b.cap ? Math.min(1, b.used / b.cap) : 0, pct = Math.round(f * 1000) / 10;
@@ -1409,12 +1409,11 @@ function renderUsage(d) {
     const c = el('div', 'col'), fill = el('div', 'fill' + (f > 0.9 ? ' warn' : ''));
     fill.style.height = (f * 100) + '%'; c.appendChild(fill); col.appendChild(c);
     col.appendChild(el('div', 'lbl', b.name));
-    const short = (n) => (n >= 1e7 ? Math.round(n / 1e6) + 'M' : fmtK(n, true));
+    const short = (n) => (n >= 1e7 || (n >= 1e6 && n % 1e6 === 0) ? Math.round(n / 1e6) + 'M' : fmtK(n, true));
     const amt = el('div', 'amt'); amt.append(short(b.used), el('br'), 'of ' + short(b.cap)); col.appendChild(amt);
     box.appendChild(col);
   });
-  $('usageNote').textContent = 'Characters. Google and Microsoft free reset on the 1st' +
-    (libUsage.s0Until ? '; the trial credit lasts through ' + fmtDay(libUsage.s0Until - 1) + ' and is used only when the free tier runs out.' : '.');
+  $('usageNote').textContent = 'Free: resets on the 1st.' + (libUsage.s0Until ? ' Trial: through ' + fmtDay(libUsage.s0Until - 1) + '.' : '');
   $('usageCard').classList.remove('hidden');
   $('usageCard').parentElement.classList.remove('nousage');
 }
@@ -1435,18 +1434,17 @@ function renderLibrary() {
     const t = el('div', 't', it.title); t.onclick = () => openItem(it.id);
     g.appendChild(t);
     const meta = [it.kind === 'book' ? 'Book' : 'Paper', new Date(it.created).toLocaleDateString()];
-    if (it.kind === 'book') meta.push(chaptersDone(it) + ' of ' + it.chapters.length + ' chapters converted');
+    if (it.kind === 'book') meta.push(chaptersDone(it) + '/' + it.chapters.length + ' chapters');
     else if (it.chapters && it.chapters.length > 1) meta.push(it.chapters.length + ' chapters');
-    if (it.chars) meta.push('about ' + fmtDur(itemMinutes(it)));
-    if (it.voice) meta.push('voice ' + voiceLabel(it.voice));
+    if (it.chars) meta.push(fmtDur(itemMinutes(it)));
     if (it.shared) meta.push('shared');
     if (it.pos && it.chapters && it.chapters[it.pos.c]) meta.push('resume at ' + (it.chapters.length > 1 ? it.chapters[it.pos.c].title + ' ' : '') + fmtTime(it.pos.t));
     const nOff = offCount(it);
-    if (nOff) meta.push(nOff === savableChapters(it).length ? '✓ saved offline' : '✓ ' + nOff + ' of ' + savableChapters(it).length + ' chapters saved offline');
+    if (nOff && nOff < savableChapters(it).length) meta.push('✓ ' + nOff + '/' + savableChapters(it).length + ' offline');
     g.appendChild(el('div', 'm', meta.join(' · ')));
     if (it.state === 'processing') {
       const ready = (it._ready || []).reduce((a, b) => a + b, 0), total = (it.chapters || []).reduce((a, c) => a + c.n, 0);
-      g.appendChild(el('div', 'm', (it._progress || 'Converting...') + (ready && total ? ' · you can start listening to finished chapters' : '') + ' · you can close this page while a conversion runs'));
+      g.appendChild(el('div', 'm', (it._progress || 'Converting...') + (ready && total ? ' · finished chapters can be played' : '') + ' · this page can be closed'));
       const bar = el('div', 'bar'); const i = el('i'); i.style.width = (total ? Math.round(100 * ready / total) : 3) + '%'; bar.appendChild(i); g.appendChild(bar);
     }
     if (it.state === 'error') g.appendChild(el('div', 'm', 'Failed: ' + (it.error || 'unknown error')));
@@ -1799,13 +1797,13 @@ async function renderStorage() {
   if (navigator.storage && navigator.storage.estimate) {
     try {
       const est = await navigator.storage.estimate();
-      parts.push('Offline storage: ' + fmtBytes(est.usage || 0) + ' used, about ' + fmtBytes(Math.max(0, (est.quota || 0) - (est.usage || 0))) + ' free.');
+      parts.push('Offline storage: ' + fmtBytes(est.usage || 0) + ' used, ' + fmtBytes(Math.max(0, (est.quota || 0) - (est.usage || 0))) + ' free.');
     } catch (e) {}
   }
   let kept = false;
   try { kept = !!(navigator.storage && navigator.storage.persisted && await navigator.storage.persisted()); } catch (e) {}
-  if (offIndex.size) parts.push(kept ? 'The browser keeps saved chapters until you remove them.' : 'The browser may delete saved chapters when space runs low.');
-  parts.push('On iPhone, Safari may delete offline data of websites that are not on the Home Screen. To keep it, tap Share, then "Add to Home Screen", and open Wako205 from there.');
+  if (offIndex.size && !kept) parts.push('Saved chapters may be deleted when space runs low.');
+  parts.push('iPhone: add to Home Screen to keep them.');
   box.textContent = parts.join(' ');
 }
 

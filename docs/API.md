@@ -23,7 +23,7 @@ Every call is `POST` with a JSON body `{action, token, ...}` (sent as `text/plai
 |---|---|---|
 | `audio_start` | `filename, voice, kind ('paper' or 'book')`; paper/thesis: `parts` (base64 PDF parts), `pages`, optional `chapterTitles`; book: `chapters [{title,text}]`, `selected [indices]` | `id` (library item), `jobId` |
 | `pdf_upload` | `id, size, index, data` (base64 of 4 MiB raw chunk `index`), `filename` | `done` (true after the last chunk). The server checks `size` (at most 200 MB), `index`, the chunk length, and refuses a second upload for an item that already has its PDF |
-| `audio_library` | | `items, ttsUsed, ttsCap` (Google), `azReady, azUsed, azCap` (Microsoft free tier, this month), `s0Used, s0Cap, azTier ('s0' while the trial resource is valid, else 'f0'), azUntil` (ms, end of the trial resource, or null) |
+| `audio_library` | | `items, ttsUsed, ttsCap` (Google), `azReady, azUsed, azCap` (Microsoft free tier, this month), `s0Used, s0Cap` (trial credit, all accounts, in total), `s0Mine, s0UserCap` (trial credit used by this account, and its limit of 2,000,000), `azTier ('s0' while the trial resource is valid, else 'f0'), azUntil` (ms, end of the trial resource, or null) |
 | `audio_text` | `id, chapter`, optional `owner` | `texts` (one string per audio segment) |
 | `audio_part` | `id, chapter, index`, optional `owner` | `data` (base64 MP3 of that segment) |
 | `audio_progress` | `id, chapter, time, label, slot ('last','b1','b2')`, optional `owner` | `ok` (for a shared item the position is stored for the caller only) |

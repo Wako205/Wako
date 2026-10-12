@@ -7,7 +7,7 @@ test('lists the library with kind, chapters and resume point', async ({ page, ba
   await expect(items).toHaveCount(2);
   await expect(items.nth(0).locator('.t')).toHaveText('The Quiet Mill');
   await expect(items.nth(0)).toContainText('Book');
-  await expect(items.nth(0)).toContainText('2 of 3 chapters converted');
+  await expect(items.nth(0)).toContainText('2/3 chapters');
   await expect(items.nth(0).getByRole('button', { name: 'Listen' })).toBeEnabled();
   await expect(items.nth(1).locator('.t')).toHaveText('Phonons in MoS2');
   await expect(items.nth(1)).toContainText('resume at 0:01');

@@ -117,17 +117,17 @@ test('a whole book is saved from the library, with sizes, marks and removal', as
   await expect(panel.locator('.offrow').first().getByRole('button', { name: /^Save chapter for offline \(about/ })).toBeVisible();
   await panel.getByRole('button', { name: /^Save all for offline \(about/ }).click();
   await expect(panel.locator('.offctl').first()).toContainText('✓ 2 of 2 saved offline');
-  await expect(book(page)).toContainText('✓ saved offline');
+  await expect(book(page).locator('.grow .m').first()).not.toContainText('✓');      // the button already says so
   await expect(book(page).getByRole('button', { name: 'Offline ✓' })).toBeVisible();
   expect((await stored(page)).meta).toEqual(['tester||book1|0', 'tester||book1|1']);
   expect(backend.callsOf('audio_part').length).toBe(4);
 
   await panel.locator('.offrow').nth(1).getByRole('button', { name: 'Remove offline copy' }).click();
   await expect(panel.getByRole('button', { name: /^Save the other chapters for offline \(about/ })).toBeVisible();
-  await expect(book(page)).toContainText('✓ 1 of 2 chapters saved offline');
+  await expect(book(page)).toContainText('✓ 1/2 offline');
   expect((await stored(page)).meta).toEqual(['tester||book1|0']);
   await panel.locator('.offctl').first().getByRole('button', { name: 'Remove offline copies' }).click();
-  await expect(book(page)).not.toContainText('saved offline');
+  await expect(book(page).locator('.grow .m').first()).not.toContainText('✓');
   expect(await stored(page)).toEqual({ meta: [], audio: [] });
 });
 
@@ -238,11 +238,11 @@ test('storage use is shown, persistent storage is requested, and the iPhone note
   });
   await login(page, site);
   await openAudio(page);
-  await expect(page.locator('#offlineInfo')).toContainText(/Offline storage: [\d.]+ (kB|MB|GB) used, about [\d.]+ (kB|MB|GB) free\./);
-  await expect(page.locator('#offlineInfo')).toContainText('On iPhone, Safari may delete offline data of websites that are not on the Home Screen. To keep it, tap Share, then "Add to Home Screen"');
+  await expect(page.locator('#offlineInfo')).toContainText(/Offline storage: [\d.]+ (kB|MB|GB) used, [\d.]+ (kB|MB|GB) free\./);
+  await expect(page.locator('#offlineInfo')).toContainText('iPhone: add to Home Screen to keep them.');
   await saveBook(page);
   expect(await page.evaluate(() => window.__persist)).toBe(1);
-  await expect(page.locator('#offlineInfo')).toContainText('The browser keeps saved chapters until you remove them.');
+  await expect(page.locator('#offlineInfo')).not.toContainText('may be deleted');
 });
 
 for (const theme of ['night', 'eye']) {
@@ -281,7 +281,7 @@ test('an item another account shared is saved and replayed offline with its owne
   const row = page.locator('#sharedLib .libitem').first();
   await row.getByRole('button', { name: 'Offline' }).click();
   await page.locator('#sharedLib .offpanel').getByRole('button', { name: /^Save all for offline/ }).click();
-  await expect(row).toContainText('✓ saved offline');
+  await expect(row.getByRole('button', { name: 'Offline ✓' })).toBeVisible();
   expect((await stored(page)).meta).toEqual(['tester|bob|shared1|0', 'tester|bob|shared1|1']);
   backend.callsOf('audio_text').concat(backend.callsOf('audio_part')).forEach((c) => expect(c).toMatchObject({ id: 'shared1', owner: 'bob' }));
 
@@ -320,7 +320,7 @@ test('offline, the next chapter that plays is the next saved one', async ({ page
   await expect(panel.locator('.offrow')).toHaveCount(3);
   await panel.locator('.offrow').nth(0).getByRole('button', { name: /^Save chapter/ }).click();
   await panel.locator('.offrow').nth(2).getByRole('button', { name: /^Save chapter/ }).click();
-  await expect(book(page)).toContainText('✓ 2 of 3 chapters saved offline');
+  await expect(book(page)).toContainText('✓ 2/3 offline');
   await book(page).getByRole('button', { name: /Listen|Resume/ }).click();
   await expect(page.locator('#pText span.s').first()).toBeVisible();
   await context.setOffline(true);

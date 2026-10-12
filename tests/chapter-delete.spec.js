@@ -6,7 +6,7 @@ test('deletes the audio of one chapter after an inline confirmation', async ({ p
   await login(page);
   await openAudio(page);
   const book = page.locator('#library .libitem').first();
-  await expect(book).toContainText('2 of 3 chapters converted');
+  await expect(book).toContainText('2/3 chapters');
   await book.getByRole('button', { name: 'Add chapters' }).click();
   const panel = page.locator('.addpanel');
   const dels = panel.getByRole('button', { name: /^Delete audio of / });
@@ -22,7 +22,7 @@ test('deletes the audio of one chapter after an inline confirmation', async ({ p
   await panel.getByRole('button', { name: 'Confirm delete' }).click();
   await expect(panel).toBeHidden();
   expect(backend.callsOf('audio_chapter_delete')).toEqual([expect.objectContaining({ id: 'book1', chapter: 0, token: 'tok-test' })]);
-  await expect(book).toContainText('1 of 3 chapters converted');
+  await expect(book).toContainText('1/3 chapters');
   expect(dialogs).toBe(0);
 
   // The deleted chapter can be ticked again for conversion.
