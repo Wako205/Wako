@@ -6,205 +6,270 @@
 <title>Wako205</title>
 <script>try { var t = localStorage.getItem('mp_theme'); if (t === 'night') document.documentElement.setAttribute('data-theme', t); else if (t === 'day') document.documentElement.removeAttribute('data-theme'); } catch (e) {}</script>
 <style>
-  /* Themes: day (default), night, eye care (warm paper tones, low blue light). Chosen in the top bar. */
+  /* Design tokens. Spacing scale 4, 8, 12, 16, 24 px; type 12, 14, 16 and 20 px in two weights (400, 600);
+     one line height for text and one for the reading text. Controls share one height: 36 px, 44 px on phones.
+     Themes: eye care (default), day and night, chosen in the top bar; text colors meet WCAG AA on every surface. */
   :root { --ink:#1c1c28; --muted:#666a7a; --line:#dcdde6; --accent:#4b2e83; --on-accent:#ffffff; --bg:#ffffff; --field:#ffffff; --soft:#f6f6fa;
-          --del:#fdecec; --ins:#e9f7ec; --user:#eef0fb; --err:#b3261e; --hl:#fff1b8; --hl2:#ffd84d; --pend:#aaaaaa; color-scheme: light; }
+          --del:#fdecec; --ins:#e9f7ec; --user:#eef0fb; --err:#b3261e; --hl:#fff1b8; --hl2:#ffd84d; --pend:#666a7a; --warn:#b5651d; color-scheme: light;
+          --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px;
+          --f1:12px; --f2:14px; --f3:16px; --f4:20px; --lh:1.5; --lh-read:1.9;
+          --ctl:36px; --r:8px; --rc:12px; }
   :root[data-theme="night"] { --ink:#e6e6ee; --muted:#9a9eb0; --line:#353849; --accent:#b8a2f0; --on-accent:#17161f; --bg:#16171d; --field:#20222b; --soft:#23252f;
-          --del:#4a2326; --ins:#1f3d29; --user:#2a2d3e; --err:#ff8a80; --hl:#5a4a12; --hl2:#8a6d10; --pend:#5c6070; color-scheme: dark; }
-  :root[data-theme="eye"] { --ink:#3b3226; --muted:#7a6d5a; --line:#ddd0b3; --accent:#6b5a2e; --on-accent:#fbf3df; --bg:#f6edd6; --field:#fbf5e4; --soft:#efe3c4;
-          --del:#f3d9cc; --ins:#dfe8c8; --user:#ece0bf; --err:#a33a24; --hl:#e9d48a; --hl2:#dcbc55; --pend:#b3a68c; color-scheme: light; }
-  .themes { display:inline-flex; border:1px solid var(--line); border-radius:999px; overflow:hidden; }
-  .themes button { background:transparent; color:var(--muted); border-radius:0; padding:4px 10px; font-size:13px; }
-  .themes button.on { background:var(--accent); color:var(--on-accent); }
+          --del:#4a2326; --ins:#1f3d29; --user:#2a2d3e; --err:#ff8a80; --hl:#5a4a12; --hl2:#8a6d10; --pend:#9a9eb0; color-scheme: dark; }
+  :root[data-theme="eye"] { --ink:#3b3226; --muted:#685b47; --line:#ddd0b3; --accent:#6b5a2e; --on-accent:#fbf3df; --bg:#f6edd6; --field:#fbf5e4; --soft:#efe3c4;
+          --del:#f3d9cc; --ins:#dfe8c8; --user:#ece0bf; --err:#a33a24; --hl:#e9d48a; --hl2:#dcbc55; --pend:#685b47; color-scheme: light; }
+
+  /* Base */
   * { box-sizing: border-box; }
   html, body { height: 100%; }
-  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.55 "Helvetica Neue", Arial, "Hiragino Sans", "PingFang SC", sans-serif; }
-  main { max-width: 900px; margin: 0 auto; padding: 24px 16px 40px; min-height: 100%; display: flex; flex-direction: column; }
-  h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
-  .top { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom: 14px; }
-  .who { font-size:13px; color:var(--muted); display:flex; gap:10px; align-items:center; }
-  .card { border:1px solid var(--line); border-radius:10px; padding:20px; background:var(--bg); }
+  body { margin:0; background:var(--bg); color:var(--ink); font:var(--f3)/var(--lh) "Helvetica Neue", Arial, "Hiragino Sans", "PingFang SC", sans-serif; -webkit-text-size-adjust:100%; }
+  b, strong, th { font-weight:600; }
+  h1, h2 { font-size:var(--f4); font-weight:600; line-height:var(--lh); margin:0; }
+  h2.sec { margin:var(--s5) 0 var(--s3); display:flex; align-items:baseline; gap:var(--s3); flex-wrap:wrap; }
+  main { max-width:900px; margin:0 auto; padding:var(--s5) var(--s4); min-height:100%; display:flex; flex-direction:column; }
   .sr-only { position:absolute !important; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
-  /* New conversion form with the speech allowance as a column chart beside it (below it on phones). */
-  .genrow { display:grid; grid-template-columns: minmax(0,1fr) 210px; gap:16px; align-items:start; }
-  .genrow.nousage { grid-template-columns: minmax(0,1fr); }
-  .usage { padding:16px 14px; }
-  .usage .uh { font-weight:600; font-size:14px; margin-bottom:10px; }
-  .ubars { display:flex; gap:12px; align-items:flex-end; justify-content:space-around; }
-  .ubar { flex:1; display:flex; flex-direction:column; align-items:center; min-width:0; }
-  .ubar .pct { font-size:12px; font-weight:600; margin-bottom:4px; font-variant-numeric:tabular-nums; }
-  .ubar .col { width:100%; max-width:44px; height:150px; border-radius:6px; background:var(--soft); border:1px solid var(--line); display:flex; align-items:flex-end; overflow:hidden; }
-  .ubar .fill { width:100%; background:var(--accent); min-height:2px; transition:height .4s; }
-  .ubar .fill.warn { background:#b5651d; }
-  .ubar .lbl { font-size:12px; margin-top:6px; text-align:center; line-height:1.25; }
-  .ubar .amt { font-size:11px; color:var(--muted); text-align:center; font-variant-numeric:tabular-nums; }
-  .usage .un { font-size:11px; color:var(--muted); margin-top:10px; line-height:1.4; }
-  @media (max-width: 760px) { .genrow { grid-template-columns: minmax(0,1fr); } .ubar .col { height:110px; } }
-  label { display:block; font-size:14px; color:var(--muted); margin:14px 0 6px; }
-  input[type=text], input[type=password], input[type=search], select, textarea { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font:inherit; background:var(--field); color:var(--ink); }
-  textarea { resize: vertical; min-height: 64px; max-height: 40vh; }
-  button { padding:9px 16px; border:0; border-radius:8px; background:var(--accent); color:var(--on-accent); font:inherit; cursor:pointer; }
-  button.ghost { background:transparent; color:var(--accent); border:1px solid var(--accent); }
-  button.small { padding:5px 10px; font-size:13px; }
-  button.danger { background:var(--err); border-color:var(--err); color:#fff; }
-  button.chip { background:var(--soft); color:var(--ink); border:1px solid var(--line); font-size:13px; padding:5px 10px; }
-  button:disabled { opacity:.5; cursor:default; }
-  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-  .status { font-size:14px; color:var(--muted); min-height: 1.4em; }
-  .status.err { color:var(--err); }
-  .notice { font-size:13px; color:var(--muted); background:var(--soft); border-radius:8px; padding:10px 12px; }
   .hidden { display:none !important; }
-  .tabs { display:flex; gap:4px; border-bottom:1px solid var(--line); margin-bottom:16px; }
-  .tabs button { background:transparent; color:var(--muted); border-radius:8px 8px 0 0; border-bottom:2px solid transparent; }
+  .sprite { position:absolute; width:0; height:0; overflow:hidden; }
+  .card { border:1px solid var(--line); border-radius:var(--rc); padding:var(--s5); background:var(--bg); }
+  .card > :first-child { margin-top:0; }
+  .row { display:flex; gap:var(--s2); flex-wrap:wrap; align-items:center; }
+  .mt { margin-top:var(--s4); }
+  .grow1 { flex:1; min-width:0; }
+  .push { margin-left:auto; }
+  .status { font-size:var(--f2); color:var(--muted); min-height:1.5em; }
+  .status:empty { min-height:0; }
+  .status.err { color:var(--err); }
+  .notice { font-size:var(--f2); color:var(--muted); background:var(--soft); border-radius:var(--r); padding:var(--s3) var(--s4); }
+  .m, .sub { font-size:var(--f2); color:var(--muted); }
+  .num { font-variant-numeric:tabular-nums; }
+  a { color:var(--accent); }
+
+  /* Top bar and tabs */
+  .top { display:flex; align-items:center; gap:var(--s3); flex-wrap:wrap; margin-bottom:var(--s4); }
+  #brand { margin-right:auto; overflow-wrap:anywhere; }
+  #whoUsage:empty { display:none; }
+  .who { display:flex; gap:var(--s2); align-items:center; font-size:var(--f2); color:var(--muted); }
+  .themes { display:inline-flex; }
+  .themes button { background:var(--field); color:var(--muted); border:1px solid var(--line); border-radius:0; margin-left:-1px; font-weight:400; padding:0 var(--s3); }
+  .themes button:first-child { border-radius:var(--r) 0 0 var(--r); margin-left:0; }
+  .themes button:last-child { border-radius:0 var(--r) var(--r) 0; }
+  .themes button.on { background:var(--accent); color:var(--on-accent); border-color:var(--accent); position:relative; }
+  .tabs { display:flex; gap:var(--s1); border-bottom:1px solid var(--line); margin-bottom:var(--s4); }
+  .tabs button { min-height:44px; background:transparent; color:var(--muted); border:0; border-bottom:2px solid transparent; border-radius:0; font-size:var(--f3); font-weight:400; padding:0 var(--s3); margin-bottom:-1px; }
   .tabs button.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
 
-  /* chat */
-  #chatView { display:flex; flex-direction:column; flex:1; min-height: 60vh; }
-  #messages { flex:1; overflow-y:auto; padding: 4px 2px; }
-  .msg { margin: 10px 0; display:flex; }
-  .msg.user { justify-content:flex-end; }
-  .bubble { max-width: 85%; padding: 10px 14px; border-radius: 12px; border:1px solid var(--line); background:var(--field); overflow-wrap:anywhere; }
-  .msg.user .bubble { background:var(--user); border-color:transparent; white-space:pre-wrap; }
-  .bubble .doc { font-size:12px; color:var(--muted); background:var(--soft); border-radius:6px; padding:3px 8px; display:inline-block; margin-bottom:6px; }
-  .bubble .meta { font-size:12px; color:var(--muted); margin-top:6px; display:flex; gap:10px; align-items:center; }
-  .bubble .meta a { color:var(--accent); cursor:pointer; text-decoration:none; }
-  .md p { margin: 0 0 10px; } .md p:last-child { margin-bottom:0; }
-  .md h1,.md h2,.md h3 { font-size:16px; margin:14px 0 6px; } .md h1 { font-size:18px; }
-  .md ul,.md ol { padding-left: 22px; margin: 6px 0; }
-  .md pre { background:var(--soft); padding:10px 12px; border-radius:8px; overflow-x:auto; font-size:13px; }
-  .md code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size:13px; background:var(--soft); padding:1px 4px; border-radius:4px; }
-  .md pre code { background:none; padding:0; }
-  .md table { border-collapse:collapse; margin:8px 0; font-size:14px; } .md th,.md td { border:1px solid var(--line); padding:4px 8px; }
-  .md blockquote { border-left:3px solid var(--line); margin:8px 0; padding-left:10px; color:var(--muted); }
-  .composer { border-top:1px solid var(--line); padding-top:12px; margin-top:8px; }
-  .attach { display:flex; gap:8px; align-items:center; flex-wrap:wrap; font-size:13px; color:var(--muted); margin-bottom:8px; }
-  .attach .chipfile { background:var(--soft); border:1px solid var(--line); border-radius:999px; padding:3px 10px; display:inline-flex; gap:8px; align-items:center; }
-  .attach .chipfile b { font-weight:600; color:var(--ink); }
-  .attach .x { cursor:pointer; color:var(--muted); }
-  .typing { color:var(--muted); font-size:14px; }
+  /* Fields and labels */
+  label { display:block; font-size:var(--f2); color:var(--muted); margin:var(--s4) 0 var(--s2); }
+  .row > label, label.inline { margin:0; }
+  button, select, input, textarea { font:inherit; }
+  input[type=text], input[type=password], input[type=search], select, textarea { width:100%; height:var(--ctl); padding:0 var(--s3); border:1px solid var(--line); border-radius:var(--r); background:var(--field); color:var(--ink); font-size:var(--f2); }
+  select { padding-right:var(--s2); }
+  select.auto { width:auto; max-width:100%; }
+  textarea { height:auto; min-height:72px; max-height:40vh; padding:var(--s2) var(--s3); resize:vertical; }
+  input[type=file] { max-width:100%; font-size:var(--f2); color:var(--muted); }
+  input[type=file]::file-selector-button { height:var(--ctl); margin-right:var(--s3); padding:0 var(--s4); border:1px solid var(--line); border-radius:var(--r); background:var(--field); color:var(--accent); font:inherit; cursor:pointer; }
+  input[type=checkbox] { width:16px; height:16px; margin:0; accent-color:var(--accent); flex:none; }
+  label.check { display:flex; align-items:center; gap:var(--s2); margin:0; min-height:var(--ctl); color:var(--ink); cursor:pointer; }
 
-  /* structured tab */
-  .edit { border:1px solid var(--line); border-radius:8px; margin:10px 0; overflow:hidden; font-size:14px; }
-  .edit div { padding:8px 12px; white-space:pre-wrap; word-break:break-word; font-family: ui-monospace, Menlo, Consolas, monospace; font-size:13px; }
+  /* Buttons: primary (filled), secondary (.ghost, .chip), destructive (.danger), toggled on (.on); .icon for icon-only. */
+  button { display:inline-flex; align-items:center; justify-content:center; min-height:var(--ctl); padding:var(--s1) var(--s4);
+           border:1px solid var(--accent); border-radius:var(--r); background:var(--accent); color:var(--on-accent); font-size:var(--f2); font-weight:600; cursor:pointer; text-align:center; }
+  button.ghost, button.chip { background:var(--field); color:var(--accent); border-color:var(--line); font-weight:400; }
+  button.ghost:hover, button.chip:hover { background:var(--soft); }
+  button.danger { background:var(--field); color:var(--err); border-color:var(--err); font-weight:400; }
+  button.ghost.on { background:var(--accent); color:var(--on-accent); border-color:var(--accent); }
+  button.small { padding:var(--s1) var(--s3); }
+  button.icon { width:var(--ctl); padding:0; flex:none; }
+  button:disabled { opacity:.5; cursor:default; }
+  button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible, a:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  button .ic + span { margin-left:var(--s2); }
+  .ic { width:20px; height:20px; flex:none; fill:none; stroke:currentColor; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round; }
+
+  /* Chat */
+  #chatView { display:flex; flex-direction:column; flex:1; min-height:60vh; }
+  #messages { flex:1; overflow-y:auto; padding:var(--s1) 0; }
+  .msg { margin:var(--s3) 0; display:flex; }
+  .msg.user { justify-content:flex-end; }
+  .bubble { max-width:85%; padding:var(--s3) var(--s4); border-radius:var(--rc); border:1px solid var(--line); background:var(--field); overflow-wrap:anywhere; }
+  .msg.user .bubble { background:var(--user); border-color:transparent; white-space:pre-wrap; }
+  .bubble .doc { font-size:var(--f1); color:var(--muted); background:var(--soft); border-radius:var(--r); padding:0 var(--s2); display:inline-block; margin-bottom:var(--s2); }
+  .bubble .meta { font-size:var(--f1); color:var(--muted); margin-top:var(--s2); display:flex; gap:var(--s3); align-items:center; }
+  .bubble .meta a { color:var(--accent); cursor:pointer; text-decoration:none; }
+  .md p { margin:0 0 var(--s3); } .md p:last-child { margin-bottom:0; }
+  .md h1, .md h2, .md h3 { font-size:var(--f3); font-weight:600; margin:var(--s4) 0 var(--s2); }
+  .md ul, .md ol { padding-left:var(--s5); margin:var(--s2) 0; }
+  .md pre { background:var(--soft); padding:var(--s3); border-radius:var(--r); overflow-x:auto; font-size:var(--f2); }
+  .md code { font-family:ui-monospace, Menlo, Consolas, monospace; font-size:var(--f2); background:var(--soft); padding:0 var(--s1); border-radius:var(--s1); }
+  .md pre code { background:none; padding:0; }
+  .md table { display:block; overflow-x:auto; max-width:100%; border-collapse:collapse; margin:var(--s2) 0; font-size:var(--f2); }
+  .md th, .md td { border:1px solid var(--line); padding:var(--s1) var(--s2); }
+  .md blockquote { border-left:3px solid var(--line); margin:var(--s2) 0; padding-left:var(--s3); color:var(--muted); }
+  .composer { border-top:1px solid var(--line); padding-top:var(--s3); margin-top:var(--s2); display:flex; flex-direction:column; gap:var(--s2); }
+  .attach { display:flex; gap:var(--s2); align-items:center; flex-wrap:wrap; font-size:var(--f2); color:var(--muted); }
+  .attach .chipfile { background:var(--soft); border:1px solid var(--line); border-radius:var(--r); padding:0 0 0 var(--s3); display:inline-flex; gap:var(--s1); align-items:center; }
+  .attach .chipfile b { color:var(--ink); }
+  .attach .chipfile button { border:0; background:transparent; }
+  .typing { color:var(--muted); font-size:var(--f2); }
+
+  /* Structured polish and review */
+  .edit { border:1px solid var(--line); border-radius:var(--r); margin:var(--s3) 0; overflow:hidden; font-size:var(--f2); }
+  .edit div { padding:var(--s2) var(--s3); white-space:pre-wrap; word-break:break-word; font-family:ui-monospace, Menlo, Consolas, monospace; }
   .edit .old { background:var(--del); } .edit .new { background:var(--ins); }
-  .edit .why { font-family: inherit; color:var(--muted); background:var(--soft); }
+  .edit .why { font-family:inherit; color:var(--muted); background:var(--soft); }
   pre.review { white-space:pre-wrap; word-break:break-word; font:inherit; margin:0; }
-  /* audio */
-  .chlist { max-height: 260px; overflow-y:auto; border:1px solid var(--line); border-radius:8px; margin-top:8px; padding:4px 10px; font-size:14px; }
-  .chlist label { display:flex; gap:8px; align-items:center; margin:4px 0; color:var(--ink); font-size:14px; }
-  .chlist .n { margin-left:auto; color:var(--muted); font-size:12px; white-space:nowrap; }
-  .chlist .chdel { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
-  .chlist .chdel .status { font-size:12px; }
-  .libitem { border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin:10px 0; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
-  .libitem .t { font-weight:600; cursor:pointer; color:var(--accent); }
-  .libitem .m { font-size:13px; color:var(--muted); }
-  .libitem .grow { flex:1; min-width:200px; }
-  .bar { height:4px; background:var(--soft); border-radius:2px; margin-top:6px; overflow:hidden; } .bar i { display:block; height:100%; background:var(--accent); }
-  .readtext { margin-top:14px; max-height: 55vh; overflow-y:auto; border-top:1px solid var(--line); padding-top:10px; line-height:1.9; font-size:17px; }
-  .readtext p { margin:0 0 12px; }
-  /* Reading mode: only the text and a small control bar, filling the screen. */
-  .pmini { display:none; }
-  #playerCard.reading { position:fixed; inset:0; z-index:50; margin:0 !important; border:0; border-radius:0; padding:0;
-    display:flex; flex-direction:column; background:var(--bg); }
-  #playerCard.reading > :not(#pText):not(#pMini):not(audio) { display:none !important; }
-  #playerCard.reading > audio { position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; }
-  #playerCard.reading #pText { flex:1; max-height:none; margin:0; border:0; padding:24px max(20px, calc((100% - 760px) / 2)) 24px; font-size:20px; line-height:2; }
-  #playerCard.reading .pmini { display:flex; align-items:center; gap:10px; padding:8px max(12px, calc((100% - 760px) / 2));
-    padding-bottom:max(8px, env(safe-area-inset-bottom)); border-top:1px solid var(--line); background:var(--soft); }
-  .pmini input[type=range] { flex:1; min-width:0; accent-color:var(--accent); height:28px; }
-  .pmini .t { font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
-  .pmini button { min-width:44px; min-height:40px; }
-  .readtext span.s { cursor:pointer; border-radius:4px; transition: background .2s; }
+
+  /* New conversion, with the speech allowance as a column chart beside it (below it on phones) */
+  .genrow { display:grid; grid-template-columns:minmax(0,1fr) 216px; gap:var(--s4); align-items:start; }
+  .genrow.nousage { grid-template-columns:minmax(0,1fr); }
+  .usage { padding:var(--s4); }
+  .usage .uh { font-weight:600; font-size:var(--f2); margin-bottom:var(--s3); }
+  .ubars { display:flex; gap:var(--s3); align-items:flex-end; justify-content:space-around; }
+  .ubar { flex:1; display:flex; flex-direction:column; align-items:center; min-width:0; font-size:var(--f1); text-align:center; }
+  .ubar .pct { font-weight:600; margin-bottom:var(--s1); font-variant-numeric:tabular-nums; }
+  .ubar .col { width:100%; max-width:40px; height:144px; border-radius:var(--r); background:var(--soft); border:1px solid var(--line); display:flex; align-items:flex-end; overflow:hidden; }
+  .ubar .fill { width:100%; background:var(--accent); min-height:2px; transition:height .4s; }
+  .ubar .fill.warn { background:var(--warn); }
+  .ubar .lbl { margin-top:var(--s2); }
+  .ubar .amt { color:var(--muted); font-variant-numeric:tabular-nums; }
+  .usage .un { font-size:var(--f1); color:var(--muted); margin-top:var(--s3); }
+  .chlist { max-height:264px; overflow-y:auto; border:1px solid var(--line); border-radius:var(--r); margin-top:var(--s2); padding:var(--s1) var(--s3); font-size:var(--f2); }
+  .chlist label { display:flex; gap:var(--s2); align-items:center; margin:0; min-height:32px; color:var(--ink); font-size:var(--f2); }
+  .chlist .n { margin-left:auto; color:var(--muted); font-size:var(--f1); white-space:nowrap; text-align:right; font-variant-numeric:tabular-nums; }
+  .chlist .chdel { display:flex; gap:var(--s2); align-items:center; flex-wrap:wrap; }
+  .chlist .chdel .status { font-size:var(--f1); }
+  .kind b { color:var(--ink); }
+  .kind a { margin-left:var(--s1); }
+
+  /* Library */
+  .libitem { border:1px solid var(--line); border-radius:var(--rc); padding:var(--s3) var(--s4); margin:0 0 var(--s2); display:flex; gap:var(--s2); align-items:center; flex-wrap:wrap; }
+  .libitem .grow { flex:1; min-width:240px; }
+  .libitem .t { font-weight:600; cursor:pointer; color:var(--accent); overflow-wrap:anywhere; }
+  .libitem .m { font-variant-numeric:tabular-nums; }
+  .addpanel, .offpanel { margin:0 0 var(--s2); padding:var(--s4); }
+  .addpanel .chlist { margin:0 0 var(--s3); }
+  .bar { height:4px; background:var(--soft); border-radius:2px; margin-top:var(--s2); overflow:hidden; } .bar i { display:block; height:100%; background:var(--accent); }
+
+  /* Player */
+  .phead { display:flex; align-items:center; gap:var(--s3); }
+  .phead h2 { flex:1; min-width:0; overflow-wrap:anywhere; }
+  .pnav { margin-top:var(--s3); }
+  #pChapter { width:auto; max-width:60%; }
+  #pSleepBtn .sl { font-variant-numeric:tabular-nums; }
+  #pSleepBtn .sl:empty { display:none; }
+  #pSleepBtn:has(.sl:not(:empty)) { width:auto; padding:var(--s1) var(--s3); }
+  #pSleepBtn.on, #pMusic.on { background:var(--accent); color:var(--on-accent); border-color:var(--accent); }
+  #player { display:block; width:100%; margin-top:var(--s3); }
+  .pset { margin-top:var(--s2); font-size:var(--f2); color:var(--muted); }
+  .pset select { width:auto; }
+  .pset .follow { color:var(--muted); }
+  .readtext { margin-top:var(--s4); max-height:55vh; overflow-y:auto; border-top:1px solid var(--line); padding-top:var(--s3); font-size:var(--f4); line-height:var(--lh-read); }
+  .readtext p { margin:0 0 var(--s3); }
+  .readtext span.s { cursor:pointer; border-radius:var(--s1); transition:background .2s; }
   .readtext span.s:hover { background:var(--soft); }
   .readtext span.s.cur { background:var(--hl); }
   .readtext span.s.flash { background:var(--hl2); }
-  .marks { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
-  .mark { border:1px solid var(--line); border-radius:8px; padding:6px 10px; font-size:13px; display:flex; gap:8px; align-items:center; background:var(--soft); }
-  .mark { min-width:0; max-width:100%; box-sizing:border-box; }
-  .mark b { font-weight:600; } .mark .w { color:var(--muted); max-width:220px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .mark button { padding:3px 8px; font-size:12px; }
   .readtext span.s.pend { color:var(--pend); cursor:default; }
-  h2 { font-size: 18px; margin: 24px 0 12px; }
-  .sleepmenu { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:8px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--soft); font-size:13px; color:var(--muted); }
+  .marks { display:grid; grid-template-columns:repeat(auto-fill, minmax(256px, 1fr)); gap:var(--s2); margin-top:var(--s3); }
+  .mark { border:1px solid var(--line); border-radius:var(--r); padding:var(--s1) var(--s1) var(--s1) var(--s3); min-height:calc(var(--ctl) + 2 * var(--s1) + 2px); font-size:var(--f2); display:flex; gap:var(--s2); align-items:center; background:var(--soft); min-width:0; }
+  .mark > span:not(.w) { font-variant-numeric:tabular-nums; color:var(--muted); }
+  .mark .w { color:var(--muted); min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .mark button { margin-left:auto; }
+  .mark button + button { margin-left:0; }
+  .sleepmenu { display:flex; flex-wrap:wrap; gap:var(--s2); align-items:center; margin-top:var(--s2); padding:var(--s3); border:1px solid var(--line); border-radius:var(--r); background:var(--soft); font-size:var(--f2); color:var(--muted); }
   .sleepmenu .sleepnote { flex-basis:100%; }
-  .sleepmenu button.last { border-width:2px; font-weight:600; }
-  #pSleepBtn.on { background:var(--accent); color:var(--on-accent); font-variant-numeric:tabular-nums; }
-  .psearch { flex-wrap: nowrap; }
-  .psearch input { flex: 1; min-width: 0; padding: 7px 10px; }
-  .results { max-height: 40vh; overflow-y: auto; }
-  .results:empty { display: none; }
-  .results button.hit { display: block; width: 100%; text-align: left; background: var(--field); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin: 6px 0; font-size: 14px; line-height: 1.45; }
-  .results button.hit:hover { background: var(--soft); }
-  .results .hit b { display: block; font-size: 12px; color: var(--muted); font-weight: 600; }
-  .results mark { background: var(--hl2); color: var(--ink); border-radius: 3px; padding: 0 1px; }
-  .musicpanel { margin-top:8px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--soft); font-size:13px; color:var(--muted); display:flex; flex-direction:column; gap:6px; }
-  .musicpanel label { margin:0; color:var(--ink); font-size:13px; }
-  .musicpanel .mon { display:flex; gap:6px; align-items:center; font-size:14px; min-height:32px; }
-  .musicpanel select { width:auto; padding:4px 8px; font-size:13px; }
-  .musicpanel .mfile { display:flex; gap:8px; align-items:center; padding:4px 0; border-bottom:1px solid var(--line); }
-  .musicpanel .mname { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ink); }
-  .musicpanel .mnote { font-size:12px; }
-  #pMusic.on { background:var(--accent); color:var(--on-accent); }
-  .banner { font-size:14px; background:var(--soft); border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:8px; padding:8px 12px; margin-bottom:12px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .sleepmenu button.last { border-color:var(--accent); font-weight:600; }
+  .psearch { flex-wrap:nowrap; margin-top:var(--s3); }
+  .psearch input { flex:1; min-width:0; }
+  .results { max-height:40vh; overflow-y:auto; }
+  .results:empty { display:none; }
+  .results button.hit { display:block; width:100%; height:auto; text-align:left; background:var(--field); color:var(--ink); border:1px solid var(--line); border-radius:var(--r); padding:var(--s2) var(--s3); margin:var(--s2) 0 0; font-size:var(--f2); font-weight:400; }
+  .results button.hit:hover { background:var(--soft); }
+  .results .hit b { display:block; font-size:var(--f1); color:var(--muted); }
+  .results mark { background:var(--hl2); color:var(--ink); border-radius:2px; }
+  .musicpanel { margin-top:var(--s2); padding:var(--s3); border:1px solid var(--line); border-radius:var(--r); background:var(--soft); font-size:var(--f2); color:var(--ink); display:flex; flex-direction:column; gap:var(--s2); }
+  .musicpanel .mfields { display:grid; grid-template-columns:repeat(auto-fill, minmax(144px, 1fr)); gap:var(--s2) var(--s3); }
+  .musicpanel .mfield label { margin:0 0 var(--s1); }
+  .musicpanel .mfile { display:flex; gap:var(--s2); align-items:center; padding:var(--s1) 0; border-bottom:1px solid var(--line); }
+  .musicpanel .mname { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .musicpanel .mfile .m { font-size:var(--f1); font-variant-numeric:tabular-nums; }
+  .musicpanel .mnote { font-size:var(--f1); color:var(--muted); }
+  .pdl { margin-top:var(--s3); }
+  .banner { font-size:var(--f2); background:var(--soft); border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:var(--r); padding:var(--s2) var(--s3); margin-bottom:var(--s3); display:flex; gap:var(--s2); align-items:center; flex-wrap:wrap; }
   body.offline [data-net] { opacity:.45; pointer-events:none; }
-  .offctl { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:6px; font-size:13px; }
-  .offmark { color:var(--accent); font-weight:600; }
-  .offlist { margin-top:8px; border-top:1px solid var(--line); }
-  .offrow { padding:6px 0; border-bottom:1px solid var(--line); font-size:14px; }
+  .offctl { display:flex; gap:var(--s2); align-items:center; flex-wrap:wrap; margin-top:var(--s2); font-size:var(--f2); }
+  .offmark { color:var(--accent); font-weight:600; font-variant-numeric:tabular-nums; }
+  .offlist { margin-top:var(--s3); border-top:1px solid var(--line); }
+  .offrow { padding:var(--s2) 0; border-bottom:1px solid var(--line); font-size:var(--f2); }
   .offrow .otitle { font-weight:600; }
-  .poffline { margin-top:6px; }
-  details.pron { margin-top:14px; border:1px solid var(--line); border-radius:8px; padding:8px 12px; font-size:14px; }
+  .poffline { margin-top:var(--s1); }
+  .offinfo { margin-top:var(--s3); }
+  /* Reading mode: only the text and a small control bar, filling the screen. */
+  .pmini { display:none; }
+  #playerCard.reading { position:fixed; inset:0; z-index:50; margin:0 !important; border:0; border-radius:0; padding:0; display:flex; flex-direction:column; background:var(--bg); }
+  #playerCard.reading > :not(#pText):not(#pMini):not(audio) { display:none !important; }
+  #playerCard.reading > audio { position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; }
+  #playerCard.reading #pText { flex:1; max-height:none; margin:0; border:0; padding:var(--s5) max(var(--s5), calc((100% - 760px) / 2)); }
+  #playerCard.reading .pmini { display:flex; align-items:center; gap:var(--s3); padding:var(--s2) max(var(--s3), calc((100% - 760px) / 2)); padding-bottom:max(var(--s2), env(safe-area-inset-bottom)); border-top:1px solid var(--line); background:var(--soft); }
+  .pmini input[type=range] { flex:1; min-width:0; accent-color:var(--accent); height:28px; }
+  .pmini .t { font-size:var(--f2); color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .pmini button { width:44px; min-height:44px; padding:0; }
+  details.pron { margin-top:var(--s4); border:1px solid var(--line); border-radius:var(--r); padding:var(--s2) var(--s3); font-size:var(--f2); }
   details.pron summary { cursor:pointer; color:var(--accent); }
-  .pron table { width:100%; border-collapse:collapse; margin-top:8px; }
-  .pron td, .pron th { padding:4px 6px 4px 0; text-align:left; vertical-align:middle; }
-  .pron th { font-weight:normal; color:var(--muted); font-size:13px; }
-  .pron input[type=text] { padding:6px 8px; }
+  .pron table { width:100%; border-collapse:collapse; margin-top:var(--s2); }
+  .pron td, .pron th { padding:var(--s1) var(--s2) var(--s1) 0; text-align:left; vertical-align:middle; }
+  .pron th { font-weight:400; color:var(--muted); }
   .pron td:last-child { width:1%; white-space:nowrap; }
-  select, input[type=file] { max-width:100%; }
-  .status:empty { min-height:0; }
-  .md table { display:block; overflow-x:auto; max-width:100%; }
 
-  /* Phones (360 to 600 px): no horizontal scrolling, touch targets at least 44 px tall,
-     player controls in two rows (chapter navigation, then speed, volume and follow). */
+  /* Phones (360 to 600 px): no horizontal scrolling, 44 px touch targets, the player controls in two rows. */
+  @media (max-width: 760px) { .genrow { grid-template-columns:minmax(0,1fr); } .ubar .col { height:112px; } }
   @media (max-width: 600px) {
-    main { padding: 12px 10px 32px; }
-    .card { padding: 12px; }
-    .top { gap: 8px; }
-    .who { flex-wrap: wrap; }
-    button, select, input[type=text], input[type=password], input[type=search] { min-height: 44px; }
-    select, input[type=text], input[type=password], input[type=search], textarea { font-size: 16px !important; }   /* below 16 px iOS zooms in on focus */
-    .themes button { padding: 4px 12px; font-size: 14px; }
-    .tabs button { flex: 1; padding: 8px 4px; }
-    .wide-only { display: none; }
-    #preset { width: 100% !important; }
-    .chlist { max-height: 50vh; }
-    .chlist label { flex-wrap: wrap; min-height: 44px; gap: 2px 10px; }
-    .chlist label input { width: 20px; height: 20px; }
-    .chlist .n { flex-basis: 100%; margin-left: 30px; white-space: normal; }
-    .libitem { padding: 10px 12px; gap: 8px; }
-    .libitem .grow { min-width: 100%; }
-    .pnav select { flex: 1; min-width: 0; max-width: none !important; }
-    .pnav button { min-width: 44px; }
-    .pnav .status { flex-basis: 100%; }
-    .pset { flex-wrap: nowrap; gap: 4px; }
-    .pset #pJump { margin-left: 0 !important; flex: none; padding: 5px 8px; }
-    .pset > label[for] { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-    .pset select { flex: 1; min-width: 0; padding: 4px 6px !important; }
-    .pset #arate { flex: none; }
-    .pset .follow { white-space: nowrap; min-height: 44px; gap: 1px !important; }
-    .pset #pRead { flex: none; padding: 5px 8px; }
-    .pset .follow input { width: 20px; height: 20px; }
-    .mark { flex-wrap: wrap; flex: 1 1 100%; }
-    .mark .w { max-width: 100%; flex: 1 1 100%; order: 3; }
-    .readtext { max-height: 60vh; font-size: 18px; }
-    .musicpanel .mon { min-height: 44px; }
-    .musicpanel .mon input { width: 22px; height: 22px; }
-    details.pron summary { min-height: 44px; display: flex; align-items: center; }
-    .pron td:last-child button { min-height: 44px; }
+    :root { --ctl:44px; }
+    main { padding:var(--s3); }
+    .card, .usage, .addpanel, .offpanel { padding:var(--s3); }
+    .libitem { padding:var(--s3); }
+    .libitem .grow { min-width:100%; }
+    select, input[type=text], input[type=password], input[type=search], textarea { font-size:var(--f3) !important; }   /* below 16 px iOS zooms in on focus */
+    input[type=checkbox] { width:20px; height:20px; }
+    .tabs button { flex:1; padding:0 var(--s1); font-size:var(--f2); }
+    .top { gap:var(--s2); }
+    #brand { font-size:var(--f3); }
+    .themes button { padding:0 var(--s2); min-width:44px; }
+    .who button { padding:var(--s1) var(--s3); }
+    .wide-only { display:none; }
+    #preset { width:100% !important; }
+    .chlist { max-height:50vh; }
+    .chlist label { flex-wrap:wrap; min-height:44px; gap:0 var(--s2); padding:var(--s1) 0; }
+    .chlist .n { flex-basis:100%; margin-left:28px; white-space:normal; text-align:left; }
+    .pnav select { flex:1; min-width:0; max-width:none; }
+    .pnav .status { flex-basis:100%; }
+    .pset { flex-wrap:nowrap; gap:var(--s1); }
+    .pset > label[for] { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
+    .pset select { flex:1; min-width:0; }
+    .pset button { flex:none; padding:var(--s1) var(--s3); }
+    .pset .follow { white-space:nowrap; gap:var(--s1); }
+    .marks { grid-template-columns:minmax(0,1fr); }
+    .mark { flex-wrap:wrap; }
+    .mark .w { flex:1 1 100%; order:3; padding-bottom:var(--s1); }
+    details.pron summary { min-height:44px; display:flex; align-items:center; }
   }
 </style>
 </head>
 <body>
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <!-- Icons: 24 px grid, drawn with strokes in the text color (class "ic"). -->
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
+  <symbol id="i-prev" viewBox="0 0 24 24"><path d="M6 5v14M18 5.5 9 12l9 6.5z"/></symbol>
+  <symbol id="i-next" viewBox="0 0 24 24"><path d="M18 5v14M6 5.5 15 12l-9 6.5z"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></symbol>
+  <symbol id="i-sleep" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
+  <symbol id="i-offline" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></symbol>
+  <symbol id="i-delete" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></symbol>
+  <symbol id="i-screen" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+</svg>
 <main>
   <div id="netBanner" class="banner hidden" role="status"></div>
   <div class="top">
@@ -212,7 +277,7 @@
     <div class="themes" id="themes" role="group" aria-label="Color theme">
       <button data-theme="eye" title="Warm paper tones, less blue light">护眼</button><button data-theme="day" title="White background">白天</button><button data-theme="night" title="Dark background">黑夜</button>
     </div>
-    <div class="who hidden" id="who"><span id="whoUsage"></span><button class="ghost small" id="logoutBtn">Log out</button></div>
+    <div class="who hidden" id="who"><span id="whoUsage"></span><button class="ghost" id="logoutBtn">Log out</button></div>
   </div>
 
   <!-- Login -->
@@ -221,17 +286,17 @@
     <input type="text" id="user" autocomplete="username">
     <label for="pass">Password</label>
     <input type="password" id="pass" autocomplete="current-password">
-    <div class="row" style="margin-top:16px"><button id="loginBtn">Log in</button><span class="status" id="loginStatus"></span></div>
-    <div id="offlineEntry" class="hidden" style="margin-top:14px">
+    <div class="row mt"><button id="loginBtn">Log in</button><span class="status" id="loginStatus"></span></div>
+    <div id="offlineEntry" class="hidden mt">
       <div class="notice" id="offlineEntryNote"></div>
-      <button class="ghost" id="offlineBtn" style="margin-top:8px">Listen offline</button>
+      <div class="row mt"><button class="ghost" id="offlineBtn">Listen offline</button></div>
     </div>
   </section>
 
   <div id="appView" class="hidden" style="display:flex;flex-direction:column;flex:1">
     <div class="tabs">
       <button id="tabAudio" class="active">PDF to audio</button>
-      <button id="tabTools">Polish / Review<span class="wide-only"> (Word &amp; LaTeX)</span></button>
+      <button id="tabTools"><span>Polish / Review<span class="wide-only"> (Word &amp; LaTeX)</span></span></button>
       <button id="tabChat">Chat</button>
     </div>
 
@@ -239,31 +304,31 @@
     <section id="chatView" class="hidden">
       <div id="messages"></div>
       <div class="composer">
-        <div class="row" style="margin-bottom:8px">
+        <div class="row">
           <button class="chip" data-prompt="Polish the English of the attached manuscript and return the revised file. Keep the scientific content, equations, citations and LaTeX commands unchanged.">Polish language</button>
           <button class="chip" data-prompt="Act as a rigorous referee for a physics journal. Write a referee report on the attached manuscript: summary, major concerns, minor concerns, presentation, and suggested additional analysis. Tie each point to a specific section, equation or figure.">Referee review</button>
           <button class="chip" data-prompt="Summarize the attached manuscript in 200 words for a non-specialist physicist, then list its three main claims and the evidence given for each.">Summarize</button>
           <button class="chip" data-prompt="Check the attached text for logical gaps, unsupported claims, and inconsistencies between the abstract, results and conclusions. Quote each problematic sentence.">Check logic</button>
-          <button class="ghost small" id="newChatBtn" style="margin-left:auto">New chat</button>
+          <button class="ghost push" id="newChatBtn">New chat</button>
         </div>
-        <div class="row" style="margin-bottom:8px;font-size:13px;color:var(--muted)">
-          <label for="preset" style="margin:0">Model</label>
-          <select id="preset" style="width:auto;max-width:100%;padding:5px 8px;font-size:13px">
+        <div class="row sub">
+          <label for="preset">Model</label>
+          <select id="preset" class="auto">
             <option value="opus-low">Opus 5.5, light reasoning (default)</option>
             <option value="opus-medium">Opus 5.5, deeper reasoning (slower, may return no text on very long tasks)</option>
             <option value="sonnet-fast">Sonnet 5.5, no reasoning (fastest, cheapest)</option>
           </select>
         </div>
         <div class="attach">
-          <label for="file" style="margin:0"><input type="file" id="file" accept=".tex,.txt,.md,.bib,.docx,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document" class="hidden"><button class="chip" type="button" id="attachBtn">Attach file</button></label>
+          <label for="file" class="inline"><input type="file" id="file" accept=".tex,.txt,.md,.bib,.docx,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document" class="hidden"><button class="chip" type="button" id="attachBtn">Attach file</button></label>
           <span id="attachInfo"></span>
         </div>
-        <textarea id="prompt" placeholder="Ask anything about your manuscript, or attach a file and choose a task above. Enter to send, Shift+Enter for a new line."></textarea>
-        <div class="row" style="margin-top:8px">
+        <textarea id="prompt" placeholder="Ask about your manuscript, or attach a file and choose a task. Enter sends; Shift+Enter starts a new line."></textarea>
+        <div class="row">
           <button data-net="1" id="sendBtn">Send</button>
           <span class="status" id="chatStatus"></span>
         </div>
-        <div class="notice" style="margin-top:10px">Attached text and the conversation are stored in the administrator's Google Drive and sent to the Anthropic API. Replies take 20 s to 3 min. Keep this page open.</div>
+        <div class="sub" title="Attached text and the conversation are stored in the administrator's Google Drive and sent to the Anthropic API.">Replies take 20 s to 3 min; keep this page open. Messages are stored in the administrator's Google Drive.</div>
       </div>
     </section>
 
@@ -277,17 +342,17 @@
           <option value="polish">Polish language (returns revised file with changes written into the .docx, plus a change list)</option>
           <option value="review">Review (returns a referee-style report)</option>
         </select>
-        <div class="row" style="margin-top:16px"><button data-net="1" id="runBtn">Submit</button><span class="status" id="runStatus"></span></div>
-        <div class="notice" style="margin-top:14px">Sentence-level edits are applied automatically. For Word files the edits are written back into the original document with formatting preserved. Processing takes 1 to 5 minutes.</div>
+        <div class="row mt"><button data-net="1" id="runBtn" title="Sentence-level edits are applied automatically. For Word files they are written into the original document with its formatting.">Submit</button><span class="status" id="runStatus"></span></div>
+        <div class="sub mt">Processing takes 1 to 5 minutes.</div>
       </div>
       <section class="hidden" id="resultView">
-        <h2 id="resultTitle"></h2>
+        <h2 class="sec" id="resultTitle"></h2>
         <div class="row">
           <button id="dlBtn" class="hidden">Download revised file</button>
           <button id="dlCleanBtn" class="ghost hidden">Download Word (clean)</button>
           <button id="dlReviewBtn" class="hidden">Download report</button>
         </div>
-        <div id="resultBody" style="margin-top:16px"></div>
+        <div id="resultBody" class="mt"></div>
       </section>
     </section>
 
@@ -295,79 +360,78 @@
     <section id="audioView">
       <!-- Player (opened from the library) -->
       <section class="card hidden" id="playerCard" style="margin-bottom:16px">
-        <div class="row" style="justify-content:space-between">
-          <h2 id="pTitle" style="margin:0"></h2>
-          <button class="ghost small" id="pClose">Close</button>
+        <div class="phead">
+          <h2 id="pTitle"></h2>
+          <button class="ghost icon" id="pClose" title="Close the player" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-close"/></svg></button>
         </div>
-        <div class="row pnav" style="margin-top:10px">
-          <button class="ghost small" id="pPrev" title="Previous chapter" aria-label="Previous chapter">◀</button>
-          <select id="pChapter" style="width:auto;max-width:60%;padding:5px 8px" aria-label="Chapter"></select>
-          <button class="ghost small" id="pNext" title="Next chapter" aria-label="Next chapter">▶</button>
-          <button class="ghost small" id="pSleepBtn" title="Sleep timer" aria-label="Sleep timer" aria-haspopup="true" aria-expanded="false" aria-controls="pSleepMenu">☾</button>
+        <div class="row pnav">
+          <button class="ghost icon" id="pPrev" title="Previous chapter" aria-label="Previous chapter"><svg class="ic" aria-hidden="true"><use href="#i-prev"/></svg></button>
+          <select id="pChapter" aria-label="Chapter"></select>
+          <button class="ghost icon" id="pNext" title="Next chapter" aria-label="Next chapter"><svg class="ic" aria-hidden="true"><use href="#i-next"/></svg></button>
+          <button class="ghost icon" id="pSleepBtn" title="Sleep timer" aria-label="Sleep timer" aria-haspopup="true" aria-expanded="false" aria-controls="pSleepMenu"><svg class="ic" aria-hidden="true"><use href="#i-sleep"/></svg><span class="sl"></span></button>
           <span class="status" id="pStatus"></span>
         </div>
         <div id="pSleepMenu" class="sleepmenu hidden" role="group" aria-label="Sleep timer">
           <span class="sleepnote" id="pSleepNote">Stop playback after:</span>
-          <button class="ghost small" data-sleep="15">15 min</button>
-          <button class="ghost small" data-sleep="30">30 min</button>
-          <button class="ghost small" data-sleep="60">60 min</button>
-          <button class="ghost small" data-sleep="end">End of chapter</button>
-          <button class="small" data-sleep="off" id="pSleepCancel">Cancel timer</button>
+          <button class="ghost" data-sleep="15">15 min</button>
+          <button class="ghost" data-sleep="30">30 min</button>
+          <button class="ghost" data-sleep="60">60 min</button>
+          <button class="ghost" data-sleep="end">End of chapter</button>
+          <button class="ghost" data-sleep="off" id="pSleepCancel">Cancel timer</button>
         </div>
-        <audio id="player" controls preload="auto" style="width:100%;margin-top:10px"></audio>
-        <div class="row pset" style="margin-top:6px;font-size:13px;color:var(--muted)">
-          <label for="arate" style="margin:0">Speed</label>
-          <select id="arate" style="width:auto;padding:4px 8px;font-size:13px">
+        <audio id="player" controls preload="auto"></audio>
+        <div class="row pset">
+          <label for="arate">Speed</label>
+          <select id="arate">
             <option value="0.85">0.85×</option><option value="1" selected>1×</option><option value="1.15">1.15×</option>
             <option value="1.3">1.3×</option><option value="1.5">1.5×</option><option value="1.75">1.75×</option><option value="2">2×</option>
           </select>
-          <label class="follow" style="margin:0;display:flex;gap:4px;align-items:center" title="Keep the screen on (no auto-lock) while audio plays"><input type="checkbox" id="pAwake" checked aria-label="Keep the screen on while audio plays"> <span aria-hidden="true">☀</span><span class="wide-only">Screen on</span></label>
-          <button class="ghost small" id="pMusic" title="Background music" aria-label="Background music" aria-expanded="false" aria-controls="pMusicPanel">♪<span class="wide-only"> Music</span></button>
-          <button class="ghost small" id="pJump" style="margin-left:auto" title="Scroll the text to the sentence being read">Jump<span class="wide-only"> to current</span></button>
-          <button class="ghost small" id="pRead" title="Show only the text, with a small progress bar">Full<span class="wide-only"> screen</span></button>
+          <label class="check follow" title="Keep the screen on (no auto-lock) while audio plays"><input type="checkbox" id="pAwake" checked aria-label="Keep the screen on while audio plays"><svg class="ic" aria-hidden="true"><use href="#i-screen"/></svg><span class="wide-only">Screen on</span></label>
+          <button class="ghost" id="pMusic" title="Background music" aria-label="Background music" aria-expanded="false" aria-controls="pMusicPanel"><svg class="ic" aria-hidden="true"><use href="#i-music"/></svg><span class="wide-only">Music</span></button>
+          <button class="ghost push" id="pJump" title="Scroll the text to the sentence being read"><span>Jump<span class="wide-only"> to current</span></span></button>
+          <button class="ghost" id="pRead" title="Show only the text, with a small progress bar"><span>Full<span class="wide-only"> screen</span></span></button>
         </div>
         <div id="pMusicPanel" class="musicpanel hidden" role="group" aria-label="Background music">
-          <label class="mon"><input type="checkbox" id="mOn"> Music under the narration</label>
-          <div class="row">
-            <label for="mSource">Source</label>
-            <select id="mSource"><option value="lofi">Lofi library</option><option value="mine">My music</option><option value="gen">Generated</option></select>
-            <span id="mLofiRow" class="row"><label for="mLofi">Track</label>
-            <select id="mLofi"><option value="all">All tracks</option></select></span>
-            <span id="mGenRow" class="row"><label for="mPreset">Style</label>
-            <select id="mPreset"><option value="rain">Rain</option><option value="night">Night</option><option value="cafe">Café</option></select></span>
-            <span id="mOrderRow" class="row"><label for="mOrder">Order</label>
-            <select id="mOrder"><option value="order">In order</option><option value="shuffle">Shuffle</option></select></span>
-            <label for="mLevel">Level</label>
-            <select id="mLevel"><option value="quiet">Quiet</option><option value="normal">Normal</option><option value="louder">Louder</option></select>
+          <label class="check mon"><input type="checkbox" id="mOn"> Music under the narration</label>
+          <div class="mfields">
+            <div class="mfield"><label for="mSource">Source</label>
+            <select id="mSource"><option value="lofi">Lofi library</option><option value="mine">My music</option><option value="gen">Generated</option></select></div>
+            <div class="mfield" id="mLofiRow"><label for="mLofi">Track</label>
+            <select id="mLofi"><option value="all">All tracks</option></select></div>
+            <div class="mfield" id="mGenRow"><label for="mPreset">Style</label>
+            <select id="mPreset"><option value="rain">Rain</option><option value="night">Night</option><option value="cafe">Café</option></select></div>
+            <div class="mfield" id="mOrderRow"><label for="mOrder">Order</label>
+            <select id="mOrder"><option value="order">In order</option><option value="shuffle">Shuffle</option></select></div>
+            <div class="mfield"><label for="mLevel">Level</label>
+            <select id="mLevel"><option value="quiet">Quiet</option><option value="normal">Normal</option><option value="louder">Louder</option></select></div>
           </div>
-          <div id="mLofiNote" class="mnote hidden">Lofi music by Holizna, public domain (CC0), loaded from this site as needed.</div>
+          <div id="mLofiNote" class="mnote hidden" title="Public domain (CC0), loaded from this site as needed.">Music by Holizna (CC0).</div>
           <div id="mMine" class="hidden">
             <div id="mFiles"></div>
-            <div class="row">
+            <div class="row mt">
               <input type="file" id="mAdd" accept="audio/*" multiple class="hidden">
-              <button class="ghost small" type="button" id="mAddBtn">Add files</button>
+              <button class="ghost" type="button" id="mAddBtn" title="Your files stay in this browser and are never uploaded.">Add files</button>
             </div>
-            <div class="mnote">Your files stay in this browser and are never uploaded.</div>
           </div>
           <div class="status" id="mStatus" aria-live="polite"></div>
         </div>
         <div id="pMarks" class="marks"></div>
-        <form class="row psearch" id="pSearchForm" role="search" style="margin-top:10px">
+        <form class="row psearch" id="pSearchForm" role="search">
           <input type="search" id="pSearch" placeholder="Search this book" aria-label="Search this book" autocomplete="off" enterkeyhint="search">
-          <button class="ghost small" type="submit" id="pSearchBtn">Search</button>
+          <button class="ghost icon" type="submit" id="pSearchBtn" title="Search" aria-label="Search"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg></button>
         </form>
         <div class="status" id="pSearchInfo" aria-live="polite"></div>
         <div id="pResults" class="results"></div>
         <div id="pText" class="readtext"></div>
         <div id="pMini" class="pmini" role="group" aria-label="Playback">
-          <button class="small" id="mPlay" aria-label="Play">▶</button>
+          <button id="mPlay" aria-label="Play"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg></button>
           <span class="t" id="mTime">0:00 / 0:00</span>
           <input type="range" id="mSeek" min="0" max="1000" value="0" step="1" aria-label="Position in the chapter">
-          <button class="ghost small" id="mExit" aria-label="Leave full screen">Exit</button>
+          <button class="ghost" id="mExit" title="Leave full screen" aria-label="Leave full screen"><svg class="ic" aria-hidden="true"><use href="#i-close"/></svg></button>
         </div>
-        <div class="row" style="margin-top:10px">
-          <button class="ghost small" id="dlAudioBtn">Download MP3</button>
-          <button class="ghost small" id="dlScriptBtn">Download text</button>
+        <div class="row pdl">
+          <button class="ghost" id="dlAudioBtn">Download MP3</button>
+          <button class="ghost" id="dlScriptBtn">Download text</button>
         </div>
         <div id="pOffline" class="poffline"></div>
       </section>
@@ -377,18 +441,18 @@
       <div class="card">
         <label for="apdf">PDF</label>
         <input type="file" id="apdf" accept=".pdf,application/pdf">
-        <div id="kindLine" class="notice hidden" style="margin-top:12px;color:var(--ink)"></div>
-        <div id="bookPanel" class="hidden" style="margin-top:12px">
-          <div class="row" style="font-size:13px;color:var(--muted)">
-            <span id="bookSummary"></span>
-            <button class="ghost small" id="bookAll" style="margin-left:auto">Select all</button>
-            <button class="ghost small" id="bookNone">Select none</button>
+        <div id="kindLine" class="notice kind hidden mt"></div>
+        <div id="bookPanel" class="hidden mt">
+          <div class="row sub">
+            <span id="bookSummary" class="grow1"></span>
+            <button class="ghost" id="bookAll">Select all</button>
+            <button class="ghost" id="bookNone">Select none</button>
           </div>
           <div id="bookChapters" class="chlist"></div>
         </div>
         <label for="avoice">Voice</label>
         <div class="row" style="flex-wrap:nowrap">
-        <select id="avoice" style="flex:1">
+        <select id="avoice" class="grow1">
           <optgroup label="Microsoft (best for Chinese)" id="azVoices" class="hidden" disabled>
             <option value="az:zh-CN-YunxiNeural">云希 Yunxi (男, 叙述)</option>
             <option value="az:zh-CN-YunjianNeural">云健 Yunjian (男, 浑厚)</option>
@@ -413,7 +477,7 @@
         </div>
         <details class="pron hidden" id="pronBox">   <!-- hidden for now; the list still applies -->
           <summary id="pronSummary">Pronunciation of terms</summary>
-          <div class="notice" style="margin-top:8px">How technical terms are spoken, for example "MoS2" as "M O S two" or "CVD" as "C V D". Applied to books when they are converted; the text in the player keeps the original spelling. Papers and theses are not covered yet. The list is stored in this browser only, under your user name, until the server can keep it with your account.</div>
+          <div class="notice mt">How technical terms are spoken, for example "MoS2" as "M O S two" or "CVD" as "C V D". Applied to books when they are converted; the text in the player keeps the original spelling. Papers and theses are not covered yet. The list is stored in this browser only, under your user name, until the server can keep it with your account.</div>
           <table>
             <thead><tr><th>Term</th><th>Spoken as</th><th></th></tr></thead>
             <tbody id="pronList"></tbody>
@@ -425,8 +489,7 @@
           </table>
           <div class="status" id="pronStatus"></div>
         </details>
-        <div class="row" style="margin-top:16px"><button data-net="1" id="audioBtn">Generate audio</button><span class="status" id="audioStatus"></span></div>
-        <div class="notice" style="margin-top:14px">The type of document is detected automatically. Papers: Claude rewrites the PDF into a listening script (references and citation numbers skipped; equations and units read in words), then Google Chirp 3 HD reads it. Books and other text: read as written, chapter by chapter, with running headers and page numbers removed. English, Japanese and Chinese are detected automatically. Every conversion is saved to your library below, together with your listening position, so it never has to be converted twice. You can close this page while a conversion runs.</div>
+        <div class="row mt"><button data-net="1" id="audioBtn" title="Papers are rewritten by Claude into a listening script (references skipped, equations read in words); books are read as written, chapter by chapter. English, Japanese and Chinese are detected automatically. Conversions are kept in your library with your listening position.">Generate audio</button><span class="status" id="audioStatus"></span></div>
       </div>
       <aside class="card usage hidden" id="usageCard" aria-label="Speech used">
         <div class="uh">Speech used</div>
@@ -436,14 +499,14 @@
       </div>
 
       <!-- Library -->
-      <h2>Your audio library <span class="status sr-only" id="libUsage"></span></h2>
+      <h2 class="sec">Your audio library <span class="status sr-only" id="libUsage"></span></h2>
       <div id="libNote" class="status"></div>
       <div id="library"><div class="status">Loading...</div></div>
       <div id="sharedCard" class="hidden">
-        <h2 style="margin-top:22px">Shared library <span class="status" style="font-weight:normal;font-size:13px;margin-left:8px">Shared by accounts of this site; listen only</span></h2>
+        <h2 class="sec">Shared library <span class="m" title="Shared by accounts of this site">Listen only</span></h2>
         <div id="sharedLib"></div>
       </div>
-      <div id="offlineInfo" class="notice" style="margin-top:12px"></div>
+      <div id="offlineInfo" class="sub offinfo"></div>
     </section>
   </div>
 </main>
@@ -492,6 +555,21 @@ function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
 function setStatus(el, msg, isErr) { el.textContent = msg || ''; el.classList.toggle('err', !!isErr); }
 /** New element; text is set as textContent, never parsed as HTML. */
 function el(tag, cls, text) { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
+/** An icon from the sprite at the top of the page, drawn in the text color. */
+function icon(name) {
+  const NS = 'http://www.w3.org/2000/svg', s = document.createElementNS(NS, 'svg'), u = document.createElementNS(NS, 'use');
+  s.setAttribute('class', 'ic'); s.setAttribute('aria-hidden', 'true'); u.setAttribute('href', '#i-' + name); s.appendChild(u);
+  return s;
+}
+/** Swaps the icon of a button (play and pause). */
+function setIcon(btn, name) { btn.querySelector('use').setAttribute('href', '#i-' + name); }
+/** A button with an icon and a text, or only an icon when label is given (then label is its accessible name and tooltip). */
+function iconButton(cls, name, text, label) {
+  const b = el('button', cls + (text ? '' : ' icon')); b.appendChild(icon(name));
+  if (text) b.appendChild(el('span', null, text));
+  if (label) { b.setAttribute('aria-label', label); b.title = label; }
+  return b;
+}
 function b64(bytes) {
   let s = '';
   for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
@@ -843,7 +921,7 @@ function renderKind() {
   line.appendChild(el('span', 'm', '(' + docWhy + ') '));
   const alt = docKind === 'book' ? (docPages <= 160 ? 'paper' : 'thesis') : 'book';
   const sw = el('a', null, alt === 'book' ? 'Read as written instead' : alt === 'thesis' ? 'Use Claude per chapter instead' : 'Use paper mode instead');
-  sw.href = '#'; sw.style.color = 'var(--accent)'; sw.style.fontSize = '13px';
+  sw.href = '#';
   sw.onclick = (e) => { e.preventDefault(); docKind = alt; docWhy = 'chosen by you'; defaultSelection(); renderKind(); renderBookPanel(); };
   line.appendChild(sw);
 }
@@ -1207,11 +1285,11 @@ function renderShared() {
     row.appendChild(g);
     const nOff = offCount(it);
     if (nOff) g.lastChild.textContent += ' · ' + (nOff === savableChapters(it).length ? '✓ saved offline' : '✓ ' + nOff + ' of ' + savableChapters(it).length + ' chapters saved offline');
-    const open = el('button', 'small', it.pos ? 'Resume' : 'Listen'); open.onclick = () => openItem(it.id, it.owner);
+    const open = iconButton('', 'play', it.pos ? 'Resume' : 'Listen'); open.onclick = () => openItem(it.id, it.owner);
     open.disabled = !(it.chapters || []).some((ch, i) => chapterReadyCount(it, i) > 0) || (!isOnline() && !nOff);
     row.appendChild(open);
     if (savableChapters(it).length && (isOnline() || nOff)) {
-      const off = el('button', 'ghost small', nOff ? 'Offline ✓' : 'Offline'); off.title = 'Save for offline listening, or remove the offline copy';
+      const off = iconButton('ghost', 'offline', 'Offline'); off.title = 'Save for offline listening, or remove the offline copy';
       off.onclick = () => toggleOfflinePanel(it, row); row.appendChild(off);
     }
     box.appendChild(row);
@@ -1272,33 +1350,33 @@ function renderLibrary() {
     g.appendChild(el('div', 'm', meta.join(' · ')));
     if (it.state === 'processing') {
       const ready = (it._ready || []).reduce((a, b) => a + b, 0), total = (it.chapters || []).reduce((a, c) => a + c.n, 0);
-      g.appendChild(el('div', 'm', (it._progress || 'Converting...') + (ready && total ? ' · you can start listening to finished chapters' : '') + ' · you can close this page while a conversion runs'));
+      g.appendChild(el('div', 'm', (it._progress || 'Converting...') + (ready && total ? ' · finished chapters can be played' : '')));
       const bar = el('div', 'bar'); const i = el('i'); i.style.width = (total ? Math.round(100 * ready / total) : 3) + '%'; bar.appendChild(i); g.appendChild(bar);
     }
     if (it.state === 'error') g.appendChild(el('div', 'm', 'Failed: ' + (it.error || 'unknown error')));
     row.appendChild(g);
-    const open = el('button', 'small', it.pos ? 'Resume' : 'Listen'); open.onclick = () => openItem(it.id);
+    const open = iconButton('', 'play', it.pos ? 'Resume' : 'Listen'); open.onclick = () => openItem(it.id);
     open.disabled = !(it.chapters || []).some((ch, i) => chapterReadyCount(it, i) > 0) || (!isOnline() && !nOff);
     if (open.disabled && !isOnline()) open.title = 'Not saved for offline listening';
     row.appendChild(open);
     if (savableChapters(it).length && (isOnline() || nOff)) {
-      const off = el('button', 'ghost small', nOff ? 'Offline ✓' : 'Offline'); off.title = 'Save for offline listening, or remove the offline copy';
+      const off = iconButton('ghost', 'offline', 'Offline'); off.title = 'Save for offline listening, or remove the offline copy';
       off.onclick = () => toggleOfflinePanel(it, row); row.appendChild(off);
     }
     if (it.kind === 'book' && it.state !== 'processing') {
-      const add = el('button', 'ghost small', chaptersDone(it) < it.chapters.length ? 'Add chapters' : 'Chapters'); add.dataset.net = '1';
+      const add = el('button', 'ghost', chaptersDone(it) < it.chapters.length ? 'Add chapters' : 'Chapters'); add.dataset.net = '1';
       add.onclick = () => toggleAddPanel(it, row); row.appendChild(add);
     }
     if (it.state !== 'processing') {
-      const sh = el('button', 'ghost small', it.shared ? 'Unshare' : 'Share'); sh.dataset.net = '1';
-      sh.title = it.shared ? 'Shared with every account of this site; click to stop sharing' : 'Let every account of this site listen to this';
+      const sh = iconButton('ghost' + (it.shared ? ' on' : ''), 'share', null, it.shared ? 'Unshare' : 'Share'); sh.dataset.net = '1';
+      sh.title = it.shared ? 'Shared with every account of this site; click to stop sharing' : 'Share: let every account of this site listen to this';
       sh.onclick = async () => {
         sh.disabled = true;
         try { await api({ action: 'audio_share', token, id: it.id, shared: !it.shared }); await loadLibrary(); }
         catch (e) { setStatus($('audioStatus'), e.message, true); sh.disabled = false; }
       };
       row.appendChild(sh);
-      const del = el('button', 'ghost small', 'Delete'); del.dataset.net = '1';
+      const del = iconButton('danger', 'delete', null, 'Delete'); del.dataset.net = '1'; del.title = 'Delete "' + it.title + '" and its audio';
       del.onclick = async () => {
         if (!window.confirm('Delete "' + it.title + '" and its audio from Drive?')) return;
         try { await api({ action: 'audio_delete', token, id: it.id }); if (P && P.item.id === it.id) closePlayer(); loadLibrary(); }
@@ -1325,10 +1403,9 @@ function chapterReadyCount(it, c) {
 function toggleAddPanel(it, row) {
   const old = row.nextSibling && row.nextSibling.classList && row.nextSibling.classList.contains('addpanel') ? row.nextSibling : null;
   if (old) { old.remove(); return; }
-  const box = el('div', 'card addpanel'); box.style.margin = '-4px 0 12px';
-  box.appendChild(el('div', 'm', 'Choose chapters of "' + it.title + '" to convert. Converted chapters are ticked and kept; ' +
-    'use Delete audio to remove one (it can be converted again later).'));
+  const box = el('div', 'card addpanel');
   const list = el('div', 'chlist'); const picks = [];
+  list.title = 'Converted chapters are ticked and kept. Delete audio removes one; it can be converted again later.';
   it.chapters.forEach((ch, i) => {
     const lab = el('label'); const cb = el('input'); cb.type = 'checkbox';
     const done = ch.status === 'done' || ch.status === 'queued';
@@ -1339,8 +1416,8 @@ function toggleAddPanel(it, row) {
     list.appendChild(lab);
   });
   box.appendChild(list);
-  const row2 = el('div', 'row'); row2.style.marginTop = '10px';
-  const voice = $('avoice').cloneNode(true); voice.removeAttribute('id'); voice.style.width = 'auto'; voice.value = it.voice || 'Charon';
+  const row2 = el('div', 'row');
+  const voice = $('avoice').cloneNode(true); voice.removeAttribute('id'); voice.className = 'auto'; voice.value = it.voice || 'Charon';
   voice.querySelectorAll('[id]').forEach((x) => x.removeAttribute('id'));
   if (!voice.value) voice.value = 'Charon';
   voice.onchange = () => sum();
@@ -1360,18 +1437,19 @@ function toggleAddPanel(it, row) {
       box.remove(); await loadLibrary();
     } catch (e) { setStatus(st, e.message.replace(/(\d{4,}) characters/g, (m, n) => fmtK(Number(n))), true); go.disabled = false; }
   };
-  row2.appendChild(el('span', 'm', 'Voice')); row2.appendChild(voice); row2.appendChild(go); row2.appendChild(st);
+  const vl = el('label', null, 'Voice'); voice.id = 'addVoice' + it.id; vl.htmlFor = voice.id;
+  row2.appendChild(vl); row2.appendChild(voice); row2.appendChild(go); row2.appendChild(st);
   box.appendChild(row2); row.after(box); sum();
 }
 
 /** "Delete audio" for one converted chapter, confirmed inline (no browser dialog). */
 function chapterDeleteButton(it, c, panel) {
   const wrap = el('span', 'chdel');
-  const b = el('button', 'ghost small', 'Delete audio');
+  const b = el('button', 'danger', 'Delete audio');
   b.setAttribute('aria-label', 'Delete audio of ' + it.chapters[c].title);
   const ask = () => {
     wrap.textContent = '';
-    const yes = el('button', 'small danger', 'Confirm delete'), no = el('button', 'ghost small', 'Cancel');
+    const yes = el('button', 'danger', 'Confirm delete'), no = el('button', 'ghost', 'Cancel');
     no.onclick = (e) => { e.preventDefault(); wrap.textContent = ''; wrap.appendChild(b); };
     yes.onclick = async (e) => {
       e.preventDefault(); yes.disabled = no.disabled = true; yes.textContent = 'Deleting...';
@@ -1557,14 +1635,14 @@ function offlineControls(it, onlyChapter, inPlayer) {
   if (missing.length) {
     const what = onlyChapter != null ? 'Save chapter for offline' : chs.length === 1 ? 'Save for offline'
       : saved.length ? 'Save the other chapters for offline' : inPlayer ? 'Save whole book for offline' : 'Save all for offline';
-    const b = el('button', 'small', what + ' (about ' + fmtBytes(sum(missing)) + ')');
+    const b = iconButton('ghost', 'offline', what + ' (about ' + fmtBytes(sum(missing)) + ')');
     b.dataset.net = '1';
     b.onclick = () => run(() => saveOffline(it, missing, say));
     box.appendChild(b);
   }
   if (saved.length) {
     box.appendChild(el('span', 'offmark', '✓ ' + (onlyChapter != null || chs.length === 1 ? 'Saved offline' : saved.length + ' of ' + chs.length + ' saved offline') + ' (' + fmtBytes(sum(saved)) + ')'));
-    const r = el('button', 'ghost small', onlyChapter != null || chs.length === 1 ? 'Remove offline copy' : inPlayer ? 'Remove offline copies of this book' : 'Remove offline copies');
+    const r = el('button', 'ghost', onlyChapter != null || chs.length === 1 ? 'Remove offline copy' : inPlayer ? 'Remove offline copies of this book' : 'Remove offline copies');
     r.onclick = () => run(() => offRemove(saved.map((c) => offKey(it, c))));
     box.appendChild(r);
   }
@@ -1578,13 +1656,12 @@ function toggleOfflinePanel(it, row) {
   const pid = (ownerOf(it).owner || '') + '|' + it.id;
   const old = row.parentNode.querySelector('.offpanel[data-id="' + CSS.escape(pid) + '"]');
   if (old) { old.remove(); return; }
-  const box = el('div', 'card offpanel'); box.dataset.id = pid; box.style.margin = '-4px 0 12px';
+  const box = el('div', 'card offpanel'); box.dataset.id = pid;
   fillOfflinePanel(box, it);
   row.after(box);
 }
 function fillOfflinePanel(box, it) {
   box.textContent = '';
-  box.appendChild(el('div', 'm', 'Keep "' + it.title + '" on this device to listen without a connection.'));
   box.appendChild(offlineControls(it));
   const chs = savableChapters(it);
   if (chs.length > 1) {
@@ -1672,7 +1749,7 @@ function renderNet() {
   if (!on) ban.appendChild(document.createTextNode('You are offline. Chapters saved for offline listening can be played; everything else needs a connection. Positions and bookmarks are sent when the connection returns.'));
   else if (offlineMode) {
     ban.appendChild(document.createTextNode('The connection is back. Log in to send the positions saved while offline and to use the other functions. '));
-    const b = el('button', 'small', 'Log in'); b.onclick = () => { $('appView').classList.add('hidden'); $('who').classList.add('hidden'); $('loginView').classList.remove('hidden'); if (P) closePlayer(); };
+    const b = el('button', null, 'Log in'); b.onclick = () => { $('appView').classList.add('hidden'); $('who').classList.add('hidden'); $('loginView').classList.remove('hidden'); if (P) closePlayer(); };
     ban.appendChild(b);
   }
   ban.classList.toggle('hidden', !ban.childNodes.length);
@@ -2170,7 +2247,7 @@ function updateMini() {
   const d = isFinite(player.duration) ? player.duration : 0, t = player.currentTime || 0;
   $('mTime').textContent = fmtTime(t) + ' / ' + fmtTime(d);
   if (!seeking) $('mSeek').value = d ? Math.round(t / d * 1000) : 0;
-  $('mPlay').textContent = player.paused ? '▶' : '❚❚';
+  setIcon($('mPlay'), player.paused ? 'play' : 'pause');
   $('mPlay').setAttribute('aria-label', player.paused ? 'Play' : 'Pause');
 }
 function enterReading() {
@@ -2358,9 +2435,10 @@ function renderSleep() {
   const btn = $('pSleepBtn'), left = sleepLeft();
   btn.classList.toggle('on', !!sleepT);
   let label = 'Sleep timer';
-  if (!sleepT) btn.textContent = '☾';
-  else if (sleepT.mode === 'end') { btn.textContent = '☾ End'; label = 'Sleep timer: stops at the end of this chapter'; }
-  else { btn.textContent = '☾ ' + fmtTime(Math.ceil(left)); label = 'Sleep timer: stops in ' + fmtTime(Math.ceil(left)); }
+  const sl = btn.querySelector('.sl');
+  if (!sleepT) sl.textContent = '';
+  else if (sleepT.mode === 'end') { sl.textContent = 'End'; label = 'Sleep timer: stops at the end of this chapter'; }
+  else { sl.textContent = fmtTime(Math.ceil(left)); label = 'Sleep timer: stops in ' + fmtTime(Math.ceil(left)); }
   btn.title = label; btn.setAttribute('aria-label', label);
   $('pSleepNote').textContent = sleepT ? label + (player.paused && sleepT.mode === 'time' ? ' of listening (paused)' : '') + '.' : 'Stop playback after:';
   $('pSleepCancel').classList.toggle('hidden', !sleepT);
@@ -2769,7 +2847,7 @@ async function renderMyMusic() {
     const r = el('div', 'mfile');
     r.appendChild(el('span', 'mname', f.name));
     r.appendChild(el('span', 'm', fmtMB(f.size)));
-    const x = el('button', 'ghost small', 'Remove'); x.setAttribute('aria-label', 'Remove ' + f.name);
+    const x = iconButton('danger', 'delete', null, 'Remove ' + f.name);
     x.onclick = async () => {
       const db = await musicDb(), tx = db.transaction('files', 'readwrite'); tx.objectStore('files').delete(f.key);
       await new Promise((res) => { tx.oncomplete = res; tx.onerror = res; });
@@ -2866,8 +2944,8 @@ function renderMarks() {
     d.appendChild(el('b', null, name));
     d.appendChild(el('span', null, m ? markText(m) : 'empty'));
     if (m && m.label) { const w = el('span', 'w', shortLabel(m.label)); w.title = m.label; d.appendChild(w); }
-    if (m) { const go = el('button', 'small', 'Go'); go.onclick = () => goToMark(m); d.appendChild(go); }
-    if (slot !== 'last') { const sv = el('button', 'ghost small', m ? 'Replace' : 'Save here'); sv.title = 'Save the current position as ' + name; sv.onclick = () => saveMark(slot); d.appendChild(sv); }
+    if (m) { const go = el('button', null, 'Go'); go.onclick = () => goToMark(m); d.appendChild(go); }
+    if (slot !== 'last') { const sv = el('button', 'ghost', m ? 'Replace' : 'Save here'); sv.title = 'Save the current position as ' + name; sv.onclick = () => saveMark(slot); d.appendChild(sv); }
     box.appendChild(d);
   });
 }
@@ -2992,7 +3070,7 @@ function renderAttach() {
   const chip = el('span', 'chipfile');
   chip.appendChild(el('b', null, pendingDoc.name));
   chip.appendChild(el('span', null, fmtK(pendingDoc.text.length)));
-  const x = el('span', 'x', '✕'); x.title = 'Remove'; x.onclick = () => { pendingDoc = null; $('file').value = ''; renderAttach(); };
+  const x = iconButton('ghost', 'close', null, 'Remove the attached file'); x.onclick = () => { pendingDoc = null; $('file').value = ''; renderAttach(); };
   chip.appendChild(x); info.appendChild(chip);
 }
 $('attachBtn').onclick = () => $('file').click();
