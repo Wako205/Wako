@@ -12,6 +12,7 @@ test('EN/中文 switch next to Log out: the interface turns Chinese and back, bo
   await expect(page.locator('#logoutBtn')).toHaveText('退出登录');
   await expect(page.locator('#tabAudio')).toHaveText('PDF 转音频');
   await expect(page.locator('#tabTrans')).toHaveText('翻译');
+  expect(await page.locator('#themes button').allTextContents()).toEqual(['护眼', '白天', '黑夜']);
   await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
   await expect(page.locator('#library .libitem .t').first()).toHaveText(title);           // a title is content, not interface
   // Text the page sets later is translated as it appears.
@@ -27,6 +28,7 @@ test('EN/中文 switch next to Log out: the interface turns Chinese and back, bo
   await page.click('#langBtn');
   await expect(page.locator('#logoutBtn')).toHaveText('Log out');
   await expect(page.locator('#tabAudio')).toHaveText('PDF to audio');
+  expect(await page.locator('#themes button').allTextContents()).toEqual(['Eye care', 'Day', 'Night']);
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
 });
 

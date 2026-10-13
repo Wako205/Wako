@@ -6,10 +6,10 @@ test('eye care is the default and listed first; white and night are kept after a
   await page.goto(INDEX_URL);
   expect(await page.evaluate(() => document.documentElement.getAttribute('data-theme'))).toBe('eye');
   expect(await bg(page)).toBe('rgb(246, 237, 214)');
-  await expect(page.locator('#themes button.on')).toHaveText('护眼');
-  expect(await page.locator('#themes button').allTextContents()).toEqual(['护眼', '白天', '黑夜']);
+  await expect(page.locator('#themes button.on')).toHaveText('Eye care');
+  expect(await page.locator('#themes button').allTextContents()).toEqual(['Eye care', 'Day', 'Night']);
 
-  for (const [label, theme, color] of [['黑夜', 'night', 'rgb(0, 0, 0)'], ['护眼', 'eye', 'rgb(246, 237, 214)']]) {
+  for (const [label, theme, color] of [['Night', 'night', 'rgb(0, 0, 0)'], ['Eye care', 'eye', 'rgb(246, 237, 214)']]) {
     await page.click('#themes button:text("' + label + '")');
     expect(await page.evaluate(() => document.documentElement.getAttribute('data-theme'))).toBe(theme);
     expect(await bg(page)).toBe(color);
@@ -19,7 +19,7 @@ test('eye care is the default and listed first; white and night are kept after a
     expect(await bg(page)).toBe(color);
   }
 
-  await page.click('#themes button:text("白天")');
+  await page.click('#themes button:text("Day")');
   await page.reload();
   expect(await page.evaluate(() => document.documentElement.getAttribute('data-theme'))).toBeNull();
   expect(await page.evaluate(() => localStorage.getItem('mp_theme'))).toBe('day');
