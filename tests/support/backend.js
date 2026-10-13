@@ -107,7 +107,16 @@ class MockBackend {
       case 'audio_preview': return { data: this.mp3.toString('base64'), lang: 'en-US', chars: body.text.length };
       case 'audio_voices': return { voices: [] };
       case 'audio_outline': return { chapters: [] };
-      case 'status': return { state: 'done', progress: '' };
+      case 'translate_revise':
+        this.trRevise = body;
+        return { jobId: 'trrevise1', count: body.items.length };
+      case 'status':
+        if (body.jobId === 'trrevise1' && this.trRevise) {
+          const r = this.trRevise;
+          return { state: 'done', mode: 'trrevise', cost: 0.012,
+                   out: r.items.map((x) => (r.revise || x.missing ? '[claude] ' + x.src : x.mt)) };
+        }
+        return { state: 'done', progress: '' };
       default: return { ok: false, error: 'Unknown action ' + body.action };
     }
   }

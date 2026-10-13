@@ -68,6 +68,9 @@
   /* chat */
   #chatView { display:flex; flex-direction:column; flex:1; min-height: 60vh; }
   #trText { width:100%; margin:10px 0; font-size:16px; line-height:1.6; }
+  .trrev { display:flex; align-items:center; gap:8px; margin:0 0 10px; font-size:14px; }
+  .trrev input { width:auto; margin:0; }
+  .trby { text-align:right; font-size:12px; color:var(--muted); margin:6px 4px 0; }
   .trhead select { width:auto; min-width:150px; }
   .trout { margin-top:12px; font-size:16px; line-height:1.7; }
   .trout .tp { display:grid; grid-template-columns:1fr; gap:4px 24px; padding:6px 0; border-bottom:1px solid var(--line); }
@@ -328,12 +331,14 @@
           <span class="status" id="trFileName"></span>
         </div>
         <textarea id="trText" rows="8" placeholder="Paste text, or open a .txt, .md, .tex, .docx or .pdf file" aria-label="Text to translate"></textarea>
+        <label class="trrev"><input type="checkbox" id="trRevise" checked> Revise with Claude <span class="status">(better wording; uses your Claude quota)</span></label>
         <div class="row">
           <button id="trBtn">Translate</button>
           <span class="status" id="trStatus" role="status"></span>
           <span class="status" id="trUsage" style="margin-left:auto"></span>
         </div>
       </div>
+      <p class="trby">Powered by Azure AI Translator &amp; Claude</p>
       <div id="trResult" class="card hidden">
         <div class="row">
           <button class="ghost small" id="trCopy">Copy translation</button>
@@ -3464,6 +3469,8 @@ let trDoc = null, trResult = null;              // trDoc: {name, kind, paras, do
   sel.value = lsGet('mp_tr_to') || 'zh-Hans';
   sel.onchange = () => lsSet('mp_tr_to', sel.value);
   $('trFrom').value = lsGet('mp_tr_from') || '';
+  $('trRevise').checked = lsGet('mp_tr_revise') !== '0';
+  $('trRevise').onchange = () => lsSet('mp_tr_revise', $('trRevise').checked ? '1' : '0');
   $('trFrom').onchange = () => lsSet('mp_tr_from', $('trFrom').value);
 })();
 $('trAttach').onclick = () => $('trFile').click();
@@ -3551,9 +3558,30 @@ $('trBtn').onclick = async () => {
       }
       $('trUsage').textContent = fmtK(d.used, true) + ' of ' + fmtK(d.cap) + ' this month';
     }
-    trResult = { to, doc, out };
-    renderTrResult();
-    setStatus(st, 'Done.');
+    // Claude: paragraphs Azure left in the source language are translated; with the revision on, every
+    // paragraph is checked against its source and improved.
+    const revise = $('trRevise').checked;
+    const items = idx.map((i) => ({ i, src: doc.paras[i].slice(0, TR_BATCH), mt: out[i], missing: trUntranslated(doc.paras[i], out[i], to) }));
+    const missing = items.filter((x) => x.missing).length;
+    if (revise || missing) {
+      setStatus(st, (revise ? 'Claude is revising the translation' : 'Claude is translating ' + missing + ' paragraph' + (missing > 1 ? 's' : '') + ' Azure left out') + '...');
+      try {
+        const started = await api({ action: 'translate_revise', token, to, revise, items: items.map(({ src, mt, missing: m }) => ({ src, mt, missing: m })) });
+        const d = await waitForJob(started.jobId, (state, x) => { if (x && x.progress) setStatus(st, x.progress + '...'); });
+        items.forEach((x, k) => { if (d.out && d.out[k]) out[x.i] = d.out[k]; });
+        trResult = { to, doc, out };
+        renderTrResult();
+        setStatus(st, 'Done. ' + (revise ? 'Revised by Claude' : 'Missing paragraphs translated by Claude') + ' (Claude cost $' + (d.cost || 0).toFixed(3) + ').');
+      } catch (e) {
+        trResult = { to, doc, out };
+        renderTrResult();
+        setStatus(st, 'Azure translation shown; the Claude step failed: ' + e.message, true);
+      }
+    } else {
+      trResult = { to, doc, out };
+      renderTrResult();
+      setStatus(st, 'Done.');
+    }
   } catch (e) { setStatus(st, e.message, true); }
   $('trBtn').disabled = false;
 };
@@ -3564,6 +3592,15 @@ const trWait = (ms, say) => new Promise((ok) => {
   tick();
 });
 /** One request, kept under the per-minute limit and retried after a 429 refusal. */
+/** True when a "translation" is still the source: unchanged, or mostly Chinese/Japanese script for a non-CJK target. */
+function trUntranslated(src, mt, to) {
+  if (!String(mt || '').trim()) return true;
+  if (mt.trim() === String(src).slice(0, TR_BATCH).trim()) return !!scriptLang(src) && scriptLang(src) !== to;
+  if (/^(zh|ja|ko)/.test(to)) return false;
+  const cjk = (mt.match(/[\p{Script=Han}\u3040-\u30ff\p{Script=Hangul}]/gu) || []).length, latin = (mt.match(/[A-Za-z]/g) || []).length;
+  return cjk > 5 && cjk > latin;
+}
+
 /** Language suggested by the script of a text: Korean, Japanese (kana), Chinese (Han), or null. */
 function scriptLang(t) {
   const n = (re) => (t.match(re) || []).length;
