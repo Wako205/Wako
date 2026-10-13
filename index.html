@@ -67,6 +67,9 @@
 
   /* chat */
   #chatView { display:flex; flex-direction:column; flex:1; min-height: 60vh; }
+  #langBtn { white-space:nowrap; }
+  #langBtn span { opacity:.55; padding:0 2px; }
+  #langBtn span.on { opacity:1; font-weight:700; text-decoration:underline; text-underline-offset:3px; }
   #trText { width:100%; margin:10px 0; font-size:16px; line-height:1.6; }
   .trrev { display:flex; align-items:center; gap:8px; margin:0 0 10px; font-size:14px; }
   .trrev input { width:auto; margin:0; }
@@ -262,7 +265,7 @@
       <span class="sr-only" id="mStatus" aria-live="polite"></span>
     </div>
     </div>
-    <button class="ghost small" id="langBtn" type="button" title="English / 中文">中文</button>
+    <button class="ghost small" id="langBtn" type="button" title="中文 / English" aria-label="中文 / English"><span data-l="zh">中文</span>/<span data-l="en">EN</span></button>
     <div class="who hidden" id="who"><span id="whoUsage"></span><button class="ghost small" id="logoutBtn">Log out</button></div>
   </div>
 
@@ -4244,7 +4247,7 @@ offLoadIndex().then(renderNet);
     if (lang === 'zh') walk(document.body); else restore(document.body);
     observe();
     const b = document.getElementById('langBtn');
-    if (b) { b.textContent = lang === 'zh' ? 'EN' : '中文'; b.setAttribute('aria-label', lang === 'zh' ? 'Switch to English' : '切换到中文'); b.__out = undefined; }
+    if (b) b.querySelectorAll('[data-l]').forEach((x) => x.classList.toggle('on', x.dataset.l === lang));
   }
   window.i18n = { tr, setLang, get lang() { return lang; } };
   function start() {

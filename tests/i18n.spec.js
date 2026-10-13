@@ -2,11 +2,13 @@ const { test, expect, login, openAudio } = require('./support/backend');
 
 test('EN/中文 switch next to Log out: the interface turns Chinese and back, book text stays as it is', async ({ page, backend }) => {
   await login(page);
-  await expect(page.locator('#langBtn')).toHaveText('中文');
+  await expect(page.locator('#langBtn')).toHaveText('中文/EN');
+  await expect(page.locator('#langBtn .on')).toHaveText('EN');
   await openAudio(page);
   const title = await page.locator('#library .libitem .t').first().textContent();
   await page.click('#langBtn');
-  await expect(page.locator('#langBtn')).toHaveText('EN');
+  await expect(page.locator('#langBtn')).toHaveText('中文/EN');                    // always both, so anyone can find it
+  await expect(page.locator('#langBtn .on')).toHaveText('中文');
   await expect(page.locator('#logoutBtn')).toHaveText('退出登录');
   await expect(page.locator('#tabAudio')).toHaveText('PDF 转音频');
   await expect(page.locator('#tabTrans')).toHaveText('翻译');
@@ -20,7 +22,7 @@ test('EN/中文 switch next to Log out: the interface turns Chinese and back, bo
   await expect(page.locator('#trText')).toHaveAttribute('placeholder', /粘贴文字/);
   // Remembered after a reload.
   await page.reload();
-  await expect(page.locator('#langBtn')).toHaveText('EN');
+  await expect(page.locator('#langBtn .on')).toHaveText('中文');
   await expect(page.locator('#logoutBtn')).toHaveText('退出登录');
   await page.click('#langBtn');
   await expect(page.locator('#logoutBtn')).toHaveText('Log out');
