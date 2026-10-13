@@ -262,6 +262,7 @@
       <span class="sr-only" id="mStatus" aria-live="polite"></span>
     </div>
     </div>
+    <button class="ghost small" id="langBtn" type="button" title="English / 中文">中文</button>
     <div class="who hidden" id="who"><span id="whoUsage"></span><button class="ghost small" id="logoutBtn">Log out</button></div>
   </div>
 
@@ -4041,6 +4042,218 @@ $('dlReviewBtn').onclick = () => lastResult && download(lastName.replace(/(\.[^.
 token = load('mp_token'); username = load('mp_user'); loadChat();
 if (token && username) showApp();
 offLoadIndex().then(renderNet);
+</script>
+<script>
+/*
+ * Chinese interface for Wako205. The page is written in English; when Chinese is chosen, visible text,
+ * titles, placeholders and aria labels are replaced through the dictionary below, including text the page
+ * sets later (a MutationObserver translates it as it appears). Book text, translations, titles and chat
+ * messages are never touched: those containers carry data-noi18n.
+ */
+(function () {
+  'use strict';
+  // Exact strings (whole text node or attribute, trimmed).
+  const D = {
+    // Header, login, tabs
+    'Log in': '登录', 'Log out': '退出登录', 'Username': '用户名', 'Password': '密码', 'Listen offline': '离线收听',
+    'PDF to audio': 'PDF 转音频', 'Chat': '对话', 'Translate': '翻译', 'Polish / Review': '润色 / 审稿', '(Word & LaTeX)': '（Word 与 LaTeX）',
+    'Color theme': '颜色主题', 'Warm paper tones, less blue light': '暖色纸张，减少蓝光', 'White background': '白色背景', 'Dark background': '黑色背景',
+    'Background music': '背景音乐', 'Background music (lofi by Holizna, CC0)': '背景音乐（Holizna 的 lofi，CC0）',
+    'Play music': '播放音乐', 'Pause music': '暂停音乐', 'Play or pause the music': '播放或暂停音乐', 'Preparing the music...': '正在准备音乐...',
+    'The lofi library could not be loaded.': 'lofi 音乐库加载失败。', 'Add audio files to play your own music.': '添加音频文件以播放自己的音乐。',
+    'Loading...': '加载中...', 'Logging in needs a connection.': '登录需要网络连接。',
+    // PDF to audio form
+    'PDF or text file': 'PDF 或文本文件', 'Voice': '声音', 'Title': '标题', '试听 Preview': '试听', 'Generate audio': '生成音频',
+    'Hear the first sentences of the selected text in this voice (uses about 0.1k characters of the allowance)': '用此声音试听所选文本的前几句（约用 0.1k 字符额度）',
+    'Andrew (English, male)': 'Andrew（英语，男）', 'Ava (English, female)': 'Ava（英语，女）', 'Kore (female, clear)': 'Kore（女，清晰）',
+    'Aoede (female, light)': 'Aoede（女，轻快）', 'Orus (male, firm)': 'Orus（男，沉稳）', 'Puck (male, lively)': 'Puck（男，活泼）',
+    'Google (best for English)': 'Google（英语最佳）', 'Google (used up this month; back on the 1st)': 'Google（本月已用完，1 日恢复）',
+    'Select all': '全选', 'Select none': '全不选', 'Speech used': '语音用量', 'Google': 'Google', 'Google trial': 'Google 试用',
+    'Microsoft free': '微软免费', 'Microsoft trial': '微软试用', 'Contact the administrator to raise the limit.': '如需提高上限，请联系管理员。',
+    'Free allowances reset on the 1st.': '免费额度每月 1 日重置。',
+    'Detected: book or plain text. ': '识别为：书籍或纯文本。', 'Detected: scientific paper. ': '识别为：科学论文。',
+    'Detected: thesis or long scientific document. ': '识别为：学位论文或长篇科学文档。',
+    'It has been split into chapters below and is read as written, without page headers and page numbers. No Claude cost. ': '已按章节拆分，按原文朗读，不读页眉和页码。不产生 Claude 费用。',
+    'It has been split into chapters below. Choose the chapters to convert; Claude writes a listening script for each, then it is read aloud. ': '已按章节拆分。请选择要转换的章节；Claude 会为每章写听书稿再朗读。',
+    'Read as written instead': '改为按原文朗读', 'Use Claude per chapter instead': '改为逐章由 Claude 处理', 'Use paper mode instead': '改为论文模式',
+    'Tick chapters to convert.': '请勾选要转换的章节。', 'Select at least one chapter.': '请至少选择一章。', 'Choose a PDF first.': '请先选择 PDF。',
+    'Front matter (before the first chapter)': '前言部分（第一章之前）', 'Full text': '全文',
+    'Reading the PDF text...': '正在读取 PDF 文本...', 'Reading the PDF...': '正在读取 PDF...', 'Preparing the selected chapters...': '正在准备所选章节...',
+    'Claude is looking for the chapters...': 'Claude 正在查找章节...',
+    'Started. It appears in your library below; you can close this page meanwhile.': '已开始。它会出现在下方书库中，期间可以关闭本页。',
+    'No text found. The PDF may be a scanned image without a text layer.': '没有找到文字。这个 PDF 可能是没有文字层的扫描件。',
+    'Could not read the text of this PDF.': '无法读取此 PDF 的文字。', 'Could not load the PDF reader. Check the connection and try again.': 'PDF 阅读组件加载失败，请检查网络后重试。',
+    'Pronunciation of terms': '术语读法', 'Term': '术语', 'Spoken as': '读作', 'Add': '添加', 'Enter both the term and how it is spoken.': '请同时填写术语和读法。',
+    // Library
+    'Your audio library': '我的音频书库', 'Shared library': '共享书库', 'Nothing yet. Converted PDFs will be listed here.': '还没有内容。转换后的 PDF 会列在这里。',
+    'Listen': '收听', 'Resume': '继续', 'Offline': '离线', 'Offline ✓': '离线 ✓', 'Chapters': '章节', 'Add chapters': '添加章节', 'Share': '分享', 'Unshare': '取消分享',
+    'Delete': '删除', 'Confirm delete': '确认删除', 'Cancel': '取消', 'Rename': '重命名', 'New title': '新标题', 'Book': '书', 'Paper': '论文',
+    'Convert selected': '转换所选', 'Delete audio': '删除音频', 'Save for offline': '离线保存', 'Saved offline': '已离线保存',
+    'Save for offline listening, or remove the offline copy': '保存以便离线收听，或删除离线副本',
+    'Let every account of this site listen to this': '让本站所有账号都能收听',
+    'Shared with every account of this site; click to stop sharing': '已分享给本站所有账号；点击取消分享',
+    'Save all for offline': '全部离线保存', 'Save chapter for offline': '离线保存本章', 'Save whole book for offline': '离线保存整本书',
+    'Save the other chapters for offline': '离线保存其余章节', 'Remove offline copy': '删除离线副本', 'Remove offline copies': '删除离线副本',
+    'Remove offline copies of this book': '删除本书的离线副本', 'Not saved for offline listening': '未离线保存',
+    'Saved chapters may be deleted when space runs low.': '空间不足时，已保存的章节可能被删除。', 'iPhone: add to Home Screen to keep them.': 'iPhone：添加到主屏幕可长期保留。',
+    'The library cannot be loaded without a connection.': '没有网络时无法加载书库。', 'No library has been saved on this device.': '此设备上没有保存书库。',
+    'Offline storage failed.': '离线保存失败。', 'Offline storage is not available.': '离线存储不可用。', 'This browser cannot store audio for offline listening.': '此浏览器无法离线保存音频。',
+    'No chapter of this item is fully converted yet.': '此项目还没有完全转换好的章节。',
+    // Player
+    'Play': '播放', 'Pause': '暂停', 'Play / pause (space bar)': '播放 / 暂停（空格键）', 'Previous chapter': '上一章', 'Next chapter': '下一章',
+    'Speed': '语速', 'Screen on': '屏幕常亮', 'Keep the screen on while audio plays': '播放时保持屏幕常亮', 'Keep the screen on (no auto-lock) while audio plays': '播放时保持屏幕常亮（不自动锁屏）',
+    'BGM with book': '伴读音乐', 'Background music together with the book': '背景音乐随书播放', 'Background music plays and pauses together with the book': '背景音乐与书同步播放和暂停',
+    'Jump': '跳到', 'Full': '全屏', ' screen': '', 'Show only the text, with a small progress bar': '只显示文字和一个小进度条', 'Leave full screen': '退出全屏', 'Exit': '退出',
+    'Chapter': '章节', 'Position in the chapter': '章节内位置', 'Close': '关闭', 'Playback': '播放', 'Search': '搜索', 'Search this book': '在本书中搜索', 'No results.': '没有结果。',
+    'Scroll the text to the sentence being read': '把文字滚动到正在朗读的句子', ' to current': '当前句',
+    'Sleep timer': '睡眠定时', 'Stop playback after:': '多久后停止播放：', '15 min': '15 分钟', '30 min': '30 分钟', '60 min': '60 分钟', 'End of chapter': '本章结束',
+    'Cancel timer': '取消定时', 'Sleep timer: playback stopped.': '睡眠定时：已停止播放。', 'Sleep timer: stops at the end of this chapter': '睡眠定时：本章结束时停止',
+    'empty': '空', 'Bookmark 1': '书签 1', 'Bookmark 2': '书签 2', 'Last position': '上次位置', 'Last used': '最近使用', 'Save here': '存到这里', 'Go': '前往', 'Replace': '替换', 'Remove': '移除',
+    'Loading audio...': '正在加载音频...', 'Loading the rest of this chapter...': '正在加载本章其余部分...',
+    'This chapter has not been converted yet.': '本章还没有转换。', 'This part of the chapter has not been converted yet.': '本章这一部分还没有转换。',
+    'This chapter is not saved for offline listening.': '本章没有离线保存。', 'Download MP3': '下载 MP3', 'Download text': '下载文字',
+    // Translate
+    'From': '从', 'To': '到', 'Auto': '自动识别', 'Open file': '打开文件', 'Revise with Claude': '用 Claude 修订', '(better wording; uses your Claude quota)': '（译文更好；使用你的 Claude 额度）',
+    'Paste text, or open a .txt, .md, .tex, .docx or .pdf file': '粘贴文字，或打开 .txt、.md、.tex、.docx、.pdf 文件', 'Text to translate': '要翻译的文字',
+    'Powered by Azure AI Translator & Claude': '由 Azure AI Translator 与 Claude 提供', 'Copy translation': '复制译文', 'Download': '下载',
+    'Show original': '显示原文', 'Hide original': '隐藏原文', 'Done.': '完成。', 'Copied.': '已复制。', 'Nothing to translate.': '没有可翻译的内容。', 'Not set up yet': '尚未设置',
+    'Characters translated this month (Azure free tier); resets on the 1st. Contact the administrator to raise the limit.': '本月已翻译字符数（Azure 免费层），每月 1 日重置。如需提高上限，请联系管理员。',
+    'Revised by Claude': '已由 Claude 修订', 'Missing paragraphs translated by Claude': '漏译段落已由 Claude 补译', 'Translating': '正在翻译',
+    'Claude is revising the translation': 'Claude 正在修订译文',
+    // Chat and tools
+    'New chat': '新对话', 'Attach file': '附加文件', 'Send': '发送', 'Model': '模型', 'Task': '任务', 'Summarize': '总结', 'Check logic': '检查逻辑',
+    'Polish language': '语言润色', 'Referee review': '审稿意见', 'Submit': '提交', 'Download report': '下载报告', 'Download revised file': '下载修改后的文件',
+    'Download Word (clean)': '下载 Word（清洁版）', 'Download Word (tracked changes)': '下载 Word（修订模式）', 'Manuscript (.tex, .txt or .docx)': '稿件（.tex、.txt 或 .docx）',
+    'Polish language (returns revised file with changes written into the .docx, plus a change list)': '语言润色（返回修改后的文件，修改写入 .docx，并附修改清单）',
+    'Review (returns a referee-style report)': '审稿（返回审稿意见式报告）',
+    'Sonnet 5.5, no reasoning (fastest, cheapest)': 'Sonnet 5.5，不推理（最快、最便宜）', 'Opus 5.5, light reasoning (default)': 'Opus 5.5，轻度推理（默认）',
+    'Opus 5.5, deeper reasoning (slower, may return no text on very long tasks)': 'Opus 5.5，深度推理（较慢，超长任务可能无输出）',
+    'Ask anything about your manuscript, or attach a file and choose a task above. Enter to send, Shift+Enter for a new line.': '可以就稿件提任何问题，或附加文件后在上方选择任务。Enter 发送，Shift+Enter 换行。',
+    'Attached text and the conversation are stored in the administrator\'s Google Drive and sent to the Anthropic API. Replies take 20 s to 3 min. Keep this page open.': '附加的文字和对话保存在管理员的 Google Drive 中，并发送给 Anthropic API。回复需要 20 秒到 3 分钟，请保持本页打开。',
+    'Start by attaching a manuscript (.tex, .txt, .md or .docx) and choosing a task, or just ask a question. The file stays in the conversation, so follow-up questions do not need re-uploading.': '先附加稿件（.tex、.txt、.md 或 .docx）并选择任务，或直接提问。文件会保留在对话中，追问不需要重新上传。',
+    'Reply hit the length limit; ask to continue.': '回复达到长度上限，可以让它继续。', 'Choose a file first.': '请先选择文件。',
+    // Network and errors
+    'You are offline. This needs a connection.': '当前离线，此操作需要网络。', 'The server did not answer in time': '服务器未及时响应', 'Unknown error': '未知错误',
+    'You are offline. Chapters saved for offline listening can be played; everything else needs a connection. Positions and bookmarks are sent when the connection returns.': '当前离线。已离线保存的章节可以播放，其他功能需要网络。播放位置和书签会在恢复连接后上传。',
+    '添加到主屏幕 · Add to Home Screen': '添加到主屏幕',
+  };
+  // Strings that begin with a fixed English part followed by numbers or names.
+  const P = [
+    ['Reading the PDF text: page ', '正在读取 PDF 文本：第 '], ['Reading page ', '正在读取第 '], ['Reading ', '正在读取 '],
+    ['Speech used this month: ', '本月语音用量：'], ['Used this month: $', '本月已用：$'], ['Converted so far: ', '已转换：'],
+    ['Conversion started. Saving the original PDF to Drive: ', '已开始转换。正在把原始 PDF 保存到 Drive：'],
+    ['Uploading ', '正在上传 '], ['Loading audio: ', '正在加载音频：'], ['Loading the rest of this chapter... ', '正在加载本章其余部分... '],
+    ['Sleep timer: stops in ', '睡眠定时：停止于 '], ['Chapter search failed (', '查找章节失败（'], ['Claude could not look for chapters (', 'Claude 无法查找章节（'],
+    ['Azure translation shown; the Claude step failed: ', '已显示 Azure 译文；Claude 步骤失败：'], ['Done. Revised by Claude', '完成。已由 Claude 修订'],
+    ['Done. Missing paragraphs translated by Claude', '完成。漏译段落已由 Claude 补译'], ['Claude is translating ', 'Claude 正在翻译 '],
+    ['Translating part ', '正在翻译第 '], ['Offline storage: ', '离线存储：'], ['Network error: ', '网络错误：'], ['Server error (HTTP ', '服务器错误（HTTP '],
+    ['Copy failed: ', '复制失败：'], ['Delete audio of ', '删除音频：'], ['Download ', '下载 '], ['Shared by ', '分享者：'],
+    ['Waiting for "', '等待"'], ['Playing a sample (', '正在试听（'], ['Preparing a sample of ', '正在准备试听：'], ['Saving chapter ', '正在保存第 '],
+    ['Bookmark saved on this device only: ', '书签仅保存在此设备：'], ['You are offline. The chapters ', '当前离线。'], ['Not enough storage space: about ', '存储空间不足：约 '],
+    ['Upload failed (', '上传失败（'], ['Upload too large (', '上传内容过大（'], ['File too large (limit ', '文件过大（上限 '], ['This PDF has ', '这个 PDF 有 '],
+    ['Selected chapters have ', '所选章节共有 '], ['Choose chapters of "', '选择要转换的章节："'], ['Google trial through ', 'Google 试用至 '],
+    ['Polishing ', '正在润色 '],
+  ];
+  const R = [
+    [/^(\d+(?:\.\d+)?k?) of ([\d,]+k?) characters this month$/, '本月已用 $1 / $2 字符'],
+    [/^(\d+)\/(\d+) chapters$/, '$1/$2 章'], [/^(\d+) min$/, '$1 分钟'], [/^(\d+) h (\d+) min$/, '$1 小时 $2 分钟'],
+    [/^resume at (.*)$/, '续播于 $1'], [/^Chapter (\d+) (\d+:\d+)$/, '第 $1 章 $2'], [/^Chapter (\d+)$/, '第 $1 章'], [/^Pages (\d+)–(\d+)$/, '第 $1–$2 页'], [/^✓ (\d+)\/(\d+) offline$/, '✓ $1/$2 已离线'], [/^shared$/, '已分享'],
+    [/^(\d+(?:\.\d+)?k) characters · (.*)$/, '$1 字符 · $2'], [/^Playing: (.*)$/, '正在播放：$1'], [/^♪ All lofi \((\d+)\)$/, '♪ 全部 lofi（$1）'],
+    [/^Claude: (\d+) of (\d+) paragraphs\.\.\.$/, 'Claude：$1 / $2 段...'], [/^Synthesizing speech: (\d+) of (\d+) segments(.*)$/, '正在合成语音：$1 / $2 段$3'],
+    [/^ · finished chapters can be played$/, ' · 已完成的章节可以播放'], [/^ · this page can be closed$/, ' · 可以关闭本页'],
+  ];
+  // Common pieces inside longer strings (after a prefix has been translated).
+  const F = [[/([\d.,]+k?) of ([\d.,]+k?) characters/g, '$1 / $2 字符'], [/ used, /g, ' 已用，'], [/ free\./g, ' 可用。'], [/\(about ([^)]+)\)/g, '（约 $1）']];
+  const frag = (x) => F.reduce((a, [re, to]) => a.replace(re, to), x);
+  const ATTRS = ['title', 'placeholder', 'aria-label'];
+  let lang = 'en';
+  try { lang = localStorage.getItem('mp_lang') || (/^zh/i.test(navigator.language || '') ? 'zh' : 'en'); } catch (e) {}
+
+  function tr(s) {
+    const t = s.trim();
+    if (!t || !/[A-Za-z]/.test(t)) return s;
+    const lead = s.slice(0, s.length - s.trimStart().length), tail = s.slice(s.trimEnd().length);
+    if (Object.prototype.hasOwnProperty.call(D, s)) return D[s];
+    if (Object.prototype.hasOwnProperty.call(D, t)) return lead + D[t] + tail;
+    for (const [re, to] of R) if (re.test(t)) return lead + t.replace(re, to) + tail;
+    for (const [en, zh] of P) if (t.startsWith(en)) return lead + zh + frag(t.slice(en.length)) + tail;
+    if (t.includes(' · ')) { const parts = t.split(' · '); const o = parts.map((x) => tr(x)); if (o.some((x, i) => x !== parts[i])) return lead + o.join(' · ') + tail; }
+    const pm = t.match(/^(.*?) \(about ([^)]+)\)$/);
+    if (pm && tr(pm[1]) !== pm[1]) return lead + tr(pm[1]) + '（约 ' + pm[2] + '）' + tail;
+    return s;
+  }
+  const CONTENT = '[data-noi18n], script, style, #pText, #trOut, #messages, .libitem .t';
+  const skip = (n) => { const e = n.nodeType === 1 ? n : n.parentElement; return !e || !!e.closest(CONTENT + ', textarea'); };
+  const skipAttrs = (e) => !!e.closest(CONTENT);
+
+  function doText(n) {
+    if (skip(n)) return;
+    if (n.__out !== undefined && n.data === n.__out) {                 // our own text: only redo it for the other language
+      if (n.__lang === lang) return;
+      n.data = n.__en;
+    }
+    n.__en = n.data; n.__lang = lang;
+    const out = lang === 'zh' ? tr(n.data) : n.data;
+    n.__out = out;
+    if (out !== n.data) n.data = out;
+  }
+  function doAttrs(el) {
+    if (skipAttrs(el)) return;
+    const m = el.__i18n || (el.__i18n = {});
+    ATTRS.forEach((a) => {
+      if (!el.hasAttribute(a)) return;
+      const v = el.getAttribute(a);
+      if (m[a] && v === m[a].out && m[a].lang === lang) return;
+      const en = m[a] && v === m[a].out ? m[a].en : v;
+      m[a] = { en, out: lang === 'zh' ? tr(en) : en, lang };
+      if (m[a].out !== v) el.setAttribute(a, m[a].out);
+    });
+  }
+  function walk(root) {
+    if (root.nodeType === 3) { doText(root); return; }
+    if (root.nodeType !== 1 || skipAttrs(root)) return;
+    doAttrs(root);
+    const it = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, null);
+    let n;
+    while ((n = it.nextNode())) { if (n.nodeType === 3) doText(n); else doAttrs(n); }
+  }
+  function restore(root) {                                             // back to English
+    const it = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, null);
+    let n;
+    while ((n = it.nextNode())) {
+      if (n.nodeType === 3) { if (n.__en !== undefined && n.data === n.__out) { n.data = n.__en; } n.__out = n.data; n.__en = n.data; n.__lang = 'en'; }
+      else if (n.__i18n) Object.keys(n.__i18n).forEach((a) => { const m = n.__i18n[a]; if (n.getAttribute(a) === m.out) n.setAttribute(a, m.en); m.out = m.en; m.lang = 'en'; });
+    }
+  }
+  const obs = new MutationObserver((list) => {
+    obs.disconnect();
+    for (const m of list) {
+      if (m.type === 'characterData') doText(m.target);
+      else if (m.type === 'attributes') doAttrs(m.target);
+      else m.addedNodes.forEach(walk);
+    }
+    observe();
+  });
+  const observe = () => obs.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ATTRS });
+
+  function setLang(l) {
+    lang = l === 'zh' ? 'zh' : 'en';
+    try { localStorage.setItem('mp_lang', lang); } catch (e) {}
+    document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+    obs.disconnect();
+    if (lang === 'zh') walk(document.body); else restore(document.body);
+    observe();
+    const b = document.getElementById('langBtn');
+    if (b) { b.textContent = lang === 'zh' ? 'EN' : '中文'; b.setAttribute('aria-label', lang === 'zh' ? 'Switch to English' : '切换到中文'); b.__out = undefined; }
+  }
+  window.i18n = { tr, setLang, get lang() { return lang; } };
+  function start() {
+    const b = document.getElementById('langBtn');
+    if (b) { b.setAttribute('data-noi18n', ''); b.onclick = () => setLang(lang === 'zh' ? 'en' : 'zh'); }
+    setLang(lang);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
+})();
 </script>
 </body>
 </html>

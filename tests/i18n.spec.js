@@ -1,0 +1,40 @@
+const { test, expect, login, openAudio } = require('./support/backend');
+
+test('EN/中文 switch next to Log out: the interface turns Chinese and back, book text stays as it is', async ({ page, backend }) => {
+  await login(page);
+  await expect(page.locator('#langBtn')).toHaveText('中文');
+  await openAudio(page);
+  const title = await page.locator('#library .libitem .t').first().textContent();
+  await page.click('#langBtn');
+  await expect(page.locator('#langBtn')).toHaveText('EN');
+  await expect(page.locator('#logoutBtn')).toHaveText('退出登录');
+  await expect(page.locator('#tabAudio')).toHaveText('PDF 转音频');
+  await expect(page.locator('#tabTrans')).toHaveText('翻译');
+  await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
+  await expect(page.locator('#library .libitem .t').first()).toHaveText(title);           // a title is content, not interface
+  // Text the page sets later is translated as it appears.
+  await page.click('#tabTrans');
+  await page.fill('#trText', '');
+  await page.click('#trBtn');
+  await expect(page.locator('#trStatus')).toHaveText('没有可翻译的内容。');
+  await expect(page.locator('#trText')).toHaveAttribute('placeholder', /粘贴文字/);
+  // Remembered after a reload.
+  await page.reload();
+  await expect(page.locator('#langBtn')).toHaveText('EN');
+  await expect(page.locator('#logoutBtn')).toHaveText('退出登录');
+  await page.click('#langBtn');
+  await expect(page.locator('#logoutBtn')).toHaveText('Log out');
+  await expect(page.locator('#tabAudio')).toHaveText('PDF to audio');
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+});
+
+test('the player text is never translated', async ({ page, backend }) => {
+  await login(page);
+  await page.click('#langBtn');
+  await openAudio(page);
+  await page.locator('#library .libitem').first().getByRole('button', { name: /收听|继续/ }).click();
+  await expect(page.locator('#pText span.s').first()).toBeVisible();
+  const txt = await page.locator('#pText').textContent();
+  expect(txt).toMatch(/[A-Za-z]{4}/);
+  expect(txt).not.toMatch(/[一-鿿]/);
+});
