@@ -92,6 +92,12 @@ class MockBackend {
       case 'audio_add': return { id: body.id, jobId: 'job-add' };
       case 'audio_delete': this.library = this.library.filter((x) => x.id !== body.id); return {};
       case 'audio_share': { const it = this.item(body.id); if (body.shared) it.shared = Date.now(); else delete it.shared; return { shared: !!body.shared }; }
+      case 'admin_stats': if (!this.admin) return { ok: false, error: 'Not allowed.' }; return { at: Date.now(), users: [
+        { user: 'tester', admin: true, lastLogin: Date.now() - 3600e3, logins: 4, lastSeen: Date.now() - 60e3, failsToday: 0, claudeUsed: 1.234, claudeLimit: 50,
+          items: 3, books: 2, papers: 1, chaptersDone: 5, chars: 250000, shared: 1, lastItem: Date.now() - 86400e3, libUpdated: Date.now() - 600e3, lastFile: Date.now() - 600e3, msTrial: 120000, googleTrial: 0 },
+        { user: 'axel', admin: false, lastLogin: null, logins: 0, lastSeen: null, failsToday: 2, claudeUsed: 0, claudeLimit: 50,
+          items: 0, books: 0, papers: 0, chaptersDone: 0, chars: 0, shared: 0, lastItem: null, libUpdated: null, lastFile: null, msTrial: 0, googleTrial: 0 }],
+        pools: { googleMonth: 1000000, googleMonthCap: 1000000, googleTrial: 20000, googleTrialCap: 3000000, msFree: 500000, msFreeCap: 500000, msTrial: 557000, msTrialCap: 12000000, translator: 652000, translatorCap: 2000000 } };
       case 'translate_usage': return { ready: true, used: this.trUsed || 0, cap: 2000000 };
       case 'translate': {
         this.trUsed = (this.trUsed || 0) + body.paras.join('').length;
@@ -147,7 +153,7 @@ class MockBackend {
       this.calls.push(body);
       let r;
       if (body.action === 'login') {
-        r = body.password === 'secret' ? { token: this.token, username: body.username } : { ok: false, error: 'Wrong username or password.' };
+        r = body.password === 'secret' ? { token: this.token, username: body.username, admin: !!this.admin } : { ok: false, error: 'Wrong username or password.' };
         if (this.handlers.login) r = this.handlers.login(body);
       } else r = await this.reply(body);   // a handler may return a promise (slow replies)
       await route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(Object.assign({ ok: true }, r)) });
