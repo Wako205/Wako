@@ -276,7 +276,7 @@
     <label for="pass">Password</label>
     <input type="password" id="pass" autocomplete="current-password">
     <div class="row" style="margin-top:16px"><button id="loginBtn">Log in</button><span class="status" id="loginStatus"></span></div>
-    <p class="status" style="margin-top:14px"><a href="install/" id="installLink" style="color:var(--accent)">添加到主屏幕 · Add to Home Screen</a></p>
+    <p class="status" style="margin-top:14px"><a href="install/" id="installLink" style="color:var(--accent)">Add to Home Screen</a></p>
     <div id="offlineEntry" class="hidden" style="margin-top:14px">
       <div class="notice" id="offlineEntryNote"></div>
       <button class="ghost" id="offlineBtn" style="margin-top:8px">Listen offline</button>
@@ -457,13 +457,13 @@
         <div class="row" style="flex-wrap:nowrap">
         <select id="avoice" style="flex:1">
           <optgroup label="Microsoft (best for Chinese)" id="azVoices" class="hidden" disabled>
-            <option value="az:zh-CN-YunxiNeural">云希 Yunxi (男, 叙述)</option>
-            <option value="az:zh-CN-YunjianNeural">云健 Yunjian (男, 浑厚)</option>
-            <option value="az:zh-CN-YunyangNeural">云扬 Yunyang (男, 播音)</option>
-            <option value="az:zh-CN-XiaoxiaoNeural">晓晓 Xiaoxiao (女, 温暖)</option>
-            <option value="az:zh-CN-XiaochenNeural">晓辰 Xiaochen (女, 自然)</option>
-            <option value="az:ja-JP-NanamiNeural">七海 Nanami (日本語, 女)</option>
-            <option value="az:ja-JP-KeitaNeural">圭太 Keita (日本語, 男)</option>
+            <option value="az:zh-CN-YunxiNeural">Yunxi (Chinese, male, narrative)</option>
+            <option value="az:zh-CN-YunjianNeural">Yunjian (Chinese, male, deep)</option>
+            <option value="az:zh-CN-YunyangNeural">Yunyang (Chinese, male, newsreader)</option>
+            <option value="az:zh-CN-XiaoxiaoNeural">Xiaoxiao (Chinese, female, warm)</option>
+            <option value="az:zh-CN-XiaochenNeural">Xiaochen (Chinese, female, natural)</option>
+            <option value="az:ja-JP-NanamiNeural">Nanami (Japanese, female)</option>
+            <option value="az:ja-JP-KeitaNeural">Keita (Japanese, male)</option>
             <option value="az:en-US-AndrewMultilingualNeural">Andrew (English, male)</option>
             <option value="az:en-US-AvaMultilingualNeural">Ava (English, female)</option>
           </optgroup>
@@ -474,7 +474,7 @@
             <option value="Puck">Puck (male, lively)</option>
           </optgroup>
         </select>
-        <button class="ghost" id="previewBtn" type="button" data-net="1" title="Hear the first sentences of the selected text in this voice (uses about 0.1k characters of the allowance)">试听 Preview</button>
+        <button class="ghost" id="previewBtn" type="button" data-net="1" title="Hear the first sentences of the selected text in this voice (uses about 0.1k characters of the allowance)">Preview</button>
         </div>
         <details class="pron hidden" id="pronBox">   <!-- hidden for now; the list still applies -->
           <summary id="pronSummary">Pronunciation of terms</summary>
@@ -1562,7 +1562,7 @@ $('audioBtn').onclick = async () => {
 // ---------------------------------------------------------------------------
 const libUsage = { used: 0, cap: 0, azUsed: 0, azCap: 0, azReady: false, s0Used: 0, s0Cap: 0, s0Mine: 0, s0UserCap: 0, s0Until: 0, gtUsed: 0, gtCap: 0, gtMine: 0, gtUserCap: 0, gtUntil: 0 };
 /** Short display name of a voice value. */
-function voiceLabel(v) { const o = Array.from($('avoice').options).find((x) => x.value === v); return o ? o.textContent.replace(/\s*\(.*\)$/, '') : v; }
+function voiceLabel(v) { const o = Array.from($('avoice').options).find((x) => x.value === v); return o ? o.textContent.replace(/\s*[(（].*[)）]$/, '') : v; }
 $('avoice').addEventListener('change', () => bookSummary());
 /**
  * Allowance of the engine a voice belongs to ('az:...' voices are Microsoft, the others Google).
@@ -4066,8 +4066,9 @@ offLoadIndex().then(renderNet);
     'The lofi library could not be loaded.': 'lofi 音乐库加载失败。', 'Add audio files to play your own music.': '添加音频文件以播放自己的音乐。',
     'Loading...': '加载中...', 'Logging in needs a connection.': '登录需要网络连接。',
     // PDF to audio form
-    'PDF or text file': 'PDF 或文本文件', 'Voice': '声音', 'Title': '标题', '试听 Preview': '试听', 'Generate audio': '生成音频',
+    'PDF or text file': 'PDF 或文本文件', 'Voice': '声音', 'Title': '标题', 'Preview': '试听', 'Generate audio': '生成音频',
     'Hear the first sentences of the selected text in this voice (uses about 0.1k characters of the allowance)': '用此声音试听所选文本的前几句（约用 0.1k 字符额度）',
+    'Yunxi (Chinese, male, narrative)': '云希 Yunxi（男，叙述）', 'Yunjian (Chinese, male, deep)': '云健 Yunjian（男，浑厚）', 'Yunyang (Chinese, male, newsreader)': '云扬 Yunyang（男，播音）', 'Xiaoxiao (Chinese, female, warm)': '晓晓 Xiaoxiao（女，温暖）', 'Xiaochen (Chinese, female, natural)': '晓辰 Xiaochen（女，自然）', 'Nanami (Japanese, female)': '七海 Nanami（日语，女）', 'Keita (Japanese, male)': '圭太 Keita（日语，男）', 'Microsoft (best for Chinese)': '微软（中文最佳）',
     'Andrew (English, male)': 'Andrew（英语，男）', 'Ava (English, female)': 'Ava（英语，女）', 'Kore (female, clear)': 'Kore（女，清晰）',
     'Aoede (female, light)': 'Aoede（女，轻快）', 'Orus (male, firm)': 'Orus（男，沉稳）', 'Puck (male, lively)': 'Puck（男，活泼）',
     'Google (best for English)': 'Google（英语最佳）', 'Google (used up this month; back on the 1st)': 'Google（本月已用完，1 日恢复）',
@@ -4138,7 +4139,7 @@ offLoadIndex().then(renderNet);
     // Network and errors
     'You are offline. This needs a connection.': '当前离线，此操作需要网络。', 'The server did not answer in time': '服务器未及时响应', 'Unknown error': '未知错误',
     'You are offline. Chapters saved for offline listening can be played; everything else needs a connection. Positions and bookmarks are sent when the connection returns.': '当前离线。已离线保存的章节可以播放，其他功能需要网络。播放位置和书签会在恢复连接后上传。',
-    '添加到主屏幕 · Add to Home Screen': '添加到主屏幕',
+    'Add to Home Screen': '添加到主屏幕',
   };
   // Strings that begin with a fixed English part followed by numbers or names.
   const P = [
@@ -4168,7 +4169,7 @@ offLoadIndex().then(renderNet);
   // Common pieces inside longer strings (after a prefix has been translated).
   const F = [[/([\d.,]+k?) of ([\d.,]+k?) characters/g, '$1 / $2 字符'], [/ used, /g, ' 已用，'], [/ free\./g, ' 可用。'], [/\(about ([^)]+)\)/g, '（约 $1）']];
   const frag = (x) => F.reduce((a, [re, to]) => a.replace(re, to), x);
-  const ATTRS = ['title', 'placeholder', 'aria-label'];
+  const ATTRS = ['title', 'placeholder', 'aria-label', 'label'];
   let lang = 'en';
   try { lang = localStorage.getItem('mp_lang') || (/^zh/i.test(navigator.language || '') ? 'zh' : 'en'); } catch (e) {}
 
