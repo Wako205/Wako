@@ -47,3 +47,15 @@ test('the player text is never translated', async ({ page, backend }) => {
   expect(txt).toMatch(/[A-Za-z]{4}/);
   expect(txt).not.toMatch(/[一-鿿]/);
 });
+
+test.describe('Chinese browser', () => {
+  test.use({ locale: 'zh-CN' });
+  test('the interface starts in English even when the browser language is Chinese', async ({ page, backend }) => {
+    await login(page);
+    await expect(page.locator('#langBtn .on')).toHaveText('EN');
+    await expect(page.locator('#logoutBtn')).toHaveText('Log out');
+    await page.click('#langBtn');
+    await page.reload();
+    await expect(page.locator('#logoutBtn')).toHaveText('退出登录');                 // a chosen language is kept
+  });
+});

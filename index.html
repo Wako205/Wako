@@ -4255,7 +4255,7 @@ offLoadIndex().then(renderNet);
   const frag = (x) => F.reduce((a, [re, to]) => a.replace(re, to), x);
   const ATTRS = ['title', 'placeholder', 'aria-label', 'label'];
   let lang = 'en';
-  try { lang = localStorage.getItem('mp_lang') || (/^zh/i.test(navigator.language || '') ? 'zh' : 'en'); } catch (e) {}
+  try { lang = localStorage.getItem('mp_lang') || 'en'; } catch (e) {}   // English unless the person chose Chinese
 
   function tr(s) {
     const t = s.trim();
