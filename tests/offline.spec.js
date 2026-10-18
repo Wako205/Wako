@@ -150,7 +150,8 @@ test('offline: the last library, saved chapters only, and server actions disable
   await expect(page2.locator('#library .libitem')).toHaveCount(2);
   await expect(book(page2).getByRole('button', { name: /Listen|Resume/ })).toBeEnabled();
   await expect(paper(page2).getByRole('button', { name: /Listen|Resume/ })).toBeDisabled();
-  for (const b of [book(page2).getByRole('button', { name: 'Delete' }), book(page2).getByRole('button', { name: 'Add chapters' }), page2.locator('#audioBtn'), page2.locator('#previewBtn')]) {
+  await book(page2).getByRole('button', { name: 'More actions' }).click();
+  for (const b of [book(page2).getByRole('menuitem', { name: 'Delete' }), book(page2).getByRole('menuitem', { name: 'Add chapters' }), page2.locator('#audioBtn'), page2.locator('#previewBtn')]) {
     await expect(b).toHaveAttribute('aria-disabled', 'true');
     expect(await b.evaluate((x) => getComputedStyle(x).pointerEvents)).toBe('none');
   }

@@ -189,4 +189,10 @@ async function openAudio(page) {
   await base.expect(page.locator('#library .libitem').first()).toBeVisible();
 }
 
-module.exports = { test, expect: base.expect, login, openAudio, INDEX_URL, CHUNK, SEG_TEXTS, MockBackend };
+/** Opens the "⋯" menu of a library row and returns its item with this name (Add chapters, Share, Rename, Delete...). */
+async function rowAction(row, name, opts) {
+  await row.getByRole('button', { name: 'More actions' }).click();
+  return row.getByRole('menuitem', Object.assign({ name }, opts));
+}
+
+module.exports = { test, expect: base.expect, login, openAudio, rowAction, INDEX_URL, CHUNK, SEG_TEXTS, MockBackend };

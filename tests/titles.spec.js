@@ -1,4 +1,4 @@
-const { test, expect, login } = require('./support/backend');
+const { test, expect, login, rowAction } = require('./support/backend');
 const { PDFDocument, StandardFonts } = require(require('./support/media').NM + '/pdf-lib');
 
 async function pdf({ meta, big } = {}) {
@@ -47,13 +47,13 @@ test('a library item can be renamed; Escape cancels', async ({ page, backend }) 
   await page.click('#tabLib');
   const first = page.locator('#library .libitem').first();
   await expect(first.locator('.t')).toHaveText('The Quiet Mill');
-  await first.getByRole('button', { name: 'Rename' }).click();
+  await (await rowAction(first, 'Rename')).click();
   const box = first.getByRole('textbox', { name: 'New title' });
   await box.fill('Something else');
   await box.press('Escape');
   await expect(first.locator('.t')).toHaveText('The Quiet Mill');
   expect(backend.callsOf('audio_rename')).toHaveLength(0);
-  await first.getByRole('button', { name: 'Rename' }).click();
+  await (await rowAction(first, 'Rename')).click();
   await first.getByRole('textbox', { name: 'New title' }).fill('  The   Mill on the River ');
   await first.getByRole('textbox', { name: 'New title' }).press('Enter');
   await expect(page.locator('#library .libitem').first().locator('.t')).toHaveText('The Mill on the River');

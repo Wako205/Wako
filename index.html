@@ -126,17 +126,21 @@
   .libitem { border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin:10px 0; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
   .libitem .t { font-weight:600; cursor:pointer; color:var(--accent); }
   .libitem .t { overflow-wrap:anywhere; display:inline; }
-  .libitem .rename { background:none; border:0; padding:0 4px; margin-left:4px; min-height:0; font-size:14px; color:var(--muted); cursor:pointer; vertical-align:baseline; }
-  .libitem .rename:hover { color:var(--accent); }
-  @media (pointer: coarse), (max-width: 600px) { .libitem .rename { min-height:44px; min-width:44px; padding:0 10px; margin:-12px 0 -12px 0; } }
   .renamebox { width:100%; font-weight:600; }
   .libitem .m { font-size:13px; color:var(--muted); }
   .libitem .grow { flex:1; min-width:200px; }
   /* Library buttons: right-aligned in fixed columns, so the same button lines up from row to row
-     (a missing button leaves its column empty; "Offline ✓" fits its column). */
-  .libacts { display:grid; grid-template-columns: 84px 92px 112px 84px 72px; gap:8px; justify-content:end; margin-left:auto; }
-  .libacts button { width:100%; white-space:nowrap; }
-  .libacts .a1 { grid-column:1; } .libacts .a2 { grid-column:2; } .libacts .a3 { grid-column:3; } .libacts .a4 { grid-column:4; } .libacts .a5 { grid-column:5; }
+     (a missing button leaves its column empty; "Offline ✓" fits its column). The other actions are in the "⋯" menu. */
+  .libacts { display:grid; grid-template-columns: 84px 92px 44px; gap:8px; justify-content:end; margin-left:auto; }
+  .libacts > button { width:100%; white-space:nowrap; }
+  .libacts .a1 { grid-column:1; } .libacts .a2 { grid-column:2; } .libacts .a3 { grid-column:3; }
+  .rowmenu { position:relative; }
+  .rowmenu .more { width:44px; min-height:36px; padding:0; font-size:18px; line-height:1; }
+  .menu { position:absolute; right:0; top:calc(100% + 4px); z-index:20; min-width:170px; display:flex; flex-direction:column; padding:4px;
+          background:var(--field); border:1px solid var(--line); border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,.18); }
+  .menu button { background:transparent; color:var(--ink); border:0; border-radius:6px; text-align:left; padding:8px 12px; font-size:14px; min-height:40px; white-space:nowrap; }
+  .menu button:hover, .menu button:focus-visible { background:var(--soft); outline:none; }
+  .menu button.danger { color:var(--err); background:transparent; }
   .bar { height:4px; background:var(--soft); border-radius:2px; margin-top:6px; overflow:hidden; } .bar i { display:block; height:100%; background:var(--accent); }
   .readtext { margin-top:14px; max-height: 55vh; overflow-y:auto; border-top:1px solid var(--line); padding-top:10px; line-height:1.9; font-size:17px; }
   .readtext p { margin:0 0 12px; }
@@ -229,8 +233,11 @@
     .chlist .n { flex-basis: 100%; margin-left: 30px; white-space: normal; }
     .libitem { padding: 10px 12px; gap: 8px; }
     .libitem .grow { min-width: 100%; }
-    .libacts { display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-start; margin-left:0; width:100%; }
-    .libacts button { width:auto; }
+    .libacts { display:flex; flex-wrap:nowrap; gap:8px; justify-content:flex-start; margin-left:0; width:100%; }
+    .libacts > button { width:auto; }
+    .rowmenu { margin-left:auto; }
+    .rowmenu .more { min-height:44px; }
+    .menu button { min-height:44px; }
     .pnav select { flex: 1; min-width: 0; max-width: none !important; }
     .pnav { gap: 4px; }
     .pnav button { min-width: 38px; padding-left: 6px; padding-right: 6px; }
@@ -1805,10 +1812,7 @@ function renderLibrary() {
     const row = el('div', 'libitem');
     const g = el('div', 'grow');
     const t = el('div', 't', it.title); t.onclick = () => openItem(it.id);
-    const ren = el('button', 'iconbtn rename', '✎'); ren.type = 'button'; ren.dataset.net = '1';
-    ren.setAttribute('aria-label', 'Rename'); ren.title = 'Rename';
-    ren.onclick = (e) => { e.stopPropagation(); startRename(it, head); };
-    const head = el('div', 'thead'); head.append(t, ren);
+    const head = el('div', 'thead'); head.append(t);
     g.appendChild(head);
     const meta = [it.kind === 'book' ? 'Book' : 'Paper', new Date(it.created).toLocaleDateString()];
     if (it.kind === 'book') meta.push(chaptersDone(it) + '/' + it.chapters.length + ' chapters');
@@ -1835,31 +1839,83 @@ function renderLibrary() {
       const off = el('button', 'ghost small', nOff ? 'Offline ✓' : 'Offline'); off.title = 'Save for offline listening, or remove the offline copy';
       off.classList.add('a2'); off.onclick = () => toggleOfflinePanel(it, row); acts.appendChild(off);
     }
-    if (it.kind === 'book' && it.state !== 'processing') {
-      const add = el('button', 'ghost small', chaptersDone(it) < it.chapters.length ? 'Add chapters' : 'Chapters'); add.dataset.net = '1';
-      add.classList.add('a3'); add.onclick = () => toggleAddPanel(it, row); acts.appendChild(add);
-    }
+    // Less frequent actions in the "⋯" menu.
+    const more = [];
+    if (it.kind === 'book' && it.state !== 'processing')
+      more.push({ label: chaptersDone(it) < it.chapters.length ? 'Add chapters' : 'Chapters', net: true, run: () => toggleAddPanel(it, row) });
     if (it.state !== 'processing') {
-      const sh = el('button', 'ghost small', it.shared ? 'Unshare' : 'Share'); sh.dataset.net = '1';
-      sh.title = it.shared ? 'Shared with every account of this site; click to stop sharing' : 'Let every account of this site listen to this';
-      sh.onclick = async () => {
-        sh.disabled = true;
-        try { await api({ action: 'audio_share', token, id: it.id, shared: !it.shared }); await loadLibrary(); }
-        catch (e) { setStatus($('libStatus'), e.message, true); sh.disabled = false; }
-      };
-      sh.classList.add('a4'); acts.appendChild(sh);
-      const del = el('button', 'ghost small', 'Delete'); del.dataset.net = '1';
-      del.onclick = async () => {
+      more.push({ label: it.shared ? 'Unshare' : 'Share', net: true,
+        title: it.shared ? 'Shared with every account of this site; click to stop sharing' : 'Let every account of this site listen to this',
+        run: async () => {
+          try { await api({ action: 'audio_share', token, id: it.id, shared: !it.shared }); await loadLibrary(); }
+          catch (e) { setStatus($('libStatus'), e.message, true); }
+        } });
+    }
+    more.push({ label: 'Rename', net: true, run: () => startRename(it, head) });
+    if (it.state !== 'processing') {
+      more.push({ label: 'Delete', net: true, danger: true, run: async () => {
         if (!window.confirm('Delete "' + it.title + '" and its audio from Drive?')) return;
         try { await api({ action: 'audio_delete', token, id: it.id }); if (P && P.item.id === it.id) closePlayer(); loadLibrary(); }
         catch (e) { setStatus($('libStatus'), e.message, true); }
-      };
-      del.classList.add('a5'); acts.appendChild(del);
+      } });
     }
+    const menu = rowMenu(more); menu.classList.add('a3'); acts.appendChild(menu);
     box.appendChild(row);
     if (openPanels.includes('|' + it.id)) toggleOfflinePanel(it, row);
   });
 }
+
+/**
+ * A "⋯" button with a menu of actions ({label, run, net, danger, title}). The menu closes on Escape,
+ * on a tap outside and after a choice; arrow keys, Home and End move between its items.
+ */
+let openRowMenu = null, rowMenuSeq = 0;
+function rowMenu(items) {
+  const wrap = el('div', 'rowmenu');
+  const btn = el('button', 'ghost small more', '⋯'); btn.type = 'button';
+  const menu = el('div', 'menu hidden'); menu.id = 'rowmenu' + (++rowMenuSeq); menu.setAttribute('role', 'menu');
+  btn.setAttribute('aria-label', 'More actions'); btn.title = 'More actions';
+  btn.setAttribute('aria-haspopup', 'menu'); btn.setAttribute('aria-expanded', 'false'); btn.setAttribute('aria-controls', menu.id);
+  items.forEach((i) => {
+    const b = el('button', i.danger ? 'danger' : '', i.label); b.type = 'button'; b.tabIndex = -1;
+    b.setAttribute('role', 'menuitem');
+    if (i.net) b.dataset.net = '1';
+    if (i.title) b.title = i.title;
+    b.onclick = (e) => {
+      e.stopPropagation();
+      if (b.getAttribute('aria-disabled') === 'true') return;
+      closeRowMenu(false); i.run();
+    };
+    menu.appendChild(b);
+  });
+  const open = (focusLast) => {
+    closeRowMenu(false);
+    menu.classList.remove('hidden'); btn.setAttribute('aria-expanded', 'true');
+    openRowMenu = { btn, menu };
+    const its = menu.querySelectorAll('[role=menuitem]');
+    if (its.length) its[focusLast ? its.length - 1 : 0].focus();
+  };
+  btn.onclick = (e) => { e.stopPropagation(); if (openRowMenu && openRowMenu.menu === menu) closeRowMenu(true); else open(false); };
+  btn.onkeydown = (e) => { if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); open(e.key === 'ArrowUp'); } };
+  menu.onkeydown = (e) => {
+    const its = Array.from(menu.querySelectorAll('[role=menuitem]')), k = its.indexOf(document.activeElement);
+    const go = (n) => { e.preventDefault(); its[(n + its.length) % its.length].focus(); };
+    if (e.key === 'ArrowDown') go(k + 1); else if (e.key === 'ArrowUp') go(k - 1);
+    else if (e.key === 'Home') go(0); else if (e.key === 'End') go(its.length - 1);
+    else if (e.key === 'Escape') { e.preventDefault(); closeRowMenu(true); }
+    else if (e.key === 'Tab') closeRowMenu(false);
+  };
+  wrap.append(btn, menu);
+  return wrap;
+}
+function closeRowMenu(focusButton) {
+  if (!openRowMenu) return;
+  const { btn, menu } = openRowMenu; openRowMenu = null;
+  menu.classList.add('hidden'); btn.setAttribute('aria-expanded', 'false');
+  if (focusButton) btn.focus();
+}
+document.addEventListener('pointerdown', (e) => { if (openRowMenu && !openRowMenu.menu.parentElement.contains(e.target)) closeRowMenu(false); }, true);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && openRowMenu) closeRowMenu(true); });
 
 function chaptersDone(it) { return (it.chapters || []).filter((c) => c.status === 'done' || (!c.status && c.n > 0)).length; }
 /** Segments of chapter c that can be played now. */
@@ -2173,8 +2229,13 @@ function renderPlayerOffline() {
   if (savableChapters(it).includes(P.c) && it.chapters.length > 1) box.appendChild(offlineControls(it, P.c));
   if (savableChapters(it).length) box.appendChild(offlineControls(it, null, true));
 }
+/** Running from the Home Screen (iPhone) or as an installed app. */
+function isStandalone() { try { return !!(navigator.standalone || matchMedia('(display-mode: standalone)').matches); } catch (e) { return false; } }
 async function renderStorage() {
   const box = $('offlineInfo');
+  // Only useful when something is saved offline, or as the hint to add the page to the Home Screen.
+  const standalone = isStandalone();
+  box.classList.toggle('hidden', standalone && !offIndex.size);
   const parts = [];
   if (navigator.storage && navigator.storage.estimate) {
     try {
@@ -2186,6 +2247,7 @@ async function renderStorage() {
   try { kept = !!(navigator.storage && navigator.storage.persisted && await navigator.storage.persisted()); } catch (e) {}
   if (offIndex.size && !kept) parts.push('Saved chapters may be deleted when space runs low.');
   box.textContent = parts.join(' ') + ' ';
+  if (standalone) return;
   const a = el('a', null, 'iPhone: add to Home Screen to keep them.'); a.href = 'install/'; a.style.color = 'var(--accent)';
   box.appendChild(a);
 }
@@ -4224,7 +4286,7 @@ offLoadIndex().then(renderNet);
     // Library
     'Your audio library': '我的音频书库', 'Shared library': '共享书库', 'Nothing yet. Converted PDFs will be listed here.': '还没有内容。转换后的 PDF 会列在这里。',
     'Listen': '收听', 'Resume': '继续', 'Offline': '离线', 'Offline ✓': '离线 ✓', 'Chapters': '章节', 'Add chapters': '添加章节', 'Share': '分享', 'Unshare': '取消分享',
-    'Delete': '删除', 'Confirm delete': '确认删除', 'Cancel': '取消', 'Rename': '重命名', 'New title': '新标题', 'Book': '书', 'Paper': '论文',
+    'Delete': '删除', 'More actions': '更多操作', 'Confirm delete': '确认删除', 'Cancel': '取消', 'Rename': '重命名', 'New title': '新标题', 'Book': '书', 'Paper': '论文',
     'Convert selected': '转换所选', 'Delete audio': '删除音频', 'Save for offline': '离线保存', 'Saved offline': '已离线保存',
     'Save for offline listening, or remove the offline copy': '保存以便离线收听，或删除离线副本',
     'Let every account of this site listen to this': '让本站所有账号都能收听',

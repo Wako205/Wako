@@ -1,4 +1,4 @@
-const { test, expect, login, openAudio } = require('./support/backend');
+const { test, expect, login, openAudio, rowAction } = require('./support/backend');
 const { makeBookPdf } = require('./support/media');
 
 test.use({ hasTouch: true });
@@ -36,7 +36,7 @@ for (const width of [360, 390, 430]) {
 
       await openAudio(page);
       expect(await audit(page, width)).toEqual({ overflow: 0, small: [] });
-      await page.locator('#library .libitem').first().getByRole('button', { name: 'Add chapters' }).click();
+      await (await rowAction(page.locator('#library .libitem').first(), 'Add chapters')).click();
       expect(await audit(page, width)).toEqual({ overflow: 0, small: [] });
     });
 
