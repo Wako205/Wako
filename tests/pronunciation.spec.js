@@ -1,88 +1,29 @@
+// The pronunciation list is gone: new conversions are sent as written. Books converted earlier with a
+// list (mp_pron_used_<id>) still show the original spelling in the player. Mock backend only.
 const { test, expect, login, openAudio, INDEX_URL } = require('./support/backend');
 const { makeBookPdf } = require('./support/media');
 
-// The section is hidden in the page for now; these tests show it to check that it still works.
-test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => document.addEventListener('DOMContentLoaded', () => document.getElementById('pronBox').classList.remove('hidden')));
-});
-
-async function addTerm(page, term, say) {
-  await page.fill('#pronTerm', term);
-  await page.fill('#pronSay', say);
-  await page.click('#pronAdd');
-}
-
-test('the list is edited in the Audio tab and stored per user', async ({ page, backend }) => {
-  await login(page, 'alice');
-  await openAudio(page);
-  await page.click('#tabAudio');
-  await page.click('#pronSummary');
-  await expect(page.locator('#pronBox .notice')).toContainText('stored in this browser only');
-  await addTerm(page, 'MoS2', 'M O S two');
-  await addTerm(page, 'CVD', 'C V D');
-  await page.fill('#pronTerm', 'hBN');
-  await page.click('#pronAdd');
-  await expect(page.locator('#pronStatus')).toHaveText('Enter both the term and how it is spoken.');
-  await expect(page.locator('#pronList tr')).toHaveCount(2);
-  await expect(page.locator('#pronSummary')).toHaveText('Pronunciation of terms (2)');
-  expect(JSON.parse(await page.evaluate(() => localStorage.getItem('mp_pron_alice')))).toEqual([
-    { term: 'CVD', say: 'C V D' }, { term: 'MoS2', say: 'M O S two' },
-  ]);
-  // Adding a term again replaces its spoken form.
-  await page.fill('#pronSay', 'molybdenum disulfide');
-  await page.fill('#pronTerm', 'MoS2');
-  await page.press('#pronSay', 'Enter');
-  await expect(page.locator('#pronList tr')).toHaveCount(2);
-  await expect(page.locator('#pronList')).toContainText('molybdenum disulfide');
-  await page.locator('#pronList tr').first().getByRole('button', { name: 'Remove' }).click();
-  await expect(page.locator('#pronList tr')).toHaveCount(1);
-
-  await page.reload();
-  await openAudio(page);
-  await page.click('#tabAudio');
-  await expect(page.locator('#pronList tr')).toHaveCount(1);
-
-  await page.click('#logoutBtn');
-  await login(page, 'bob');
-  await openAudio(page);
-  await page.click('#tabAudio');
-  await expect(page.locator('#pronList tr')).toHaveCount(0);
-});
-
-test('book text is respelled before audio_start, titles and other words are not', async ({ page, backend }) => {
+test('no pronunciation box; an old list in this browser is not applied to new conversions', async ({ page, backend }) => {
   const pdf = await makeBookPdf({ chapters: 3 });
+  await page.goto(INDEX_URL);
+  await page.evaluate(() => localStorage.setItem('mp_pron_tester', JSON.stringify([{ term: 'mill', say: 'M I L L' }, { term: 'lantern', say: 'lamp' }])));
   await login(page);
   await page.click('#tabAudio');
-  await page.click('#pronSummary');
-  await addTerm(page, 'mill', 'M I L L');
-  await addTerm(page, 'lantern', 'lamp');
-  await addTerm(page, 'Chapter', 'Kapitel');
+  await expect(page.locator('#pronBox')).toHaveCount(0);
   await page.setInputFiles('#apdf', { name: 'mill.pdf', mimeType: 'application/pdf', buffer: pdf });
   await page.locator('#bookChapters label').nth(1).locator('input').check();
-
   await page.click('#previewBtn');
   await expect.poll(() => backend.callsOf('audio_preview').length).toBe(1);
-  expect(backend.callsOf('audio_preview')[0].text).toContain('old M I L L while');
-  await expect(page.locator('#previewBtn')).toBeEnabled();
-  await page.click('#previewBtn');                                   // the same sample again: played from memory
-  await expect(page.locator('#audioStatus')).toContainText('no new charge');
-  expect(backend.callsOf('audio_preview')).toHaveLength(1);
-
+  expect(backend.callsOf('audio_preview')[0].text).not.toContain('M I L L');
   await page.click('#audioBtn');
   await expect(page.locator('#audioStatus')).toContainText('Started.');
-  const start = backend.callsOf('audio_start')[0];
-  expect(start.chapters.map((c) => c.title)).toEqual(['Chapter 1', 'Chapter 2', 'Chapter 3']);
-  const text = start.chapters[1].text;
-  expect(text).toContain('past the old M I L L while');
-  expect(text).toContain('Nobody noticed the lamp in');
-  expect(text).toContain('the miller had gone');          // whole words only
-  expect(text).not.toContain('lantern');
-  expect(text).toContain('end of chapter 2');             // terms are case-sensitive
-  // The list used is kept with the new library item, for the player.
-  expect(JSON.parse(await page.evaluate(() => localStorage.getItem('mp_pron_used_new1'))).map((x) => x.term)).toEqual(['Chapter', 'lantern', 'mill']);
+  const text = backend.callsOf('audio_start')[0].chapters[1].text;
+  expect(text).toContain('past the old mill while');
+  expect(text).toContain('Nobody noticed the lantern in');
+  expect(await page.evaluate(() => localStorage.getItem('mp_pron_used_new1'))).toBeNull();
 });
 
-test('the player shows the original spelling', async ({ page, backend }) => {
+test('a book converted with a list still shows the original spelling in the player', async ({ page, backend }) => {
   backend.on('audio_text', () => ({ texts: ['Layers of M O S two are thin. They grow by C V D.', 'The M O S two film is uniform.'] }));
   await page.goto(INDEX_URL);
   await page.evaluate(() => localStorage.setItem('mp_pron_used_book1', JSON.stringify([{ term: 'MoS2', say: 'M O S two' }, { term: 'CVD', say: 'C V D' }])));

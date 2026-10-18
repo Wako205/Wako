@@ -88,7 +88,7 @@ test('playback never goes through Web Audio, so it continues with the screen loc
   await openBook(page);
   await expect(page.locator('#pVol')).toHaveCount(0);
   await expect(page.locator('#pFollow')).toHaveCount(0);
-  await expect(page.locator('#pronBox')).toBeHidden();
+  await expect(page.locator('#pronBox')).toHaveCount(0);
   await page.locator('#pText span.s').nth(1).click();
   await expect.poll(async () => (await state(page)).paused).toBe(false);
   expect(await page.evaluate(() => window.__routed)).toBe(0);
