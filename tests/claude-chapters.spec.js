@@ -28,6 +28,11 @@ test('a long book with fewer than five recognized chapters: Claude finds the hea
   expect(text).toContain('The last lines of chapter 3, line 6.');
   expect(text).not.toContain('chapter 2,');
   expect(text).not.toMatch(/quietly\. \d+ Text/);                    // page numbers left out
+  // The same file chosen again: the saved answer is used, Claude is not paid a second time.
+  await page.setInputFiles('#apdf', { name: 'long.pdf', mimeType: 'application/pdf', buffer: await makeWordHeadedBookPdf() });
+  await expect(page.locator('#kindLine')).toContainText('chapters found by Claude', { timeout: 30000 });
+  await expect(rows).toHaveCount(6);
+  expect(backend.callsOf('audio_outline')).toHaveLength(1);
 });
 
 test('a short book does not ask Claude', async ({ page, backend }) => {

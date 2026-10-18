@@ -45,3 +45,20 @@ test('deletes an item after confirmation', async ({ page, backend }) => {
   await expect(page.locator('#library .libitem')).toHaveCount(1);
   expect(backend.callsOf('audio_delete')[0]).toMatchObject({ id: 'paper1' });
 });
+
+test('the library saved on this device is shown at once, then replaced by the fresh one; switching tabs does not ask again', async ({ page, backend }) => {
+  await login(page);
+  await openAudio(page);
+  const calls = () => backend.callsOf('audio_library').length;
+  const n = calls();
+  await page.click('#tabAudio');
+  await page.click('#tabLib');
+  await expect(page.locator('#library .libitem').first()).toBeVisible();
+  expect(calls()).toBe(n);                                   // fetched moments ago: not again
+  // Next visit: a slow server, but the saved list is there immediately.
+  let release; backend.on('audio_library', () => new Promise((r) => { release = () => r({ items: JSON.parse(JSON.stringify(backend.library)).map((x, i) => i ? x : Object.assign(x, { title: 'Fresh title' })), ttsUsed: 0, ttsCap: 1030000 }); }));
+  await page.reload();
+  await expect(page.locator('#library .libitem').first().locator('.t')).toHaveText('The Quiet Mill');
+  release();
+  await expect(page.locator('#library .libitem').first().locator('.t')).toHaveText('Fresh title');
+});

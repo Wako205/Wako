@@ -63,6 +63,10 @@ test('book text is respelled before audio_start, titles and other words are not'
   await page.click('#previewBtn');
   await expect.poll(() => backend.callsOf('audio_preview').length).toBe(1);
   expect(backend.callsOf('audio_preview')[0].text).toContain('old M I L L while');
+  await expect(page.locator('#previewBtn')).toBeEnabled();
+  await page.click('#previewBtn');                                   // the same sample again: played from memory
+  await expect(page.locator('#audioStatus')).toContainText('no new charge');
+  expect(backend.callsOf('audio_preview')).toHaveLength(1);
 
   await page.click('#audioBtn');
   await expect(page.locator('#audioStatus')).toContainText('Started.');

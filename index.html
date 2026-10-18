@@ -665,7 +665,8 @@ function showApp() {
   }
   renderChat();
   loadMusicPrefs();
-  musicSync();                                      // loads the first track, ready for ▶
+  libFirst = true; libFetchedAt = 0;
+  setTimeout(() => { if (libFirst) { libFirst = false; musicSync(); } }, 4000);   // normally started once the library is shown
   switchTab('lib');
 }
 /**
@@ -727,7 +728,11 @@ function switchTab(t) {
   [['chat', 'tabChat', 'chatView'], ['tools', 'tabTools', 'toolsView'], ['lib', 'tabLib', 'libView'], ['audio', 'tabAudio', 'audioView'], ['trans', 'tabTrans', 'transView'], ['admin', 'tabAdmin', 'adminView']].forEach(([k, tab, view]) => {
     $(tab).classList.toggle('active', t === k); $(view).classList.toggle('hidden', t !== k);
   });
-  if ((t === 'audio' || t === 'lib') && (token || offlineMode)) { renderPron(); loadLibrary(); } else clearTimeout(libTimer);
+  if ((t === 'audio' || t === 'lib') && (token || offlineMode)) {
+    renderPron();
+    if (token && isOnline() && Date.now() - libFetchedAt < 30000) { renderLibrary(); pollLibrary(); }   // fetched moments ago
+    else loadLibrary();
+  } else clearTimeout(libTimer);
   if (t === 'trans' && token) trLoadUsage();
   if (t === 'admin' && token) loadAdmin();
   renderNet();
@@ -1300,9 +1305,16 @@ async function outlineWithClaude(d, kind) {
     const t = l.s.trim();
     if (t && t.length <= 40 && !(t.length > 8 && /[.,;:!?…。，；：！？、”’"'»)]$/.test(t))) cands.push((pi + 1) + ':' + li + ' ' + t);
   }));
-  setStatus($('audioStatus'), 'Claude is looking for the chapters...');
-  const r = await api(Object.assign({ action: 'audio_outline', token, pages: d.pages, head, firsts }, kind === 'book' ? { kind, cands: cands.join('\n').slice(0, 60000) } : {}));
-  setStatus($('audioStatus'), '');
+  const req = Object.assign({ action: 'audio_outline', pages: d.pages, head, firsts }, kind === 'book' ? { kind, cands: cands.join('\n').slice(0, 60000) } : {});
+  // The same file chosen again: the answer saved on this device is used, so the search is not paid for twice.
+  const ck = 'mp_outline_' + strHash(JSON.stringify(req));
+  let r = null; try { r = JSON.parse(lsGet(ck) || 'null'); } catch (e) {}
+  if (!r) {
+    setStatus($('audioStatus'), 'Claude is looking for the chapters...');
+    r = await api(Object.assign({ token }, req));
+    setStatus($('audioStatus'), '');
+    lsSet(ck, JSON.stringify({ chapters: r.chapters || [] }));
+  }
   const list = (r.chapters || []).filter((c) => c.page >= 1 && c.page <= d.pages).sort((a, b) => a.page - b.page);
   if (list.length < 2) return null;
   if (kind === 'book') return chaptersAtHeadings(d.lines, list);
@@ -1452,6 +1464,7 @@ async function splitPdfRanges(bytes, ranges) {
 
 // Plays a short sample of the chosen voice reading the beginning of the selected text.
 let previewAudio = null;
+const previewCache = new Map();                 // voice|text -> sample already received (played again without a charge)
 $('previewBtn').onclick = async () => {
   const st = $('audioStatus');
   const src = bookData && (bookData.chapters.find((c) => c.sel !== false && !c.front && c.text.length > 20) || bookData.chapters.find((c) => c.text.length > 20));
@@ -1459,11 +1472,16 @@ $('previewBtn').onclick = async () => {
   let text = sample.replace(/\s+/g, ' ').trim().slice(0, 140);
   const cut = Math.max(text.lastIndexOf('。'), text.lastIndexOf('. '), text.lastIndexOf('！'), text.lastIndexOf('？'));
   if (cut > 40) text = text.slice(0, cut + 1);
-  $('previewBtn').disabled = true; setStatus(st, 'Preparing a sample of ' + $('avoice').value + '...');
+  const voice = $('avoice').value, said = respell(text, pronList()), key = voice + '|' + said;
+  if (previewAudio) previewAudio.pause();
+  const seen = previewCache.get(key);
+  if (seen) { previewAudio = new Audio(seen.url); previewAudio.play().catch(() => {}); setStatus(st, 'Playing a sample (' + seen.lang + ', no new charge).'); return; }
+  $('previewBtn').disabled = true; setStatus(st, 'Preparing a sample of ' + voice + '...');
   try {
-    const d = await api({ action: 'audio_preview', token, voice: $('avoice').value, text: respell(text, pronList()) });
-    if (previewAudio) { previewAudio.pause(); URL.revokeObjectURL(previewAudio.src); }
-    previewAudio = new Audio(URL.createObjectURL(new Blob([unb64(d.data)], { type: 'audio/mpeg' })));
+    const d = await api({ action: 'audio_preview', token, voice, text: said });
+    const url = URL.createObjectURL(new Blob([unb64(d.data)], { type: 'audio/mpeg' }));
+    previewCache.set(key, { url, lang: d.lang });
+    previewAudio = new Audio(url);
     previewAudio.play().catch(() => {});
     setStatus(st, 'Playing a sample (' + d.lang + ', ' + fmtK(d.chars) + ').');
   } catch (e) { setStatus(st, e.message, true); if (/log in again/i.test(e.message)) logout(); }
@@ -1618,13 +1636,21 @@ function allowance(voice) {
 function allowanceLeft(al) { return Math.max(0, al.cap - al.used) + al.trial; }
 /** Unambiguous date, for example "7 Nov 2026". */
 function fmtDay(ms) { const d = new Date(ms); return d.getDate() + ' ' + d.toLocaleString('en', { month: 'short' }) + ' ' + d.getFullYear(); }
+/** Short hash of a string, for cache keys. */
+function strHash(t) { let h = 0; for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) >>> 0; return h.toString(36) + '_' + t.length; }
 function libSnapshot(user) { try { return JSON.parse(lsGet('mp_lib_' + user) || 'null'); } catch (e) { return null; } }
+let libFetchedAt = 0, libFirst = true;
 async function loadLibrary() {
   renderStorage();
   let d = null;
   if (token && isOnline()) {
+    // The copy saved on this device is shown at once; the fresh list replaces it when it arrives.
+    const snap = !libItems.length ? libSnapshot(username) : null;
+    if (snap) applyLibrary(snap, true);
+    loadShared();                                     // at the same time as the library
     try {
       d = await api({ action: 'audio_library', token });
+      libFetchedAt = Date.now();
       lsSet('mp_lib_' + username, JSON.stringify(Object.assign({}, d, { ok: undefined, at: Date.now() })));
       setStatus($('libNote'), '');
       flushOutbox();
@@ -1638,7 +1664,14 @@ async function loadLibrary() {
     if (!snap) { $('library').textContent = token ? 'The library cannot be loaded without a connection.' : 'No library has been saved on this device.'; return; }
     d = snap;
     setStatus($('libNote'), 'Offline: the library as received on ' + new Date(snap.at).toLocaleString() + '.');
+    loadShared();
   }
+  applyLibrary(d, false);
+  if (libFirst) { libFirst = false; setTimeout(musicSync, 0); }   // the music loads after the library, not alongside it
+}
+
+/** Shows a library reply (or the copy saved on this device, cached = true: no polling, no player refresh). */
+function applyLibrary(d, cached) {
   libItems = (d.items || []).filter((x) => x && x.id); libUsage.used = d.ttsUsed || 0; libUsage.cap = d.ttsCap || 0;
   libUsage.azUsed = d.azUsed || 0; libUsage.azCap = d.azCap || 0; libUsage.azReady = !!d.azReady;
   libUsage.s0Used = d.s0Used || 0; libUsage.s0Cap = d.s0Cap || 0; libUsage.s0Mine = d.s0Mine || 0; libUsage.s0UserCap = d.s0UserCap || 0;
@@ -1656,8 +1689,8 @@ async function loadLibrary() {
         ' (through ' + fmtDay(libUsage.s0Until - 1) + ')' : '') : '');
   renderUsage(d);
   renderLibrary(); bookSummary(); renderNet();
+  if (cached) return;
   if (P && !P.item.owner) { refreshChapterSelect(); resumeIfWaiting(); }
-  loadShared();
   if (isOnline() && token) pollLibrary();
 }
 
@@ -1909,21 +1942,26 @@ function chapterDeleteButton(it, c, panel) {
   return wrap;
 }
 
+// Back to the page (another app, a locked phone): the library is brought up to date.
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && token && isOnline() && libShown() && Date.now() - libFetchedAt > 30000) loadLibrary();
+});
 // Polls conversions in progress; the server also uses these polls to restart a stalled job.
 function pollLibrary() {
   clearTimeout(libTimer);
   const busy = libItems.filter((it) => it.state === 'processing');
   if (!busy.length || !libShown()) return;
   libTimer = setTimeout(async () => {
+    if (document.hidden) return pollLibrary();       // nobody is looking: check again later
     let reload = false;
-    for (const it of busy) {
+    await Promise.all(busy.map(async (it) => {
       try {
         const d = await api({ action: 'status', token, jobId: it.jobId || it.id });
-        if (d.state === 'done') { reload = true; continue; }
+        if (d.state === 'done') { reload = true; return; }
         it._progress = d.progress; it._ready = d.ready || it._ready;
         if (d.chapters && d.chapters.length && it.kind !== 'book') it.chapters = d.chapters;
       } catch (e) { reload = true; }
-    }
+    }));
     if (reload) return loadLibrary();
     renderLibrary(); if (P) { refreshChapterSelect(); resumeIfWaiting(); } pollLibrary();
   }, 8000);

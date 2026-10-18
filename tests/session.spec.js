@@ -34,7 +34,7 @@ test('shows the server error for a wrong password', async ({ page, backend }) =>
 test('an expired token returns to the login form', async ({ page, backend }) => {
   await login(page);
   backend.token = 'something-else';
-  await page.click('#tabAudio');
+  await page.reload();                                    // the library was fetched moments ago; a reload asks again
   await expect(page.locator('#loginView')).toBeVisible();
 });
 
