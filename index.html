@@ -2045,6 +2045,10 @@ const OFFLINE_MSG = 'You are offline. This needs a connection.';
 let offlineMode = false;              // using saved chapters without being logged in
 const offIndex = new Map();           // key 'user|id|c' -> { user, id, c, bytes, at } for the chapters saved here
 const offBusy = new Set();            // item ids being saved
+// Recently played chapters are kept in the same store, marked "recent" (not saved by the user), so the next
+// play needs no request; up to RECENT_LIMIT bytes per user, the least recently played removed first.
+let RECENT_LIMIT = 200e6;
+const recentIndex = new Map();        // key -> meta of this user's recent copies (not in offIndex)
 let offDbP = null;
 
 function isOnline() { return navigator.onLine !== false; }
@@ -2093,7 +2097,8 @@ async function offLoadIndex() {
   try {
     const db = await offDb();
     const all = await idbReq(db.transaction('meta').objectStore('meta').index('user').getAll(user));
-    all.forEach((m) => offIndex.set(m.key, m));
+    recentIndex.clear();
+    all.forEach((m) => (m.recent ? recentIndex : offIndex).set(m.key, m));
   } catch (e) {}
 }
 async function offGet(it, c) {
@@ -2104,8 +2109,55 @@ async function offGet(it, c) {
 async function offRemove(keys) {
   if (!keys.length) return;
   const db = await offDb(), tx = db.transaction(['meta', 'audio'], 'readwrite');
-  keys.forEach((k) => { tx.objectStore('meta').delete(k); tx.objectStore('audio').delete(k); offIndex.delete(k); });
+  keys.forEach((k) => { tx.objectStore('meta').delete(k); tx.objectStore('audio').delete(k); offIndex.delete(k); recentIndex.delete(k); });
   await idbDone(tx);
+}
+/** The recent copy of a chapter, or null; touch marks it as just played (for the size limit). */
+async function recentGet(it, c, touch) {
+  const key = offKey(it, c), m = recentIndex.get(key);
+  if (!m) return null;
+  const db = await offDb();
+  const rec = await idbReq(db.transaction('audio').objectStore('audio').get(key));
+  if (!rec) { recentIndex.delete(key); return null; }
+  if (touch) { m.played = Date.now(); try { db.transaction('meta', 'readwrite').objectStore('meta').put(m); } catch (e) {} }
+  return rec;
+}
+/** Keeps a chapter that has been loaded in full for playing, unless it is saved for offline already. */
+async function keepRecent(it, c, data) {
+  const ch = it.chapters[c], user = offUser();
+  if (!ch || !ch.n || data.parts < ch.n || !user) return;
+  if (ch.status ? ch.status !== 'done' : it.state === 'processing') return;      // still being converted
+  const key = offKey(it, c, user), had = recentIndex.get(key);
+  if (offIndex.has(key)) return;
+  if (had) {                                         // played again (perhaps from memory): now the most recent
+    had.played = Date.now();
+    try { (await offDb()).transaction('meta', 'readwrite').objectStore('meta').put(had); } catch (e) {}
+    return;
+  }
+  const bytes = data.bufs.reduce((n, b) => n + b.byteLength, 0);
+  if (bytes > RECENT_LIMIT) return;
+  try {
+    const db = await offDb(), now = Date.now();
+    const meta = { key, user, owner: ownerOf(it).owner || '', id: it.id, c, bytes, at: now, played: now, recent: true };
+    const tx = db.transaction(['meta', 'audio'], 'readwrite');
+    tx.objectStore('audio').put({ key, texts: data.texts, bufs: data.bufs, plain: true });   // texts already in the original spelling
+    tx.objectStore('meta').put(meta);
+    await idbDone(tx);
+    recentIndex.set(key, meta);
+    await recentTrim();
+    renderStorage();
+  } catch (e) {}                                     // no room or no IndexedDB: simply no copy
+}
+/** Removes the least recently played copies above RECENT_LIMIT; chapters saved by the user are never touched. */
+async function recentTrim() {
+  let total = 0; recentIndex.forEach((m) => { total += m.bytes; });
+  if (total <= RECENT_LIMIT) return;
+  const drop = [];
+  for (const m of [...recentIndex.values()].sort((a, b) => a.played - b.played)) {
+    if (total <= RECENT_LIMIT) break;
+    drop.push(m.key); total -= m.bytes;
+  }
+  await offRemove(drop);
 }
 /** Deletes everything this browser keeps for a user: offline audio, the library copy, unsent and saved positions. */
 async function offWipe(user) {
@@ -2113,7 +2165,7 @@ async function offWipe(user) {
   try {
     const db = await offDb();
     const keys = await idbReq(db.transaction('meta').objectStore('meta').index('user').getAllKeys(user));
-    await offRemove(keys);
+    await offRemove(keys);                           // saved and recent copies
   } catch (e) {}
   try {
     const own = ['mp_pos_' + user + '_', 'mp_mark_b1_' + user + '_', 'mp_mark_b2_' + user + '_'];
@@ -2121,7 +2173,7 @@ async function offWipe(user) {
   } catch (e) {}
   ['mp_lib_' + user, 'mp_shared_' + user, 'mp_outbox_' + user].forEach((k) => { try { localStorage.removeItem(k); } catch (e) {} });
   if (lsGet('mp_last_user') === user) { try { localStorage.removeItem('mp_last_user'); } catch (e) {} }
-  offIndex.clear();
+  offIndex.clear(); recentIndex.clear();
 }
 
 /** Downloads chapters of an item and stores them for offline listening. */
@@ -2140,6 +2192,14 @@ async function saveOffline(it, chapters, say) {
   try {
     for (let j = 0; j < chapters.length; j++) {
       const c = chapters[j], ch = it.chapters[c];
+      const rk = offKey(it, c, user), rm = recentIndex.get(rk);
+      if (rm) {                                      // played recently: the copy becomes a saved one, nothing to download
+        const meta = Object.assign({}, rm, { recent: false, at: Date.now() });
+        delete meta.recent; delete meta.played;
+        const tx = db.transaction('meta', 'readwrite'); tx.objectStore('meta').put(meta); await idbDone(tx);
+        recentIndex.delete(rk); offIndex.set(rk, meta);
+        continue;
+      }
       const pre = chapters.length > 1 ? 'Saving chapter ' + (j + 1) + ' of ' + chapters.length + ': ' : 'Saving: ';
       say(pre + 'text');
       const texts = (await api({ action: 'audio_text', token, id: it.id, chapter: c, ...ownerOf(it) })).texts;
@@ -2256,6 +2316,10 @@ async function renderStorage() {
   }
   let kept = false;
   try { kept = !!(navigator.storage && navigator.storage.persisted && await navigator.storage.persisted()); } catch (e) {}
+  if (recentIndex.size) {
+    let n = 0; recentIndex.forEach((m) => { n += m.bytes; });
+    parts.push('Recently played chapters: ' + fmtBytes(n) + ', removed first when more room is needed.');
+  }
   if (offIndex.size && !kept) parts.push('Saved chapters may be deleted when space runs low.');
   box.textContent = parts.join(' ') + ' ';
   if (standalone) return;
@@ -2472,10 +2536,11 @@ function fetchChapter(c, onStatus, onEarly) {
   const st = { texts: null, bufs: null, earlyDone: false };
   const say = (m) => { if (job.say) job.say(m); };
   const job = (async () => {
-    const used = pronUsed(id), saved = await offGet(P.item, c).catch(() => null);
+    const used = pronUsed(id);
+    const saved = (await offGet(P.item, c).catch(() => null)) || (await recentGet(P.item, c, true).catch(() => null));
     let texts, bufs, stop = ch.n;
-    if (saved) {                                         // saved for offline listening: no request at all
-      texts = saved.texts.map((t) => unrespell(t, used));
+    if (saved) {                                         // saved for offline listening, or played recently: no request at all
+      texts = saved.plain ? saved.texts.slice() : saved.texts.map((t) => unrespell(t, used));
       bufs = saved.bufs.map((b) => new Uint8Array(b));
       stop = 0;
     } else {
@@ -2523,8 +2588,10 @@ const textMemo = new Map();
 async function chapterTexts(it, c) {
   const key = (it.owner || '') + '|' + it.id + '|' + c;
   if (textMemo.has(key)) return textMemo.get(key);
-  const used = pronUsed(it.id), saved = await offGet(it, c).catch(() => null);   // a copy saved for offline listening needs no request
-  const texts = (saved ? saved.texts : (await api({ action: 'audio_text', token, id: it.id, chapter: c, ...ownerOf(it) })).texts).map((t) => unrespell(t, used));
+  const used = pronUsed(it.id);
+  const saved = (await offGet(it, c).catch(() => null)) || (await recentGet(it, c, false).catch(() => null));   // a copy on the device needs no request
+  const texts = saved && saved.plain ? saved.texts.slice()
+    : (saved ? saved.texts : (await api({ action: 'audio_text', token, id: it.id, chapter: c, ...ownerOf(it) })).texts).map((t) => unrespell(t, used));
   const ch = it.chapters[c];
   if (ch && (ch.status === 'done' || (!ch.status && it.state === 'done'))) textMemo.set(key, texts);
   return texts;
@@ -2685,6 +2752,7 @@ async function loadChapter(c, startAt, autoplay) {
     } else startChapter(data, startAt, autoplay);
     setStatus(st, data.parts < ch.n ? 'Converted so far: ' + data.parts + ' of ' + ch.n + ' parts of this chapter.' : '');
     if (!data.refined) { data.refined = true; refineTimings(data).catch(() => {}); }
+    keepRecent(P.item, c, data);                     // kept on the device for the next play
     renderPlayerOffline();
     prefetchNext();
   } catch (e) { setStatus(st, e.message, true); if (/log in again/i.test(e.message)) logout(); }
@@ -4363,7 +4431,7 @@ offLoadIndex().then(renderNet);
     ['Sleep timer: stops in ', '睡眠定时：停止于 '], ['Chapter search failed (', '查找章节失败（'], ['Claude could not look for chapters (', 'Claude 无法查找章节（'],
     ['Azure translation shown; the Claude step failed: ', '已显示 Azure 译文；Claude 步骤失败：'], ['Done. Revised by Claude', '完成。已由 Claude 修订'],
     ['Done. Missing paragraphs translated by Claude', '完成。漏译段落已由 Claude 补译'], ['Claude is translating ', 'Claude 正在翻译 '],
-    ['Translating part ', '正在翻译第 '], ['Offline storage: ', '离线存储：'], ['Network error: ', '网络错误：'], ['Server error (HTTP ', '服务器错误（HTTP '],
+    ['Translating part ', '正在翻译第 '], ['Offline storage: ', '离线存储：'], ['Recently played chapters: ', '最近播放的章节：'], ['Network error: ', '网络错误：'], ['Server error (HTTP ', '服务器错误（HTTP '],
     ['Copy failed: ', '复制失败：'], ['All accounts: ', '全部账号：'], ['Delete audio of ', '删除音频：'], ['Download ', '下载 '], ['Shared by ', '分享者：'],
     ['Waiting for "', '等待"'], ['Playing a sample (', '正在试听（'], ['Preparing a sample of ', '正在准备试听：'], ['Saving chapter ', '正在保存第 '],
     ['Bookmark saved on this device only: ', '书签仅保存在此设备：'], ['You are offline. The chapters ', '当前离线。'], ['Not enough storage space: about ', '存储空间不足：约 '],
@@ -4382,7 +4450,9 @@ offLoadIndex().then(renderNet);
     [/^ · finished chapters can be played$/, ' · 已完成的章节可以播放'], [/^ · this page can be closed$/, ' · 可以关闭本页'],
   ];
   // Common pieces inside longer strings (after a prefix has been translated).
-  const F = [[/([\d.,]+k?) of ([\d.,]+k?) characters/g, '$1 / $2 字符'], [/ used, /g, ' 已用，'], [/ free\./g, ' 可用。'], [/\(about ([^)]+)\)/g, '（约 $1）']];
+  const F = [[/([\d.,]+k?) of ([\d.,]+k?) characters/g, '$1 / $2 字符'], [/ used, /g, ' 已用，'], [/ free\./g, ' 可用。'],
+             [/, removed first when more room is needed\./g, '，空间不够时最先删除。'],
+             [/Recently played chapters: /g, '最近播放的章节：'], [/\(about ([^)]+)\)/g, '（约 $1）']];
   const frag = (x) => F.reduce((a, [re, to]) => a.replace(re, to), x);
   const ATTRS = ['title', 'placeholder', 'aria-label', 'label'];
   let lang = 'en';
