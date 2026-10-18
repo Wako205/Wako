@@ -1,4 +1,4 @@
-const { test, expect, login, openAudio } = require('./support/backend');
+const { test, expect, login, openAudio, rowAction } = require('./support/backend');
 
 test('lists the library with kind, chapters and resume point', async ({ page, backend }) => {
   await login(page);
@@ -20,7 +20,7 @@ test('adds chapters of a book later without uploading it again', async ({ page, 
   await login(page);
   await openAudio(page);
   const book = page.locator('#library .libitem').first();
-  await book.getByRole('button', { name: 'Add chapters' }).click();
+  await (await rowAction(book, 'Add chapters')).click();
   const panel = page.locator('.addpanel');
   await expect(panel).toBeVisible();
   const boxes = panel.locator('input[type=checkbox]');
@@ -41,7 +41,7 @@ test('deletes an item after confirmation', async ({ page, backend }) => {
   await login(page);
   await openAudio(page);
   page.once('dialog', (d) => d.accept());
-  await page.locator('#library .libitem').nth(1).getByRole('button', { name: 'Delete' }).click();
+  await (await rowAction(page.locator('#library .libitem').nth(1), 'Delete')).click();
   await expect(page.locator('#library .libitem')).toHaveCount(1);
   expect(backend.callsOf('audio_delete')[0]).toMatchObject({ id: 'paper1' });
 });

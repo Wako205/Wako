@@ -1,4 +1,4 @@
-const { test, expect, login, openAudio } = require('./support/backend');
+const { test, expect, login, openAudio, rowAction } = require('./support/backend');
 
 const SHARED = {
   id: 'shared1', owner: 'bob', mine: false, kind: 'book', title: 'Bob\'s Book', created: '2026-09-02T10:00:00Z', state: 'done',
@@ -11,14 +11,14 @@ test('shares and unshares an item of the own library', async ({ page, backend })
   await login(page);
   await openAudio(page);
   const book = page.locator('#library .libitem').first();
-  await book.getByRole('button', { name: 'Share', exact: true }).click();
+  await (await rowAction(book, 'Share', { exact: true })).click();
   await expect.poll(() => backend.callsOf('audio_share').length).toBe(1);
   expect(backend.callsOf('audio_share')[0]).toMatchObject({ id: 'book1', shared: true, token: 'tok-test' });
   await expect(book).toContainText('shared');
-  await book.getByRole('button', { name: 'Unshare' }).click();
+  await (await rowAction(book, 'Unshare')).click();
   await expect.poll(() => backend.callsOf('audio_share').length).toBe(2);
   expect(backend.callsOf('audio_share')[1]).toMatchObject({ id: 'book1', shared: false });
-  await expect(book.getByRole('button', { name: 'Share', exact: true })).toBeVisible();
+  await expect(await rowAction(book, 'Share', { exact: true })).toBeVisible();
 });
 
 test('the shared library is hidden when nothing is shared', async ({ page, backend }) => {
@@ -36,8 +36,8 @@ test('lists items shared by others and plays them with the owner in every reques
   const rows = page.locator('#sharedLib .libitem');
   await expect(rows).toHaveCount(1);                       // the caller's own shared items are not repeated
   await expect(rows.first()).toContainText('Shared by bob');
-  await expect(rows.first().getByRole('button', { name: 'Delete' })).toHaveCount(0);
-  await expect(rows.first().getByRole('button', { name: /Share|Add chapters/ })).toHaveCount(0);
+  await expect(rows.first().getByRole('button', { name: 'More actions' })).toHaveCount(0);   // listen only: no Delete, Share or Add chapters
+  await expect(rows.first().getByRole('menuitem')).toHaveCount(0);
   await rows.first().getByRole('button', { name: 'Listen' }).click();
   await expect(page.locator('#pTitle')).toHaveText('Bob\'s Book');
   await expect.poll(() => backend.callsOf('audio_part').length).toBeGreaterThan(0);

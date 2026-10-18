@@ -1,4 +1,4 @@
-const { test, expect, login, openAudio } = require('./support/backend');
+const { test, expect, login, openAudio, rowAction } = require('./support/backend');
 
 test('Microsoft voices are hidden until the server has them configured', async ({ page, backend }) => {
   await login(page);
@@ -20,7 +20,7 @@ test('Microsoft voices: listed, counted against their own allowance, sent to the
   await page.click('#tabLib');
 
   // Adding chapters to a book with a Microsoft voice shows the Microsoft allowance.
-  await page.locator('#library .libitem').first().getByRole('button', { name: 'Add chapters' }).click();
+  await (await rowAction(page.locator('#library .libitem').first(), 'Add chapters')).click();
   const panel = page.locator('.addpanel');
   const sel = panel.locator('select');
   await sel.selectOption('az:zh-CN-XiaoxiaoNeural');
@@ -39,7 +39,7 @@ test('Microsoft: free tier first, then the trial credit, with a clear end date',
   await openAudio(page);
   await expect(page.locator('#libUsage')).toContainText('Microsoft free 499k of 500k, then trial credit 0.2k of 12,000k characters');
   await expect(page.locator('#libUsage')).toContainText('(through 7 Nov 2026)');
-  await page.locator('#library .libitem').first().getByRole('button', { name: 'Add chapters' }).click();
+  await (await rowAction(page.locator('#library .libitem').first(), 'Add chapters')).click();
   const panel = page.locator('.addpanel');
   await panel.locator('select').selectOption('az:zh-CN-YunxiNeural');
   await panel.locator('.chlist input:not([disabled])').first().check();
@@ -80,7 +80,7 @@ test('when Google is used up, its voices are greyed out and a Microsoft voice is
   expect(await page.locator('#ggVoices option').evaluateAll((os) => os.every((o) => o.disabled))).toBe(true);
   expect(await page.locator('#ggVoices').getAttribute('label')).toContain('used up');
   // The Microsoft free tier is also used up: the trial credit is what is left.
-  await page.locator('#library .libitem').first().getByRole('button', { name: 'Add chapters' }).click();
+  await (await rowAction(page.locator('#library .libitem').first(), 'Add chapters')).click();
   const panel = page.locator('.addpanel');
   await panel.locator('.chlist input:not([disabled])').first().check();
   await expect(panel.locator('select')).toHaveValue('az:zh-CN-YunxiNeural');
@@ -99,7 +99,7 @@ test('each account may use at most 2M characters of the trial credit', async ({ 
   await expect(trial).toHaveAttribute('aria-label', 'Microsoft trial: 1,999k of 2,000k characters for this account');
   await expect(trial).toContainText('of 2M');
   // Only this account's rest (1k) is available, although the shared credit has 7M left.
-  await page.locator('#library .libitem').first().getByRole('button', { name: 'Add chapters' }).click();
+  await (await rowAction(page.locator('#library .libitem').first(), 'Add chapters')).click();
   const panel = page.locator('.addpanel');
   await panel.locator('.chlist input:not([disabled])').first().check();
   await expect(panel).toContainText('then 1k trial credit');

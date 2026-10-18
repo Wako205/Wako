@@ -1,4 +1,4 @@
-const { test, expect, login, openAudio } = require('./support/backend');
+const { test, expect, login, openAudio, rowAction } = require('./support/backend');
 
 test('deletes the audio of one chapter after an inline confirmation', async ({ page, backend }) => {
   let dialogs = 0;
@@ -7,7 +7,7 @@ test('deletes the audio of one chapter after an inline confirmation', async ({ p
   await openAudio(page);
   const book = page.locator('#library .libitem').first();
   await expect(book).toContainText('2/3 chapters');
-  await book.getByRole('button', { name: 'Add chapters' }).click();
+  await (await rowAction(book, 'Add chapters')).click();
   const panel = page.locator('.addpanel');
   const dels = panel.getByRole('button', { name: /^Delete audio of / });
   await expect(dels).toHaveCount(2);                       // only converted chapters
@@ -26,7 +26,7 @@ test('deletes the audio of one chapter after an inline confirmation', async ({ p
   expect(dialogs).toBe(0);
 
   // The deleted chapter can be ticked again for conversion.
-  await book.getByRole('button', { name: 'Add chapters' }).click();
+  await (await rowAction(book, 'Add chapters')).click();
   await expect(panel.locator('input[type=checkbox]').first()).toBeEnabled();
   await expect(panel.locator('input[type=checkbox]').first()).not.toBeChecked();
 });
@@ -35,7 +35,7 @@ test('shows the server error when a chapter cannot be deleted', async ({ page, b
   backend.on('audio_chapter_delete', () => ({ ok: false, error: 'Wait until the conversion has finished' }));
   await login(page);
   await openAudio(page);
-  await page.locator('#library .libitem').first().getByRole('button', { name: 'Add chapters' }).click();
+  await (await rowAction(page.locator('#library .libitem').first(), 'Add chapters')).click();
   const panel = page.locator('.addpanel');
   await panel.getByRole('button', { name: /^Delete audio of / }).first().click();
   await panel.getByRole('button', { name: 'Confirm delete' }).click();
@@ -48,7 +48,7 @@ test('a book with every chapter converted still offers its chapters for deletion
   await login(page);
   await openAudio(page);
   const book = page.locator('#library .libitem').first();
-  await expect(book.getByRole('button', { name: 'Add chapters' })).toHaveCount(0);
-  await book.getByRole('button', { name: 'Chapters', exact: true }).click();
+  await expect(await rowAction(book, 'Add chapters')).toHaveCount(0);
+  await book.getByRole('menuitem', { name: 'Chapters', exact: true }).click();
   await expect(page.locator('.addpanel').getByRole('button', { name: /^Delete audio of / })).toHaveCount(3);
 });
