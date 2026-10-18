@@ -129,6 +129,9 @@
   .libitem .rename { background:none; border:0; padding:0 4px; margin-left:4px; min-height:0; font-size:14px; color:var(--muted); cursor:pointer; vertical-align:baseline; }
   .libitem .rename:hover { color:var(--accent); }
   @media (pointer: coarse), (max-width: 600px) { .libitem .rename { min-height:44px; min-width:44px; padding:0 10px; margin:-12px 0 -12px 0; } }
+  label.keep { display:flex; align-items:center; gap:8px; margin:12px 0 0; color:var(--ink); cursor:pointer; width:fit-content; }
+  label.keep input { width:18px; height:18px; margin:0; accent-color:var(--accent); }
+  @media (max-width: 600px) { label.keep { min-height:44px; } label.keep input { width:20px; height:20px; } }
   .renamebox { width:100%; font-weight:600; }
   .libitem .m { font-size:13px; color:var(--muted); }
   .libitem .grow { flex:1; min-width:200px; }
@@ -281,7 +284,8 @@
     <input type="text" id="user" autocomplete="username">
     <label for="pass">Password</label>
     <input type="password" id="pass" autocomplete="current-password">
-    <div class="row" style="margin-top:16px"><button id="loginBtn">Log in</button><span class="status" id="loginStatus"></span></div>
+    <label class="keep" title="For your own device only. The session still ends after 24 hours."><input type="checkbox" id="keepLogin"> Stay logged in on this device</label>
+    <div class="row" style="margin-top:12px"><button id="loginBtn">Log in</button><span class="status" id="loginStatus"></span></div>
     <p class="status" style="margin-top:14px"><a href="install/" id="installLink" style="color:var(--accent)">Add to Home Screen</a></p>
     <div id="offlineEntry" class="hidden" style="margin-top:14px">
       <div class="notice" id="offlineEntryNote"></div>
@@ -607,7 +611,11 @@ function fmtTime(s) { s = Math.max(0, Math.floor(s)); const h = Math.floor(s / 3
 // ---------------------------------------------------------------------------
 // 2. Backend API (contract: docs/API.md)
 // ---------------------------------------------------------------------------
-let token = null, username = null;     // the token is kept in memory and in this tab's sessionStorage only
+let token = null, username = null;     // the token is kept in memory and in this tab's sessionStorage, or
+                                       // with "Stay logged in on this device" in localStorage (mp_token_keep)
+/** The session kept on this device by "Stay logged in", or null. */
+function keptSession() { try { const k = JSON.parse(lsGet('mp_token_keep') || 'null'); return k && k.token && k.user ? k : null; } catch (e) { return null; } }
+function forgetKeptSession() { try { localStorage.removeItem('mp_token_keep'); } catch (e) {} }
 
 // text/plain body keeps this a "simple" request, which Apps Script requires (no CORS preflight).
 async function api(payload, timeoutMs) {
@@ -686,7 +694,7 @@ function logout() {
   // Offline copies, the saved library, unsent positions and the positions of this user are deleted from this browser.
   offWipe(user).then(renderNet);
   offlineMode = false;
-  token = username = null; store('mp_token', null); store('mp_user', null); $('brand').textContent = 'Wako205';
+  token = username = null; store('mp_token', null); store('mp_user', null); forgetKeptSession(); $('brand').textContent = 'Wako205';
   mPrefs.on = false; resetMusic(); $('miniMusic').classList.add('hidden');
   clearTimeout(libTimer); libItems = []; sharedItems = []; $('library').textContent = ''; $('libUsage').textContent = ''; $('usageCard').classList.add('hidden'); $('usageCard').parentElement.classList.add('nousage');
   $('sharedLib').textContent = ''; $('sharedCard').classList.add('hidden');
@@ -705,7 +713,10 @@ $('loginBtn').onclick = async () => {
   const st = $('loginStatus'); $('loginBtn').disabled = true; setStatus(st, 'Checking...');
   try {
     const d = await api({ action: 'login', username: $('user').value.trim(), password: $('pass').value });
-    token = d.token; username = d.username; store('mp_token', token); store('mp_user', username);
+    token = d.token; username = d.username;
+    if ($('keepLogin').checked) { lsSet('mp_token_keep', JSON.stringify({ token, user: username })); store('mp_token', null); store('mp_user', null); }
+    else { forgetKeptSession(); store('mp_token', token); store('mp_user', username); }
+    $('keepLogin').checked = false;
     lsSet('mp_admin_' + username, d.admin ? '1' : '0');
     lsSet('mp_last_user', username); offlineMode = false;
     $('pass').value = ''; setStatus(st, '');
@@ -4175,7 +4186,9 @@ $('dlReviewBtn').onclick = () => lastResult && download(lastName.replace(/(\.[^.
 // ---------------------------------------------------------------------------
 // Start-up: restore the session of this tab
 // ---------------------------------------------------------------------------
-token = load('mp_token'); username = load('mp_user'); loadChat();
+token = load('mp_token'); username = load('mp_user');
+if (!token) { const k = keptSession(); if (k) { token = k.token; username = k.user; } }   // "Stay logged in on this device"
+loadChat();
 if (token && username) showApp();
 offLoadIndex().then(renderNet);
 </script>
@@ -4191,7 +4204,8 @@ offLoadIndex().then(renderNet);
   // Exact strings (whole text node or attribute, trimmed).
   const D = {
     // Header, login, tabs
-    'Log in': '登录', 'Log out': '退出登录', 'Username': '用户名', 'Password': '密码', 'Listen offline': '离线收听',
+    'Log in': '登录', 'Log out': '退出登录', 'Stay logged in on this device': '在此设备上保持登录',
+    'For your own device only. The session still ends after 24 hours.': '仅限自己的设备。登录状态仍会在 24 小时后结束。', 'Username': '用户名', 'Password': '密码', 'Listen offline': '离线收听',
     'My library': '我的书库', 'PDF to audio': 'PDF 转音频', 'Chat': '对话', 'Translate': '翻译', 'Polish / Review': '润色 / 审稿', '(Word & LaTeX)': '（Word 与 LaTeX）',
     'Color theme': '颜色主题', 'Eye care': '护眼', 'Day': '白天', 'Night': '黑夜', 'Warm paper tones, less blue light': '暖色纸张，减少蓝光', 'White background': '白色背景', 'Dark background': '黑色背景',
     'Background music': '背景音乐', 'Background music (lofi by Holizna, CC0)': '背景音乐（Holizna 的 lofi，CC0）',
