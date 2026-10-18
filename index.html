@@ -536,12 +536,6 @@
 </main>
 <audio id="music" preload="auto" class="hidden" x-webkit-airplay="deny" disableremoteplayback></audio>
 
-<!-- Libraries: exact versions from jsDelivr, which serves the npm package files unchanged, so the
-     Subresource Integrity hashes can be checked against the npm registry (versions in package.json). -->
-<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" integrity="sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js" integrity="sha384-/TQbtLCAerC3jgaim+N78RZSDYV7ryeoBCVqTuzRrFec2akfBkHS7ACQ3PQhvMVi" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/dompurify@3.4.16/dist/purify.min.js" integrity="sha384-a7SzOxErzJ3ZpQz0zJ32d67dSitNzPcbfybc/ykU9KJhMgZkwqfSxlhhdJRS+XGL" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js" integrity="sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI" crossorigin="anonymous"></script>
 <script>
 // Sections of this script, in order:
 //   1. Configuration and helpers         9. Audio: library
@@ -562,8 +556,15 @@
 // Paste the Apps Script web app URL here (it ends with /exec).
 const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbyMPCW8XBoolVwUI_SpiViT3k5KojULj4TwmyOAR4ElwjXdMODygcsof8hxQUJyo9ew/exec';
 const MAX_DOC_CHARS = 400000;
-// Loaded when first needed; pinned with Subresource Integrity like the scripts above.
+// Libraries, loaded when first needed (needLib): exact versions from jsDelivr, which serves the npm package
+// files unchanged, so the Subresource Integrity hashes can be checked against the npm registry (versions in
+// package.json). sw.js caches the same files, so they also load without a connection.
 const LIB = {
+  // Paper splitting (splitPdf, splitPdfRanges), .docx reading (readDocx), chat Markdown (renderMarkdown).
+  pdflib: { src: 'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js', integrity: 'sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI' },
+  jszip: { src: 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js', integrity: 'sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG' },
+  marked: { src: 'https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js', integrity: 'sha384-/TQbtLCAerC3jgaim+N78RZSDYV7ryeoBCVqTuzRrFec2akfBkHS7ACQ3PQhvMVi' },
+  dompurify: { src: 'https://cdn.jsdelivr.net/npm/dompurify@3.4.16/dist/purify.min.js', integrity: 'sha384-a7SzOxErzJ3ZpQz0zJ32d67dSitNzPcbfybc/ykU9KJhMgZkwqfSxlhhdJRS+XGL' },
   // pdf.js: the "legacy" build, which also runs on iPhones before iOS 17.4. ES modules, see getPdfjs().
   pdfjs: { src: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/legacy/build/pdf.min.mjs', integrity: 'sha384-z/XbAtvhBXJoK+yvYimnFuTCF6/2wTCDSIFD09/HtIfwFtvDKOMdAe5Z3wOChkmW' },
   pdfjsWorker: { src: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/legacy/build/pdf.worker.min.mjs', integrity: 'sha384-vbNBYP03jHFPlgtK4qSXtazEmGfmpTWlSsfq9OiU20MroW/Q9TbaEXiM7PpeWg+6' },
@@ -593,6 +594,12 @@ function loadScript(lib) {
     s.onload = res; s.onerror = () => rej(new Error('Could not load ' + lib.src));
     document.head.appendChild(s);
   });
+}
+/** Loads a script of LIB once; a failed load can be tried again. */
+const libLoads = {};
+function needLib(name) {
+  if (!libLoads[name]) libLoads[name] = loadScript(LIB[name]).catch((e) => { delete libLoads[name]; throw e; });
+  return libLoads[name];
 }
 function download(name, text) { downloadBlob(name, new Blob([text], { type: 'text/plain;charset=utf-8' })); }
 function downloadBlob(name, blob) {
@@ -812,6 +819,7 @@ async function pdfOutline(doc) {
 }
 
 async function splitPdf(bytes) {
+  await needLib('pdflib');
   const src = await PDFLib.PDFDocument.load(bytes, { ignoreEncryption: true });
   const total = src.getPageCount();
   const parts = [];
@@ -1448,6 +1456,7 @@ $('apdf').onchange = prepareBook;
 
 /** PDF parts of AUDIO_PAGES pages (plus one look-ahead page) for the selected page ranges. */
 async function splitPdfRanges(bytes, ranges) {
+  await needLib('pdflib');
   const src = await PDFLib.PDFDocument.load(bytes, { ignoreEncryption: true });
   const total = src.getPageCount(), parts = [];
   for (const r of ranges) {
@@ -3520,7 +3529,7 @@ $('dlScriptBtn').onclick = () => {
 // ---------------------------------------------------------------------------
 const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 async function readDocx(file) {
-  if (!window.JSZip) throw new Error('Word support failed to load. Reload the page and try again.');
+  try { await needLib('jszip'); } catch (e) { throw new Error('Word support failed to load. Check the connection and try again.'); }
   const zip = await JSZip.loadAsync(await file.arrayBuffer());
   const entry = zip.file('word/document.xml');
   if (!entry) throw new Error('Not a valid .docx file');
@@ -3831,15 +3840,25 @@ const MD_PURIFY = {
   FORBID_TAGS: ['style', 'form', 'input', 'button', 'textarea', 'select', 'option', 'img', 'picture', 'video', 'audio', 'source', 'iframe', 'object', 'embed', 'link', 'meta', 'base'],
   FORBID_ATTR: ['style', 'srcset', 'action', 'formaction'],
 };
-if (window.DOMPurify) {
-  DOMPurify.addHook('afterSanitizeAttributes', (node) => {
-    if (node.tagName === 'A' && node.hasAttribute('href')) { node.setAttribute('target', '_blank'); node.setAttribute('rel', 'noopener noreferrer'); }
-  });
+/** marked and DOMPurify, loaded with the first reply to render; links get target=_blank and rel=noopener. */
+let mdReady = null, mdOk = false;
+function mdLibs() {
+  if (!mdReady) {
+    mdReady = Promise.all([needLib('marked'), needLib('dompurify')]).then(() => {
+      DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+        if (node.tagName === 'A' && node.hasAttribute('href')) { node.setAttribute('target', '_blank'); node.setAttribute('rel', 'noopener noreferrer'); }
+      });
+      mdOk = true;
+    }).catch((e) => { mdReady = null; throw e; });
+  }
+  return mdReady;
 }
+/** Markdown as sanitized HTML; plain text until the two libraries are in, then rendered in place. */
 function renderMarkdown(text) {
   const div = el('div', 'md');
-  if (!window.marked || !window.DOMPurify) { div.textContent = text; return div; }
-  div.innerHTML = DOMPurify.sanitize(marked.parse(text, { breaks: false, gfm: true }), MD_PURIFY);
+  const fill = () => { div.innerHTML = DOMPurify.sanitize(marked.parse(text, { breaks: false, gfm: true }), MD_PURIFY); };
+  if (mdOk) fill();
+  else { div.textContent = text; mdLibs().then(fill, () => {}); }
   return div;
 }
 
@@ -4219,7 +4238,7 @@ offLoadIndex().then(renderNet);
     'Claude is looking for the chapters...': 'Claude 正在查找章节...',
     'Started. It appears in My library; you can close this page meanwhile.': '已开始。它会出现在「我的书库」中，期间可以关闭本页。',
     'No text found. The PDF may be a scanned image without a text layer.': '没有找到文字。这个 PDF 可能是没有文字层的扫描件。',
-    'Could not read the text of this PDF.': '无法读取此 PDF 的文字。', 'Could not load the PDF reader. Check the connection and try again.': 'PDF 阅读组件加载失败，请检查网络后重试。',
+    'Could not read the text of this PDF.': '无法读取此 PDF 的文字。', 'Word support failed to load. Check the connection and try again.': 'Word 组件加载失败，请检查网络后重试。', 'Could not load the PDF reader. Check the connection and try again.': 'PDF 阅读组件加载失败，请检查网络后重试。',
     'Pronunciation of terms': '术语读法', 'Term': '术语', 'Spoken as': '读作', 'Add': '添加', 'Enter both the term and how it is spoken.': '请同时填写术语和读法。',
     // Library
     'Your audio library': '我的音频书库', 'Shared library': '共享书库', 'Nothing yet. Converted PDFs will be listed here.': '还没有内容。转换后的 PDF 会列在这里。',

@@ -16,22 +16,19 @@ function npmFile(url) {
 }
 
 test('every CDN script is pinned to an exact version with a matching integrity hash', async () => {
-  const tags = [...html.matchAll(/<script\s+src="([^"]+)"([^>]*)>/g)];
-  expect(tags.length).toBe(4);
-  for (const [, src, attrs] of tags) {
-    expect(attrs).toContain('crossorigin="anonymous"');
-    expect(attrs).toContain('integrity="' + sri(npmFile(src)) + '"');
-  }
-  // Scripts loaded later (pdf.js and its worker).
+  // No library is loaded with the page; all are in LIB and loaded when first needed (needLib, getPdfjs).
+  expect([...html.matchAll(/<script\s+src=/g)].length).toBe(0);
   const lib = [...html.matchAll(/\{ src: '([^']+)', integrity: '([^']+)' \}/g)];
-  expect(lib.length).toBe(2);
+  expect(lib.length).toBe(6);
   for (const [, src, integrity] of lib) expect(integrity, src).toBe(sri(npmFile(src)));
   expect(html).not.toMatch(/cdnjs\.cloudflare\.com|unpkg\.com/);
 });
 
 test('the libraries load under their integrity checks', async ({ page, backend }) => {
   await page.goto(INDEX_URL);
+  await page.evaluate(() => Promise.all(['jszip', 'marked', 'dompurify', 'pdflib'].map(needLib)));
   expect(await page.evaluate(() => [typeof JSZip, typeof marked, typeof DOMPurify, typeof PDFLib])).toEqual(['function', 'object', 'function', 'object']);
+  expect(await page.evaluate(() => [...document.querySelectorAll('script[src]')].every((s) => s.integrity.startsWith('sha384-') && s.crossOrigin === 'anonymous'))).toBe(true);
   // pdf.js 4 is an ES module: imported, with its module worker, from blob URLs of files fetched with integrity.
   expect(await page.evaluate(async () => { const pdf = await getPdfjs(); return [typeof pdf.getDocument, pdf.version, pdf.GlobalWorkerOptions.workerSrc.slice(0, 5)]; }))
     .toEqual(['function', '4.10.38', 'blob:']);

@@ -68,6 +68,8 @@ test('the page opens without a connection once it has been loaded', async ({ pag
   await context.setOffline(true);
   await page.reload();
   await expect(page.locator('h1')).toHaveText('Wako205');
+  // The libraries loaded on first use come from the service worker's cache.
+  await page.evaluate(() => Promise.all(['jszip', 'marked', 'dompurify', 'pdflib'].map(needLib)));
   expect(await page.evaluate(() => [typeof JSZip, typeof marked, typeof DOMPurify, typeof PDFLib])).toEqual(['function', 'object', 'function', 'object']);
   await expect(page.locator('#loginStatus')).toHaveText('Logging in needs a connection.');
   await expect(page.locator('#offlineEntry')).toBeHidden();             // nothing saved on this device yet
