@@ -687,7 +687,7 @@ function logout() {
   offlineMode = false;
   token = username = null; store('mp_token', null); store('mp_user', null); $('brand').textContent = 'Wako205';
   mPrefs.on = false; resetMusic(); $('miniMusic').classList.add('hidden');
-  clearTimeout(libTimer); libItems = []; sharedItems = []; $('library').textContent = ''; $('libUsage').textContent = ''; $('usageCard').classList.add('hidden'); $('usageCard').parentElement.classList.add('nousage');
+  clearTimeout(libTimer); libItems = []; sharedItems = []; libShown = null; libLoadSeq++; $('library').textContent = ''; $('libUsage').textContent = ''; $('usageCard').classList.add('hidden'); $('usageCard').parentElement.classList.add('nousage');
   $('sharedLib').textContent = ''; $('sharedCard').classList.add('hidden');
   chat = { convId: null, messages: [] }; pendingDoc = null; currentFile = null; store('mp_chat', null);
   Object.keys(fileOutputs).forEach((k) => delete fileOutputs[k]);
@@ -1619,18 +1619,32 @@ function allowanceLeft(al) { return Math.max(0, al.cap - al.used) + al.trial; }
 /** Unambiguous date, for example "7 Nov 2026". */
 function fmtDay(ms) { const d = new Date(ms); return d.getDate() + ' ' + d.toLocaleString('en', { month: 'short' }) + ' ' + d.getFullYear(); }
 function libSnapshot(user) { try { return JSON.parse(lsGet('mp_lib_' + user) || 'null'); } catch (e) { return null; } }
+/** The library reply without its envelope, to tell whether a new reply changes anything. */
+const libKey = (d) => JSON.stringify(Object.assign({}, d, { ok: undefined, at: undefined }));
+let libShown = null, libLoadSeq = 0;         // libShown: libKey of the library on screen (null before the first)
+/**
+ * Shows the library. Right after login the copy saved in this browser (mp_lib_<user>) is shown at
+ * once, while audio_library and audio_public are requested together; the reply replaces the copy
+ * only when it differs.
+ */
 async function loadLibrary() {
   renderStorage();
+  const seq = ++libLoadSeq;
+  loadShared();                               // in parallel with audio_library
   let d = null;
   if (token && isOnline()) {
+    const snap = libShown == null ? libSnapshot(username) : null;
+    if (snap) showLibrary(snap);
     try {
       d = await api({ action: 'audio_library', token });
+      if (seq !== libLoadSeq) return;         // a newer load has started meanwhile
       lsSet('mp_lib_' + username, JSON.stringify(Object.assign({}, d, { ok: undefined, at: Date.now() })));
       setStatus($('libNote'), '');
       flushOutbox();
     } catch (e) {
+      if (seq !== libLoadSeq) return;
       if (/log in again/i.test(e.message)) return logout();
-      if (!isNetError(e)) { $('library').textContent = e.message; return; }
+      if (!isNetError(e)) { $('library').textContent = e.message; libShown = null; return; }
     }
   }
   if (!d) {                                  // offline: the library as last received
@@ -1639,6 +1653,12 @@ async function loadLibrary() {
     d = snap;
     setStatus($('libNote'), 'Offline: the library as received on ' + new Date(snap.at).toLocaleString() + '.');
   }
+  if (libKey(d) !== libShown) showLibrary(d);
+  if (isOnline() && token) pollLibrary();
+}
+/** Renders a library reply (or a saved copy of one): items, allowances and voices. */
+function showLibrary(d) {
+  libShown = libKey(d);
   libItems = (d.items || []).filter((x) => x && x.id); libUsage.used = d.ttsUsed || 0; libUsage.cap = d.ttsCap || 0;
   libUsage.azUsed = d.azUsed || 0; libUsage.azCap = d.azCap || 0; libUsage.azReady = !!d.azReady;
   libUsage.s0Used = d.s0Used || 0; libUsage.s0Cap = d.s0Cap || 0; libUsage.s0Mine = d.s0Mine || 0; libUsage.s0UserCap = d.s0UserCap || 0;
@@ -1657,8 +1677,6 @@ async function loadLibrary() {
   renderUsage(d);
   renderLibrary(); bookSummary(); renderNet();
   if (P && !P.item.owner) { refreshChapterSelect(); resumeIfWaiting(); }
-  loadShared();
-  if (isOnline() && token) pollLibrary();
 }
 
 /** Items other accounts have shared (audio_public). A failure leaves the section hidden. */
@@ -1669,11 +1687,13 @@ async function loadShared() {
     sharedItems = snap && Array.isArray(snap.items) ? snap.items : [];
     return renderShared();
   }
+  const tok = token;
   try {
     const d = await api({ action: 'audio_public', token });
+    if (tok !== token) return;                         // logged out meanwhile
     sharedItems = (d.items || []).filter((x) => x && x.id && !x.mine);
     lsSet('mp_shared_' + username, JSON.stringify({ at: Date.now(), items: sharedItems }));
-  } catch (e) { if (!isNetError(e)) sharedItems = []; }
+  } catch (e) { if (tok !== token) return; if (!isNetError(e)) sharedItems = []; }
   renderShared();
 }
 function renderShared() {
