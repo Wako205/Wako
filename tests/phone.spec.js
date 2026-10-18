@@ -5,10 +5,9 @@ test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
 /** Pixels the page is wider than the 390 px screen (measured without mobile zoom-out, which would hide it). */
 const overflow = (page) => page.evaluate(() => document.documentElement.scrollWidth - 390);
 
-test('no horizontal scrolling at 390 px in the Polish and Audio tabs and the player', async ({ page, backend }) => {
+test('no horizontal scrolling at 390 px in the Chat and Audio tabs and the player', async ({ page, backend }) => {
   await login(page);
-  await page.evaluate(() => { const b = document.getElementById('tabTools'); b.hidden = false; b.classList.remove('hidden'); });   // the tab is hidden for now; its layout is still checked
-      await page.click('#tabTools');
+  await page.click('#tabChat');
   expect(await overflow(page)).toBeLessThanOrEqual(0);
   await openAudio(page);
   expect(await overflow(page)).toBeLessThanOrEqual(0);

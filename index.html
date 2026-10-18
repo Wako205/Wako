@@ -111,12 +111,6 @@
   .attach .x { cursor:pointer; color:var(--muted); }
   .typing { color:var(--muted); font-size:14px; }
 
-  /* structured tab */
-  .edit { border:1px solid var(--line); border-radius:8px; margin:10px 0; overflow:hidden; font-size:14px; }
-  .edit div { padding:8px 12px; white-space:pre-wrap; word-break:break-word; font-family: ui-monospace, Menlo, Consolas, monospace; font-size:13px; }
-  .edit .old { background:var(--del); } .edit .new { background:var(--ins); }
-  .edit .why { font-family: inherit; color:var(--muted); background:var(--soft); }
-  pre.review { white-space:pre-wrap; word-break:break-word; font:inherit; margin:0; }
   /* audio */
   .chlist { max-height: 260px; overflow-y:auto; border:1px solid var(--line); border-radius:8px; margin-top:8px; padding:4px 10px; font-size:14px; }
   .chlist label { display:flex; gap:8px; align-items:center; margin:4px 0; color:var(--ink); font-size:14px; }
@@ -206,13 +200,6 @@
   .offrow { padding:6px 0; border-bottom:1px solid var(--line); font-size:14px; }
   .offrow .otitle { font-weight:600; }
   .poffline { margin-top:6px; }
-  details.pron { margin-top:14px; border:1px solid var(--line); border-radius:8px; padding:8px 12px; font-size:14px; }
-  details.pron summary { cursor:pointer; color:var(--accent); }
-  .pron table { width:100%; border-collapse:collapse; margin-top:8px; }
-  .pron td, .pron th { padding:4px 6px 4px 0; text-align:left; vertical-align:middle; }
-  .pron th { font-weight:normal; color:var(--muted); font-size:13px; }
-  .pron input[type=text] { padding:6px 8px; }
-  .pron td:last-child { width:1%; white-space:nowrap; }
   select, input[type=file] { max-width:100%; }
   .status:empty { min-height:0; }
   .md table { display:block; overflow-x:auto; max-width:100%; }
@@ -261,8 +248,6 @@
     .minimusic { flex: 1; min-width: 0; }
     .minimusic select { flex: 1; min-width: 0; max-width: none; }
     .minimusic button { min-width: 44px; }
-        details.pron summary { min-height: 44px; display: flex; align-items: center; }
-    .pron td:last-child button { min-height: 44px; }
   }
 </style>
 </head>
@@ -304,7 +289,6 @@
     <div class="tabs">
       <button id="tabLib" class="active">My library</button>
       <button id="tabAudio">PDF to audio</button>
-      <button id="tabTools" class="hidden" hidden>Polish / Review<span class="wide-only"> (Word &amp; LaTeX)</span></button>
       <button id="tabChat">Chat</button>
       <button id="tabTrans">Translate</button>
       <button id="tabAdmin" class="hidden" hidden>Admin</button>
@@ -383,29 +367,6 @@
       </div>
     </section>
 
-    <!-- Structured polish / review -->
-    <section id="toolsView" class="hidden">
-      <div class="card">
-        <label for="sfile">Manuscript (.tex, .txt or .docx)</label>
-        <input type="file" id="sfile" accept=".tex,.txt,.docx,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
-        <label for="mode">Task</label>
-        <select id="mode">
-          <option value="polish">Polish language (returns revised file with changes written into the .docx, plus a change list)</option>
-          <option value="review">Review (returns a referee-style report)</option>
-        </select>
-        <div class="row" style="margin-top:16px"><button data-net="1" id="runBtn">Submit</button><span class="status" id="runStatus"></span></div>
-        <div class="notice" style="margin-top:14px">Sentence-level edits are applied automatically. For Word files the edits are written back into the original document with formatting preserved. Processing takes 1 to 5 minutes.</div>
-      </div>
-      <section class="hidden" id="resultView">
-        <h2 id="resultTitle"></h2>
-        <div class="row">
-          <button id="dlBtn" class="hidden">Download revised file</button>
-          <button id="dlCleanBtn" class="ghost hidden">Download Word (clean)</button>
-          <button id="dlReviewBtn" class="hidden">Download report</button>
-        </div>
-        <div id="resultBody" style="margin-top:16px"></div>
-      </section>
-    </section>
 
     <!-- PDF to audio -->
     <section id="audioView" class="hidden">
@@ -448,20 +409,6 @@
         </select>
         <button class="ghost" id="previewBtn" type="button" data-net="1" title="Hear the first sentences of the selected text in this voice (uses about 0.1k characters of the allowance)">Preview</button>
         </div>
-        <details class="pron hidden" id="pronBox">   <!-- hidden for now; the list still applies -->
-          <summary id="pronSummary">Pronunciation of terms</summary>
-          <div class="notice" style="margin-top:8px">How technical terms are spoken, for example "MoS2" as "M O S two" or "CVD" as "C V D". Applied to books when they are converted; the text in the player keeps the original spelling. Papers and theses are not covered yet. The list is stored in this browser only, under your user name, until the server can keep it with your account.</div>
-          <table>
-            <thead><tr><th>Term</th><th>Spoken as</th><th></th></tr></thead>
-            <tbody id="pronList"></tbody>
-            <tfoot><tr>
-              <td><input type="text" id="pronTerm" placeholder="MoS2" aria-label="Term"></td>
-              <td><input type="text" id="pronSay" placeholder="M O S two" aria-label="Spoken as"></td>
-              <td><button class="small" id="pronAdd" type="button">Add</button></td>
-            </tr></tfoot>
-          </table>
-          <div class="status" id="pronStatus"></div>
-        </details>
         <div class="row" style="margin-top:16px"><button data-net="1" id="audioBtn">Generate audio</button><span class="status" id="audioStatus"></span></div>
       </div>
       <aside class="card usage hidden" id="usageCard" aria-label="Speech used">
@@ -556,7 +503,7 @@
 //   5. Audio: paper mode (PDF parts)    13. File reading (.docx, text)
 //   6. Audio: book mode (chapters)      14. Chat
 //   7. Audio: document type             15. Word export with tracked changes
-//   8. Audio: new conversion, upload    16. Structured polish / review, start-up
+//   8. Audio: new conversion, upload    16. Start-up
 // Text from the server, from PDFs or from documents is put into the page only as text
 // (textContent, see el()). The one place that inserts HTML is chat Markdown, which is
 // sanitized by DOMPurify (renderMarkdown).
@@ -680,11 +627,6 @@ function showApp() {
   $('who').classList.remove('hidden'); $('brand').textContent = username + '@Wako205';
   const admin = lsGet('mp_admin_' + username) === '1';
   $('tabAdmin').hidden = !admin; $('tabAdmin').classList.toggle('hidden', !admin);
-  if (lsGet('mp_admin_' + username) === null) {     // session from before admin flags: ask once
-    const u = username;
-    api({ action: 'admin_stats', token }, 60000).then(() => { lsSet('mp_admin_' + u, '1'); if (u === username) { $('tabAdmin').hidden = false; $('tabAdmin').classList.remove('hidden'); } },
-      () => lsSet('mp_admin_' + u, '0'));
-  }
   renderChat();
   loadMusicPrefs();
   libFirst = true; libFetchedAt = 0;
@@ -714,11 +656,10 @@ function logout() {
   $('sharedLib').textContent = ''; $('sharedCard').classList.add('hidden');
   chat = { convId: null, messages: [] }; pendingDoc = null; currentFile = null; store('mp_chat', null);
   Object.keys(fileOutputs).forEach((k) => delete fileOutputs[k]);
-  lastResult = lastDocx = null; $('resultView').classList.add('hidden'); $('resultBody').textContent = '';
-  ['file', 'sfile', 'apdf', 'prompt'].forEach((id) => { $(id).value = ''; });
+  ['file', 'apdf', 'prompt'].forEach((id) => { $(id).value = ''; });
   bookData = null; docKind = null; renderKind(); renderBookPanel(); renderAttach();
   textMemo.clear();
-  ['chatStatus', 'runStatus', 'audioStatus'].forEach((id) => setStatus($(id), ''));
+  ['chatStatus', 'audioStatus'].forEach((id) => setStatus($(id), ''));
   $('whoUsage').textContent = '';
   $('appView').classList.add('hidden'); $('who').classList.add('hidden'); $('loginView').classList.remove('hidden');
   switchTab('lib');
@@ -744,17 +685,15 @@ $('logoutBtn').onclick = logout;
 $('tabChat').onclick = () => switchTab('chat');
 $('tabTrans').onclick = () => switchTab('trans');
 $('tabAdmin').onclick = () => switchTab('admin');
-$('tabTools').onclick = () => switchTab('tools');
 $('tabAudio').onclick = () => switchTab('audio');
 $('tabLib').onclick = () => switchTab('lib');
 /** The library is loaded and kept fresh while My library or PDF to audio is open. */
 function libShown() { return !$('libView').classList.contains('hidden') || !$('audioView').classList.contains('hidden'); }
 function switchTab(t) {
-  [['chat', 'tabChat', 'chatView'], ['tools', 'tabTools', 'toolsView'], ['lib', 'tabLib', 'libView'], ['audio', 'tabAudio', 'audioView'], ['trans', 'tabTrans', 'transView'], ['admin', 'tabAdmin', 'adminView']].forEach(([k, tab, view]) => {
+  [['chat', 'tabChat', 'chatView'], ['lib', 'tabLib', 'libView'], ['audio', 'tabAudio', 'audioView'], ['trans', 'tabTrans', 'transView'], ['admin', 'tabAdmin', 'adminView']].forEach(([k, tab, view]) => {
     $(tab).classList.toggle('active', t === k); $(view).classList.toggle('hidden', t !== k);
   });
   if ((t === 'audio' || t === 'lib') && (token || offlineMode)) {
-    renderPron();
     if (token && isOnline() && Date.now() - libFetchedAt < 30000) { renderLibrary(); pollLibrary(); }   // fetched moments ago
     else loadLibrary();
   } else clearTimeout(libTimer);
@@ -1499,7 +1438,7 @@ $('previewBtn').onclick = async () => {
   let text = sample.replace(/\s+/g, ' ').trim().slice(0, 140);
   const cut = Math.max(text.lastIndexOf('。'), text.lastIndexOf('. '), text.lastIndexOf('！'), text.lastIndexOf('？'));
   if (cut > 40) text = text.slice(0, cut + 1);
-  const voice = $('avoice').value, said = respell(text, pronList()), key = voice + '|' + said;
+  const voice = $('avoice').value, said = text, key = voice + '|' + said;
   if (previewAudio) previewAudio.pause();
   const seen = previewCache.get(key);
   if (seen) { previewAudio = new Audio(seen.url); previewAudio.play().catch(() => {}); setStatus(st, 'Playing a sample (' + seen.lang + ', no new charge).'); return; }
@@ -1516,15 +1455,10 @@ $('previewBtn').onclick = async () => {
 };
 
 // ---------------------------------------------------------------------------
-// Pronunciation list: technical terms and how they are to be spoken. Book text is
-// respelled before it is sent for conversion; the player turns the spoken forms
-// back into the terms, using the list stored with each converted book. Kept in
-// localStorage per user until the backend can store it with the account.
+// Pronunciation: books converted earlier with a list of terms and their spoken forms
+// (mp_pron_used_<id>, stored when they were converted) show the terms again in the
+// player. New conversions are sent as written.
 // ---------------------------------------------------------------------------
-function pronKey() { return 'mp_pron_' + (username || ''); }
-function pronList() {
-  try { const l = JSON.parse(lsGet(pronKey()) || '[]'); return Array.isArray(l) ? l.filter((x) => x && x.term && x.say) : []; } catch (e) { return []; }
-}
 function pronUsed(id) { try { const l = JSON.parse(lsGet('mp_pron_used_' + id) || '[]'); return Array.isArray(l) ? l : []; } catch (e) { return []; } }
 const reEsc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 /** One regular expression for all words in `from`, longest first; a word made of letters or digits matches whole words only. */
@@ -1538,32 +1472,9 @@ function mapWords(text, pairs) {
   const to = new Map(pairs);
   return text.replace(wordsRe(pairs.map((p) => p[0])), (m) => to.get(m));
 }
-/** Text with every term replaced by its spoken form. */
-function respell(text, list) { return mapWords(text, list.map((x) => [x.term, x.say])); }
-/** Inverse of respell, for display. */
+/** The spoken forms of a book's terms turned back into the terms, for display. */
 function unrespell(text, list) { return mapWords(text, list.map((x) => [x.say, x.term])); }
 
-function renderPron() {
-  const list = pronList(), box = $('pronList');
-  box.textContent = '';
-  list.forEach((x, i) => {
-    const tr = el('tr');
-    tr.appendChild(el('td', null, x.term)); tr.appendChild(el('td', null, x.say));
-    const td = el('td'), rm = el('button', 'ghost small', 'Remove'); rm.type = 'button';
-    rm.onclick = () => { const l = pronList(); l.splice(i, 1); lsSet(pronKey(), JSON.stringify(l)); renderPron(); };
-    td.appendChild(rm); tr.appendChild(td); box.appendChild(tr);
-  });
-  $('pronSummary').textContent = 'Pronunciation of terms' + (list.length ? ' (' + list.length + ')' : '');
-}
-$('pronAdd').onclick = () => {
-  const term = $('pronTerm').value.trim(), say = $('pronSay').value.trim(), st = $('pronStatus');
-  if (!term || !say) return setStatus(st, 'Enter both the term and how it is spoken.', true);
-  const l = pronList().filter((x) => x.term !== term);
-  l.push({ term, say }); l.sort((a, b) => a.term.localeCompare(b.term));
-  lsSet(pronKey(), JSON.stringify(l));
-  $('pronTerm').value = ''; $('pronSay').value = ''; setStatus(st, ''); renderPron(); $('pronTerm').focus();
-};
-[$('pronTerm'), $('pronSay')].forEach((x) => x.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('pronAdd').click(); } }));
 
 // ---------------------------------------------------------------------------
 // 8. Audio: new conversion. The original PDF is then saved to Drive in 4 MiB chunks.
@@ -1591,14 +1502,13 @@ $('audioBtn').onclick = async () => {
   try {
     if (!docKind) await prepareBook();
     const bytes = new Uint8Array(await f.arrayBuffer());
-    const kind = audioKind(), pron = pronList();
+    const kind = audioKind();
     const payload = { action: 'audio_start', token, filename: f.name, voice: $('avoice').value, kind: kind === 'book' ? 'book' : 'paper' };
     if ($('atitle').value.trim()) payload.title = $('atitle').value.trim();
     if (kind === 'book') {
       if (!bookData) throw new Error('Could not read the text of this PDF.');
       // The whole book is stored, so other chapters can be converted later from the library.
-      // Terms are respelled for speech; chapters added later from the library use this stored text.
-      payload.chapters = bookData.chapters.map((c) => ({ title: c.title, text: respell(c.text, pron) }));
+      payload.chapters = bookData.chapters.map((c) => ({ title: c.title, text: c.text }));
       payload.selected = bookData.chapters.map((c, i) => (c.sel !== false ? i : -1)).filter((i) => i >= 0);
       if (!payload.selected.length) throw new Error('Select at least one chapter.');
     } else if (kind === 'thesis') {
@@ -1622,7 +1532,6 @@ $('audioBtn').onclick = async () => {
     try { started = await api(payload); }
     catch (e) { if (/failed to fetch|load failed|network/i.test(e.message)) throw new Error('Upload failed (' + mb.toFixed(1) + ' MB). Check the connection, or select fewer chapters, and try again.'); throw e; }
     // The original PDF is stored in Drive in 4 MB pieces, so its size is not limited by the request size.
-    if (kind === 'book' && pron.length) lsSet('mp_pron_used_' + started.id, JSON.stringify(pron));
     let saved = true;
     try { await uploadPdf(started.id, f.name, bytes, (p) => setStatus(st, 'Conversion started. Saving the original PDF to Drive: ' + p + '%')); }
     catch (e) { saved = false; }
@@ -4261,78 +4170,6 @@ const writeDocxTracked = (d, edits) => exportDocx(d, edits, false);
 const writeDocxClean = (d, edits) => exportDocx(d, edits, true);
 
 // ---------------------------------------------------------------------------
-// 16. Structured polish / review (edits written back into .docx)
-// ---------------------------------------------------------------------------
-let lastResult = null, lastName = 'manuscript.tex', lastDocx = null;
-
-$('runBtn').onclick = async () => {
-  const st = $('runStatus');
-  const f = $('sfile').files[0];
-  if (!f) { setStatus(st, 'Choose a file first.', true); return; }
-  const mode = $('mode').value;
-  $('runBtn').disabled = true; $('resultView').classList.add('hidden');
-  const t0 = Date.now();
-  const timer = setInterval(() => setStatus(st, 'Processing... ' + Math.round((Date.now() - t0) / 1000) + ' s'), 1000);
-  try {
-    lastName = f.name; lastDocx = null;
-    let text;
-    if (/\.docx$/i.test(f.name)) { lastDocx = await readDocx(f); text = lastDocx.text; } else { text = await f.text(); }
-    const { jobId } = await api({ action: 'start', token, mode, filename: f.name, text });
-    const d = await waitForJob(jobId);
-    if (lastDocx && d.mode === 'polish') {
-      const tr = await writeDocxTracked(lastDocx, d.edits);
-      d.docxBlob = tr.blob; d.docxBlob.applied = tr.applied; d.docxBlob.manual = tr.manual;
-      d.cleanBlob = (await writeDocxClean(lastDocx, d.edits)).blob;
-    }
-    lastResult = d; clearInterval(timer);
-    setStatus(st, 'Done. Cost $' + d.cost.toFixed(3) + '.'); showUsage(d);
-    renderResult(d);
-  } catch (e) {
-    clearInterval(timer); setStatus(st, e.message, true);
-    if (/log in again/i.test(e.message)) logout();
-  }
-  $('runBtn').disabled = false;
-};
-
-function renderResult(d) {
-  const body = $('resultBody'); body.textContent = '';
-  $('resultView').classList.remove('hidden');
-  $('dlBtn').classList.toggle('hidden', d.mode !== 'polish');
-  $('dlCleanBtn').classList.toggle('hidden', !d.cleanBlob);
-  $('dlBtn').textContent = d.docxBlob ? 'Download Word (tracked changes)' : 'Download revised file';
-  $('dlReviewBtn').classList.toggle('hidden', d.mode !== 'review');
-  if (d.mode === 'review') {
-    $('resultTitle').textContent = 'Review report';
-    const card = el('div', 'card'); card.appendChild(renderMarkdown(d.review)); body.appendChild(card);
-    return;
-  }
-  let title = d.edits.length + ' changes applied';
-  if (d.skipped) title += ', ' + d.skipped + ' could not be located and were skipped';
-  $('resultTitle').textContent = title;
-  if (d.truncated) body.appendChild(el('div', 'notice', 'Time limit reached: the last part of the manuscript was left unchanged. Split the file and submit the remainder separately.'));
-  if (d.docxBlob) {
-    let msg = d.docxBlob.applied + ' of ' + d.edits.length + ' changes are in the Word file as tracked changes (accept or reject them in Word under Review). A clean version is also available.';
-    if (d.docxBlob.manual.length) msg += ' ' + d.docxBlob.manual.length + ' could not be placed automatically and are listed first below for manual editing.';
-    body.appendChild(el('div', 'notice', msg));
-    const manualSet = new Set(d.docxBlob.manual);
-    d.edits = d.docxBlob.manual.concat(d.edits.filter((e) => !manualSet.has(e)));
-  }
-  d.edits.forEach((ed) => {
-    const box = el('div', 'edit');
-    box.appendChild(el('div', 'old', ed.old)); box.appendChild(el('div', 'new', ed.new)); box.appendChild(el('div', 'why', ed.reason));
-    body.appendChild(box);
-  });
-}
-
-$('dlBtn').onclick = () => {
-  if (!lastResult) return;
-  const name = lastName.replace(/(\.[^.]+)?$/, '_polished$1');
-  if (lastResult.docxBlob) downloadBlob(name.replace(/\.docx$/i, '_tracked.docx'), lastResult.docxBlob); else download(name, lastResult.revised);
-};
-$('dlCleanBtn').onclick = () => { if (lastResult && lastResult.cleanBlob) downloadBlob(lastName.replace(/\.docx$/i, '_polished.docx'), lastResult.cleanBlob); };
-$('dlReviewBtn').onclick = () => lastResult && download(lastName.replace(/(\.[^.]+)?$/, '_review.md'), lastResult.review);
-
-// ---------------------------------------------------------------------------
 // Start-up: restore the session of this tab
 // ---------------------------------------------------------------------------
 token = load('mp_token'); username = load('mp_user');
@@ -4355,7 +4192,7 @@ offLoadIndex().then(renderNet);
     // Header, login, tabs
     'Log in': '登录', 'Log out': '退出登录', 'Stay logged in on this device': '在此设备上保持登录',
     'For your own device only. The session still ends after 24 hours.': '仅限自己的设备。登录状态仍会在 24 小时后结束。', 'Username': '用户名', 'Password': '密码', 'Listen offline': '离线收听',
-    'My library': '我的书库', 'PDF to audio': 'PDF 转音频', 'Chat': '对话', 'Translate': '翻译', 'Polish / Review': '润色 / 审稿', '(Word & LaTeX)': '（Word 与 LaTeX）',
+    'My library': '我的书库', 'PDF to audio': 'PDF 转音频', 'Chat': '对话', 'Translate': '翻译',
     'Color theme': '颜色主题', 'Eye care': '护眼', 'Day': '白天', 'Night': '黑夜', 'Warm paper tones, less blue light': '暖色纸张，减少蓝光', 'White background': '白色背景', 'Dark background': '黑色背景',
     'Background music': '背景音乐', 'Background music (lofi by Holizna, CC0)': '背景音乐（Holizna 的 lofi，CC0）',
     'Play music': '播放音乐', 'Pause music': '暂停音乐', 'Play or pause the music': '播放或暂停音乐', 'Preparing the music...': '正在准备音乐...',
@@ -4383,7 +4220,6 @@ offLoadIndex().then(renderNet);
     'Started. It appears in My library; you can close this page meanwhile.': '已开始。它会出现在「我的书库」中，期间可以关闭本页。',
     'No text found. The PDF may be a scanned image without a text layer.': '没有找到文字。这个 PDF 可能是没有文字层的扫描件。',
     'Could not read the text of this PDF.': '无法读取此 PDF 的文字。', 'Word support failed to load. Check the connection and try again.': 'Word 组件加载失败，请检查网络后重试。', 'Could not load the PDF reader. Check the connection and try again.': 'PDF 阅读组件加载失败，请检查网络后重试。',
-    'Pronunciation of terms': '术语读法', 'Term': '术语', 'Spoken as': '读作', 'Add': '添加', 'Enter both the term and how it is spoken.': '请同时填写术语和读法。',
     // Library
     'Your audio library': '我的音频书库', 'Shared library': '共享书库', 'Nothing yet. Converted PDFs will be listed here.': '还没有内容。转换后的 PDF 会列在这里。',
     'Listen': '收听', 'Resume': '继续', 'Offline': '离线', 'Offline ✓': '离线 ✓', 'Chapters': '章节', 'Add chapters': '添加章节', 'Share': '分享', 'Unshare': '取消分享',
@@ -4424,18 +4260,18 @@ offLoadIndex().then(renderNet);
     'Admin': '后台', 'Accounts': '账号', 'Refresh': '刷新', 'Account': '账号', 'Last login': '最近登录', 'Logins': '登录次数', 'Last active': '最近活动',
     'Claude this month': '本月 Claude', 'Library': '书库', 'Characters': '字符', 'Last item': '最近添加', 'Last file': '最近文件', 'just now': '刚刚',
     'Logins are counted from 14 Oct 2026. "Last active" is the last request to the server (updated at most every 10 minutes); for earlier activity see "Last file".': '登录次数从 2026 年 10 月 14 日开始统计。"最近活动"是最后一次访问服务器的时间（最多每 10 分钟更新一次）；更早的活动见"最近文件"。',
-    // Chat and tools
-    'New chat': '新对话', 'Attach file': '附加文件', 'Send': '发送', 'Model': '模型', 'Task': '任务', 'Summarize': '总结', 'Check logic': '检查逻辑',
-    'Polish language': '语言润色', 'Referee review': '审稿意见', 'Submit': '提交', 'Download report': '下载报告', 'Download revised file': '下载修改后的文件',
-    'Download Word (clean)': '下载 Word（清洁版）', 'Download Word (tracked changes)': '下载 Word（修订模式）', 'Manuscript (.tex, .txt or .docx)': '稿件（.tex、.txt 或 .docx）',
-    'Polish language (returns revised file with changes written into the .docx, plus a change list)': '语言润色（返回修改后的文件，修改写入 .docx，并附修改清单）',
-    'Review (returns a referee-style report)': '审稿（返回审稿意见式报告）',
+    // Chat
+    'New chat': '新对话', 'Attach file': '附加文件', 'Send': '发送', 'Model': '模型', 'Summarize': '总结', 'Check logic': '检查逻辑',
+    'Polish language': '语言润色', 'Referee review': '审稿意见', 
+    'Download Word (clean)': '下载 Word（清洁版）', 'Download Word (tracked changes)': '下载 Word（修订模式）', 
+    
+    
     'Sonnet 5.5, no reasoning (fastest, cheapest)': 'Sonnet 5.5，不推理（最快、最便宜）', 'Opus 5.5, light reasoning (default)': 'Opus 5.5，轻度推理（默认）',
     'Opus 5.5, deeper reasoning (slower, may return no text on very long tasks)': 'Opus 5.5，深度推理（较慢，超长任务可能无输出）',
     'Ask anything about your manuscript, or attach a file and choose a task above. Enter to send, Shift+Enter for a new line.': '可以就稿件提任何问题，或附加文件后在上方选择任务。Enter 发送，Shift+Enter 换行。',
     'Attached text and the conversation are stored in the administrator\'s Google Drive and sent to the Anthropic API. Replies take 20 s to 3 min. Keep this page open.': '附加的文字和对话保存在管理员的 Google Drive 中，并发送给 Anthropic API。回复需要 20 秒到 3 分钟，请保持本页打开。',
     'Start by attaching a manuscript (.tex, .txt, .md or .docx) and choosing a task, or just ask a question. The file stays in the conversation, so follow-up questions do not need re-uploading.': '先附加稿件（.tex、.txt、.md 或 .docx）并选择任务，或直接提问。文件会保留在对话中，追问不需要重新上传。',
-    'Reply hit the length limit; ask to continue.': '回复达到长度上限，可以让它继续。', 'Choose a file first.': '请先选择文件。',
+    'Reply hit the length limit; ask to continue.': '回复达到长度上限，可以让它继续。',
     // Network and errors
     'You are offline. This needs a connection.': '当前离线，此操作需要网络。', 'The server did not answer in time': '服务器未及时响应', 'Unknown error': '未知错误',
     'You are offline. Chapters saved for offline listening can be played; everything else needs a connection. Positions and bookmarks are sent when the connection returns.': '当前离线。已离线保存的章节可以播放，其他功能需要网络。播放位置和书签会在恢复连接后上传。',

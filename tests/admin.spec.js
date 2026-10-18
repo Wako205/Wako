@@ -30,13 +30,12 @@ test('Admin tab stays hidden for other accounts', async ({ page, backend }) => {
   expect(backend.calls.some((c) => c.action === 'admin_stats')).toBe(false);
 });
 
-test('a session from before admin flags asks once and shows the tab for an admin', async ({ page, backend }) => {
+test('a session without the admin flag (from before login returned it) shows no Admin tab and asks nothing', async ({ page, backend }) => {
   backend.admin = true;
   await login(page);
   await page.evaluate(() => localStorage.removeItem('mp_admin_tester'));
   await page.goto(INDEX_URL);
-  await expect(page.locator('#tabAdmin')).toBeVisible();
-  await page.reload();
-  await expect(page.locator('#tabAdmin')).toBeVisible();
-  expect(backend.calls.filter((c) => c.action === 'admin_stats').length).toBe(1);
+  await expect(page.locator('#appView')).toBeVisible();
+  await expect(page.locator('#tabAdmin')).toBeHidden();                       // shown again after the next login
+  expect(backend.calls.filter((c) => c.action === 'admin_stats')).toHaveLength(0);
 });
