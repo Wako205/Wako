@@ -2749,11 +2749,20 @@ function updatePlayBtn() {
   const b = $('pPlay'); b.textContent = player.paused ? '▶' : '❚❚';
   b.setAttribute('aria-label', player.paused ? 'Play' : 'Pause'); b.classList.toggle('on', !player.paused);
 }
-$('pPlay').onclick = () => { if (player.paused) player.play().catch(() => {}); else player.pause(); };
+/** Play / pause from the player's own buttons. Pausing stops the background music too; playing does not start it. */
+function togglePlay() {
+  if (player.paused) { player.play().catch(() => {}); return; }
+  player.pause();
+  if (!musicBound() && mPrefs.on) {
+    mPrefs.on = false; saveMusicPrefs(); music.pause(); renderMini();
+    if (mTrack) setStatus($('mStatus'), 'Paused: ' + mTrack.label + '.');
+  }
+}
+$('pPlay').onclick = togglePlay;
 ['play', 'pause', 'ended', 'emptied'].forEach((ev) => player.addEventListener(ev, updatePlayBtn));
 $('pRead').onclick = enterReading;
 $('mExit').onclick = leaveReading;
-$('mPlay').onclick = () => { if (player.paused) player.play().catch(() => {}); else player.pause(); setTimeout(updateMini, 50); };
+$('mPlay').onclick = () => { togglePlay(); setTimeout(updateMini, 50); };
 $('mSeek').addEventListener('input', () => {
   seeking = true;
   const d = isFinite(player.duration) ? player.duration : 0;

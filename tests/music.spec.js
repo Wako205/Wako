@@ -95,6 +95,26 @@ test('mini player: plays by itself at login, ❚❚ pauses, ▶ resumes, indepen
   await expect(page.locator('#mmPlay')).toHaveText('▶');
 });
 
+test('the player\'s pause button pauses the music too; its play button does not start the music', async ({ page, backend }) => {
+  test.setTimeout(90000);
+  await login(page);
+  await expect(page.locator('#mStatus')).toHaveText(/^Playing: /, { timeout: 30000 });
+  await openAudio(page);
+  await page.locator('#library .libitem').first().getByRole('button', { name: 'Listen' }).click();
+  await expect.poll(() => page.evaluate(() => player.duration)).toBeGreaterThan(8);
+  await page.click('#pPlay');
+  await expect.poll(async () => { const s = await st(page); return s.player && s.music; }).toBe(true);
+  await page.click('#pPlay');                                  // pause the book
+  await expect.poll(async () => { const s = await st(page); return !s.player && !s.music; }).toBe(true);
+  await expect(page.locator('#mmPlay')).toHaveText('▶');
+  await page.click('#pPlay');                                  // play the book: the music stays off
+  await expect.poll(async () => (await st(page)).player).toBe(true);
+  await page.waitForTimeout(500);
+  expect((await st(page)).music).toBe(false);
+  await page.click('#mmPlay');                                 // the music is started on its own
+  await expect.poll(async () => (await st(page)).music).toBe(true);
+});
+
 test('choosing one song plays it, then the list continues in order; all tracks shuffle; the choice is per user', async ({ page, backend }) => {
   test.setTimeout(90000);
   const list = tracks();
