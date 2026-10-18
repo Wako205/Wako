@@ -105,7 +105,7 @@ test('logout forgets the token and everything shown for the account', async ({ p
   await login(page, 'bob');
   await expect(page.locator('#messages')).not.toContainText('Private reply');
   await expect(page.locator('#messages')).not.toContainText('unpublished');
-  await expect(page.locator('#audioView')).toBeVisible();      // the first tab after login
+  await expect(page.locator('#libView')).toBeVisible();        // the first tab after login
   await expect(page.locator('#playerCard')).toBeHidden();
   expect(backend.calls.filter((c) => c.action !== 'login' && c.action !== 'audio_progress' && c.token !== 'tok-test')).toEqual([]);
 });

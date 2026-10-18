@@ -44,7 +44,7 @@ test('otherwise the file name is made readable', async ({ page, backend }) => {
 
 test('a library item can be renamed; Escape cancels', async ({ page, backend }) => {
   await login(page);
-  await page.click('#tabAudio');
+  await page.click('#tabLib');
   const first = page.locator('#library .libitem').first();
   await expect(first.locator('.t')).toHaveText('The Quiet Mill');
   await first.getByRole('button', { name: 'Rename' }).click();

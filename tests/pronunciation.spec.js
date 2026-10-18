@@ -15,6 +15,7 @@ async function addTerm(page, term, say) {
 test('the list is edited in the Audio tab and stored per user', async ({ page, backend }) => {
   await login(page, 'alice');
   await openAudio(page);
+  await page.click('#tabAudio');
   await page.click('#pronSummary');
   await expect(page.locator('#pronBox .notice')).toContainText('stored in this browser only');
   await addTerm(page, 'MoS2', 'M O S two');
@@ -38,11 +39,13 @@ test('the list is edited in the Audio tab and stored per user', async ({ page, b
 
   await page.reload();
   await openAudio(page);
+  await page.click('#tabAudio');
   await expect(page.locator('#pronList tr')).toHaveCount(1);
 
   await page.click('#logoutBtn');
   await login(page, 'bob');
   await openAudio(page);
+  await page.click('#tabAudio');
   await expect(page.locator('#pronList tr')).toHaveCount(0);
 });
 

@@ -15,7 +15,9 @@ test('Microsoft voices: listed, counted against their own allowance, sent to the
   await openAudio(page);
   expect(await page.locator('#azVoices').evaluate((g) => g.disabled)).toBe(false);
   await expect(page.locator('#libUsage')).toContainText('Microsoft 20k of 500k characters');
+  await page.click('#tabAudio');
   await page.selectOption('#avoice', 'az:zh-CN-YunxiNeural');
+  await page.click('#tabLib');
 
   // Adding chapters to a book with a Microsoft voice shows the Microsoft allowance.
   await page.locator('#library .libitem').first().getByRole('button', { name: 'Add chapters' }).click();
@@ -51,6 +53,7 @@ test('the allowances are shown as a column chart beside the conversion form', as
   await page.setViewportSize({ width: 1100, height: 900 });
   await login(page);
   await openAudio(page);
+  await page.click('#tabAudio');
   const bars = page.locator('#usageBars .ubar');
   await expect(bars).toHaveCount(3);
   await expect(bars.nth(0)).toHaveAttribute('aria-label', 'Google: 20k of 1,030k characters this month');

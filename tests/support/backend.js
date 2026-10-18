@@ -185,7 +185,7 @@ async function login(page, user = 'tester') {
 
 /** Opens the Audio tab and waits for the library. */
 async function openAudio(page) {
-  await page.click('#tabAudio');
+  await page.click('#tabLib');
   await base.expect(page.locator('#library .libitem').first()).toBeVisible();
 }
 

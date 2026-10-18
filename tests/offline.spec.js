@@ -38,7 +38,7 @@ async function login(page, site, user = 'tester') {
   await expect(page.locator('#appView')).toBeVisible();
 }
 async function openAudio(page) {
-  await page.click('#tabAudio');
+  await page.click('#tabLib');
   await expect(page.locator('#library .libitem').first()).toBeVisible();
 }
 const book = (page) => page.locator('#library .libitem').first();
@@ -156,7 +156,7 @@ test('offline: the last library, saved chapters only, and server actions disable
   }
   await page2.click('#tabChat');
   await expect(page2.locator('#sendBtn')).toHaveAttribute('aria-disabled', 'true');
-  await page2.click('#tabAudio');
+  await page2.click('#tabLib');
   await book(page2).getByRole('button', { name: /Listen|Resume/ }).click();
   await expect(page2.locator('#pText span.s')).toHaveCount(6);
   await expect(page2.locator('#pChapter option').nth(1)).toHaveText('Chapter 2 ✓ offline');

@@ -291,7 +291,8 @@
 
   <div id="appView" class="hidden" style="display:flex;flex-direction:column;flex:1">
     <div class="tabs">
-      <button id="tabAudio" class="active">PDF to audio</button>
+      <button id="tabLib" class="active">My library</button>
+      <button id="tabAudio">PDF to audio</button>
       <button id="tabTools" class="hidden" hidden>Polish / Review<span class="wide-only"> (Word &amp; LaTeX)</span></button>
       <button id="tabChat">Chat</button>
       <button id="tabTrans">Translate</button>
@@ -396,65 +397,7 @@
     </section>
 
     <!-- PDF to audio -->
-    <section id="audioView">
-      <!-- Player (opened from the library) -->
-      <section class="card hidden" id="playerCard" style="margin-bottom:16px">
-        <div class="row" style="justify-content:space-between">
-          <h2 id="pTitle" style="margin:0"></h2>
-          <button class="ghost small" id="pClose">Close</button>
-        </div>
-        <div class="row pnav" style="margin-top:10px">
-          <button class="ghost small" id="pPrev" title="Previous chapter" aria-label="Previous chapter">◀</button>
-          <select id="pChapter" style="width:auto;max-width:60%;padding:5px 8px" aria-label="Chapter"></select>
-          <button class="ghost small" id="pNext" title="Next chapter" aria-label="Next chapter">▶</button>
-          <button class="ghost small" id="pSleepBtn" title="Sleep timer" aria-label="Sleep timer" aria-haspopup="true" aria-expanded="false" aria-controls="pSleepMenu">☾</button>
-          <button class="ghost small" id="pSearchToggle" type="button" title="Search this book" aria-label="Search this book" aria-expanded="false" aria-controls="pSearchForm"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" style="vertical-align:-3px"><circle cx="6.8" cy="6.8" r="4.8" fill="none" stroke="currentColor" stroke-width="1.6"/><line x1="10.4" y1="10.4" x2="14.5" y2="14.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
-          <span class="status" id="pStatus"></span>
-        </div>
-        <form class="row psearch hidden" id="pSearchForm" role="search" style="margin-top:8px">
-          <input type="search" id="pSearch" placeholder="Search this book" aria-label="Search this book" autocomplete="off" enterkeyhint="search">
-          <button class="ghost small" type="submit" id="pSearchBtn">Search</button>
-        </form>
-        <div class="status" id="pSearchInfo" aria-live="polite"></div>
-        <div id="pResults" class="results"></div>
-        <div id="pSleepMenu" class="sleepmenu hidden" role="group" aria-label="Sleep timer">
-          <span class="sleepnote" id="pSleepNote">Stop playback after:</span>
-          <button class="ghost small" data-sleep="15">15 min</button>
-          <button class="ghost small" data-sleep="30">30 min</button>
-          <button class="ghost small" data-sleep="60">60 min</button>
-          <button class="ghost small" data-sleep="end">End of chapter</button>
-          <button class="small" data-sleep="off" id="pSleepCancel">Cancel timer</button>
-        </div>
-        <div class="prow">
-          <button id="pPlay" class="bigplay" type="button" aria-label="Play" title="Play / pause (space bar)">▶</button>
-          <audio id="player" controls preload="auto"></audio>
-        </div>
-        <div id="pMarks" class="marks" style="margin-top:6px"></div>
-        <div class="row pset" style="margin-top:10px;font-size:13px;color:var(--muted)">
-          <label for="arate" style="margin:0">Speed</label>
-          <select id="arate" style="width:auto;padding:4px 8px;font-size:13px">
-            <option value="0.85">0.85×</option><option value="1" selected>1×</option><option value="1.15">1.15×</option>
-            <option value="1.3">1.3×</option><option value="1.5">1.5×</option><option value="1.75">1.75×</option><option value="2">2×</option>
-          </select>
-          <label class="follow" style="margin:0;display:flex;gap:4px;align-items:center" title="Keep the screen on (no auto-lock) while audio plays"><input type="checkbox" id="pAwake" checked aria-label="Keep the screen on while audio plays"> <span aria-hidden="true">☀</span><span class="wide-only">Screen on</span></label>
-          <label class="follow" style="margin:0;display:flex;gap:4px;align-items:center" title="Background music plays and pauses together with the book"><input type="checkbox" id="pBgm" aria-label="Background music together with the book"> <span aria-hidden="true">♪</span><span class="wide-only">BGM with book</span></label>
-          <button class="ghost small" id="pJump" style="margin-left:auto" title="Scroll the text to the sentence being read">Jump<span class="wide-only"> to current</span></button>
-          <button class="small" id="pRead" title="Show only the text, with a small progress bar">Full<span class="wide-only"> screen</span></button>
-        </div>
-        <div id="pText" class="readtext"></div>
-        <div id="pMini" class="pmini" role="group" aria-label="Playback">
-          <button class="small" id="mPlay" aria-label="Play">▶</button>
-          <span class="t" id="mTime">0:00 / 0:00</span>
-          <input type="range" id="mSeek" min="0" max="1000" value="0" step="1" aria-label="Position in the chapter">
-          <button class="ghost small" id="mExit" aria-label="Leave full screen">Exit</button>
-        </div>
-        <div class="row" style="margin-top:10px">
-          <button class="ghost small" id="dlAudioBtn">Download MP3</button>
-          <button class="ghost small" id="dlScriptBtn">Download text</button>
-        </div>
-        <div id="pOffline" class="poffline"></div>
-      </section>
-
+    <section id="audioView" class="hidden">
       <!-- New conversion, with the speech allowance beside it -->
       <div class="genrow nousage">
       <div class="card">
@@ -517,9 +460,71 @@
       </aside>
       </div>
 
+    </section>
+
+    <section id="libView">
+      <!-- Player (opened from the library) -->
+      <section class="card hidden" id="playerCard" style="margin-bottom:16px">
+        <div class="row" style="justify-content:space-between">
+          <h2 id="pTitle" style="margin:0"></h2>
+          <button class="ghost small" id="pClose">Close</button>
+        </div>
+        <div class="row pnav" style="margin-top:10px">
+          <button class="ghost small" id="pPrev" title="Previous chapter" aria-label="Previous chapter">◀</button>
+          <select id="pChapter" style="width:auto;max-width:60%;padding:5px 8px" aria-label="Chapter"></select>
+          <button class="ghost small" id="pNext" title="Next chapter" aria-label="Next chapter">▶</button>
+          <button class="ghost small" id="pSleepBtn" title="Sleep timer" aria-label="Sleep timer" aria-haspopup="true" aria-expanded="false" aria-controls="pSleepMenu">☾</button>
+          <button class="ghost small" id="pSearchToggle" type="button" title="Search this book" aria-label="Search this book" aria-expanded="false" aria-controls="pSearchForm"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" style="vertical-align:-3px"><circle cx="6.8" cy="6.8" r="4.8" fill="none" stroke="currentColor" stroke-width="1.6"/><line x1="10.4" y1="10.4" x2="14.5" y2="14.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+          <span class="status" id="pStatus"></span>
+        </div>
+        <form class="row psearch hidden" id="pSearchForm" role="search" style="margin-top:8px">
+          <input type="search" id="pSearch" placeholder="Search this book" aria-label="Search this book" autocomplete="off" enterkeyhint="search">
+          <button class="ghost small" type="submit" id="pSearchBtn">Search</button>
+        </form>
+        <div class="status" id="pSearchInfo" aria-live="polite"></div>
+        <div id="pResults" class="results"></div>
+        <div id="pSleepMenu" class="sleepmenu hidden" role="group" aria-label="Sleep timer">
+          <span class="sleepnote" id="pSleepNote">Stop playback after:</span>
+          <button class="ghost small" data-sleep="15">15 min</button>
+          <button class="ghost small" data-sleep="30">30 min</button>
+          <button class="ghost small" data-sleep="60">60 min</button>
+          <button class="ghost small" data-sleep="end">End of chapter</button>
+          <button class="small" data-sleep="off" id="pSleepCancel">Cancel timer</button>
+        </div>
+        <div class="prow">
+          <button id="pPlay" class="bigplay" type="button" aria-label="Play" title="Play / pause (space bar)">▶</button>
+          <audio id="player" controls preload="auto"></audio>
+        </div>
+        <div id="pMarks" class="marks" style="margin-top:6px"></div>
+        <div class="row pset" style="margin-top:10px;font-size:13px;color:var(--muted)">
+          <label for="arate" style="margin:0">Speed</label>
+          <select id="arate" style="width:auto;padding:4px 8px;font-size:13px">
+            <option value="0.85">0.85×</option><option value="1" selected>1×</option><option value="1.15">1.15×</option>
+            <option value="1.3">1.3×</option><option value="1.5">1.5×</option><option value="1.75">1.75×</option><option value="2">2×</option>
+          </select>
+          <label class="follow" style="margin:0;display:flex;gap:4px;align-items:center" title="Keep the screen on (no auto-lock) while audio plays"><input type="checkbox" id="pAwake" checked aria-label="Keep the screen on while audio plays"> <span aria-hidden="true">☀</span><span class="wide-only">Screen on</span></label>
+          <label class="follow" style="margin:0;display:flex;gap:4px;align-items:center" title="Background music plays and pauses together with the book"><input type="checkbox" id="pBgm" aria-label="Background music together with the book"> <span aria-hidden="true">♪</span><span class="wide-only">BGM with book</span></label>
+          <button class="ghost small" id="pJump" style="margin-left:auto" title="Scroll the text to the sentence being read">Jump<span class="wide-only"> to current</span></button>
+          <button class="small" id="pRead" title="Show only the text, with a small progress bar">Full<span class="wide-only"> screen</span></button>
+        </div>
+        <div id="pText" class="readtext"></div>
+        <div id="pMini" class="pmini" role="group" aria-label="Playback">
+          <button class="small" id="mPlay" aria-label="Play">▶</button>
+          <span class="t" id="mTime">0:00 / 0:00</span>
+          <input type="range" id="mSeek" min="0" max="1000" value="0" step="1" aria-label="Position in the chapter">
+          <button class="ghost small" id="mExit" aria-label="Leave full screen">Exit</button>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button class="ghost small" id="dlAudioBtn">Download MP3</button>
+          <button class="ghost small" id="dlScriptBtn">Download text</button>
+        </div>
+        <div id="pOffline" class="poffline"></div>
+      </section>
+
       <!-- Library -->
       <h2>Your audio library <span class="status sr-only" id="libUsage"></span></h2>
       <div id="libNote" class="status"></div>
+      <div id="libStatus" class="status"></div>
       <div id="library"><div class="status">Loading...</div></div>
       <div id="sharedCard" class="hidden">
         <h2 style="margin-top:22px">Shared library</h2>
@@ -661,7 +666,7 @@ function showApp() {
   renderChat();
   loadMusicPrefs();
   musicSync();                                      // loads the first track, ready for ▶
-  switchTab('audio');
+  switchTab('lib');
 }
 /**
  * Ends the session: forgets the token and everything shown for the account (chat with
@@ -693,7 +698,7 @@ function logout() {
   ['chatStatus', 'runStatus', 'audioStatus'].forEach((id) => setStatus($(id), ''));
   $('whoUsage').textContent = '';
   $('appView').classList.add('hidden'); $('who').classList.add('hidden'); $('loginView').classList.remove('hidden');
-  switchTab('audio');
+  switchTab('lib');
 }
 $('loginBtn').onclick = async () => {
   const st = $('loginStatus'); $('loginBtn').disabled = true; setStatus(st, 'Checking...');
@@ -715,11 +720,14 @@ $('tabTrans').onclick = () => switchTab('trans');
 $('tabAdmin').onclick = () => switchTab('admin');
 $('tabTools').onclick = () => switchTab('tools');
 $('tabAudio').onclick = () => switchTab('audio');
+$('tabLib').onclick = () => switchTab('lib');
+/** The library is loaded and kept fresh while My library or PDF to audio is open. */
+function libShown() { return !$('libView').classList.contains('hidden') || !$('audioView').classList.contains('hidden'); }
 function switchTab(t) {
-  [['chat', 'tabChat', 'chatView'], ['tools', 'tabTools', 'toolsView'], ['audio', 'tabAudio', 'audioView'], ['trans', 'tabTrans', 'transView'], ['admin', 'tabAdmin', 'adminView']].forEach(([k, tab, view]) => {
+  [['chat', 'tabChat', 'chatView'], ['tools', 'tabTools', 'toolsView'], ['lib', 'tabLib', 'libView'], ['audio', 'tabAudio', 'audioView'], ['trans', 'tabTrans', 'transView'], ['admin', 'tabAdmin', 'adminView']].forEach(([k, tab, view]) => {
     $(tab).classList.toggle('active', t === k); $(view).classList.toggle('hidden', t !== k);
   });
-  if (t === 'audio' && (token || offlineMode)) { renderPron(); loadLibrary(); } else clearTimeout(libTimer);
+  if ((t === 'audio' || t === 'lib') && (token || offlineMode)) { renderPron(); loadLibrary(); } else clearTimeout(libTimer);
   if (t === 'trans' && token) trLoadUsage();
   if (t === 'admin' && token) loadAdmin();
   renderNet();
@@ -1573,7 +1581,7 @@ $('audioBtn').onclick = async () => {
     let saved = true;
     try { await uploadPdf(started.id, f.name, bytes, (p) => setStatus(st, 'Conversion started. Saving the original PDF to Drive: ' + p + '%')); }
     catch (e) { saved = false; }
-    setStatus(st, 'Started. It appears in your library below; you can close this page meanwhile.' +
+    setStatus(st, 'Started. It appears in My library; you can close this page meanwhile.' +
       (saved ? '' : ' (The original PDF could not be saved to Drive; the conversion is not affected.)'));
     $('apdf').value = ''; bookData = null; docKind = null; renderKind(); renderBookPanel();
     await loadLibrary();
@@ -1710,7 +1718,7 @@ function startRename(it, head) {
     if (save && v && v !== it.title) {
       inp.disabled = true;
       try { await api({ action: 'audio_rename', token, id: it.id, title: v }); it.title = v; }
-      catch (e) { setStatus($('audioStatus'), e.message, true); }
+      catch (e) { setStatus($('libStatus'), e.message, true); }
     }
     renderLibrary(); loadShared();
   };
@@ -1804,14 +1812,14 @@ function renderLibrary() {
       sh.onclick = async () => {
         sh.disabled = true;
         try { await api({ action: 'audio_share', token, id: it.id, shared: !it.shared }); await loadLibrary(); }
-        catch (e) { setStatus($('audioStatus'), e.message, true); sh.disabled = false; }
+        catch (e) { setStatus($('libStatus'), e.message, true); sh.disabled = false; }
       };
       sh.classList.add('a4'); acts.appendChild(sh);
       const del = el('button', 'ghost small', 'Delete'); del.dataset.net = '1';
       del.onclick = async () => {
         if (!window.confirm('Delete "' + it.title + '" and its audio from Drive?')) return;
         try { await api({ action: 'audio_delete', token, id: it.id }); if (P && P.item.id === it.id) closePlayer(); loadLibrary(); }
-        catch (e) { setStatus($('audioStatus'), e.message, true); }
+        catch (e) { setStatus($('libStatus'), e.message, true); }
       };
       del.classList.add('a5'); acts.appendChild(del);
     }
@@ -1905,7 +1913,7 @@ function chapterDeleteButton(it, c, panel) {
 function pollLibrary() {
   clearTimeout(libTimer);
   const busy = libItems.filter((it) => it.state === 'processing');
-  if (!busy.length || $('audioView').classList.contains('hidden')) return;
+  if (!busy.length || !libShown()) return;
   libTimer = setTimeout(async () => {
     let reload = false;
     for (const it of busy) {
@@ -2194,12 +2202,12 @@ function renderNet() {
   if (canOffline) $('offlineEntryNote').textContent = 'You are offline. The chapters ' + last + ' saved on this device can be played without logging in.';
   if (!on && !token) setStatus($('loginStatus'), 'Logging in needs a connection.'); else if ($('loginStatus').textContent === 'Logging in needs a connection.') setStatus($('loginStatus'), '');
 }
-window.addEventListener('online', () => { renderNet(); flushOutbox(); if (token && !$('audioView').classList.contains('hidden')) loadLibrary(); else if (!$('appView').classList.contains('hidden')) renderOfflineEverywhere(); });
+window.addEventListener('online', () => { renderNet(); flushOutbox(); if (token && libShown()) loadLibrary(); else if (!$('appView').classList.contains('hidden')) renderOfflineEverywhere(); });
 window.addEventListener('offline', () => { renderNet(); if (!$('appView').classList.contains('hidden')) renderOfflineEverywhere(); });
 $('offlineBtn').onclick = async () => {
   username = lsGet('mp_last_user'); offlineMode = true;
   await offLoadIndex();
-  showApp(); switchTab('audio');
+  showApp(); switchTab('lib');
 };
 
 // The page opens without a connection once the service worker has cached it (not for file:// pages).
@@ -4137,7 +4145,7 @@ offLoadIndex().then(renderNet);
   const D = {
     // Header, login, tabs
     'Log in': '登录', 'Log out': '退出登录', 'Username': '用户名', 'Password': '密码', 'Listen offline': '离线收听',
-    'PDF to audio': 'PDF 转音频', 'Chat': '对话', 'Translate': '翻译', 'Polish / Review': '润色 / 审稿', '(Word & LaTeX)': '（Word 与 LaTeX）',
+    'My library': '我的书库', 'PDF to audio': 'PDF 转音频', 'Chat': '对话', 'Translate': '翻译', 'Polish / Review': '润色 / 审稿', '(Word & LaTeX)': '（Word 与 LaTeX）',
     'Color theme': '颜色主题', 'Eye care': '护眼', 'Day': '白天', 'Night': '黑夜', 'Warm paper tones, less blue light': '暖色纸张，减少蓝光', 'White background': '白色背景', 'Dark background': '黑色背景',
     'Background music': '背景音乐', 'Background music (lofi by Holizna, CC0)': '背景音乐（Holizna 的 lofi，CC0）',
     'Play music': '播放音乐', 'Pause music': '暂停音乐', 'Play or pause the music': '播放或暂停音乐', 'Preparing the music...': '正在准备音乐...',
@@ -4162,7 +4170,7 @@ offLoadIndex().then(renderNet);
     'Front matter (before the first chapter)': '前言部分（第一章之前）', 'Full text': '全文',
     'Reading the PDF text...': '正在读取 PDF 文本...', 'Reading the PDF...': '正在读取 PDF...', 'Preparing the selected chapters...': '正在准备所选章节...',
     'Claude is looking for the chapters...': 'Claude 正在查找章节...',
-    'Started. It appears in your library below; you can close this page meanwhile.': '已开始。它会出现在下方书库中，期间可以关闭本页。',
+    'Started. It appears in My library; you can close this page meanwhile.': '已开始。它会出现在「我的书库」中，期间可以关闭本页。',
     'No text found. The PDF may be a scanned image without a text layer.': '没有找到文字。这个 PDF 可能是没有文字层的扫描件。',
     'Could not read the text of this PDF.': '无法读取此 PDF 的文字。', 'Could not load the PDF reader. Check the connection and try again.': 'PDF 阅读组件加载失败，请检查网络后重试。',
     'Pronunciation of terms': '术语读法', 'Term': '术语', 'Spoken as': '读作', 'Add': '添加', 'Enter both the term and how it is spoken.': '请同时填写术语和读法。',
