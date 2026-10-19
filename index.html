@@ -125,6 +125,9 @@
   @media (max-width: 600px) { label.keep { min-height:44px; } label.keep input { width:20px; height:20px; } }
   .renamebox { width:100%; font-weight:600; }
   .libitem .m { font-size:13px; color:var(--muted); }
+  .libitem.notoff { opacity:.55; }
+  .libbar { justify-content:space-between; align-items:center; margin:0 0 4px; min-height:0; }
+  .libbar .status { flex:1; }
   .libitem .grow { flex:1; min-width:200px; }
   /* Library buttons: right-aligned in fixed columns, so the same button lines up from row to row
      (a missing button leaves its column empty; "Offline ✓" fits its column). The other actions are in the "⋯" menu. */
@@ -483,7 +486,7 @@
 
       <!-- Library -->
       <h2 class="sr-only">Your audio library <span class="status" id="libUsage"></span></h2>   <!-- the tab names it; kept for screen readers -->
-      <div id="libNote" class="status"></div>
+      <div class="row libbar"><div id="libNote" class="status"></div><button class="ghost small" id="libRefresh" type="button" title="Load the library again; offline, check the connection and what is saved on this device">Refresh</button></div>
       <div id="libStatus" class="status"></div>
       <div id="library"><div class="status">Loading...</div></div>
       <div id="sharedCard" class="hidden">
@@ -581,13 +584,14 @@ function keptSession() { try { const k = JSON.parse(lsGet('mp_token_keep') || 'n
 function forgetKeptSession() { try { localStorage.removeItem('mp_token_keep'); } catch (e) {} }
 
 // text/plain body keeps this a "simple" request, which Apps Script requires (no CORS preflight).
-async function api(payload, timeoutMs) {
-  if (!isOnline()) throw new Error(OFFLINE_MSG);
+async function api(payload, timeoutMs, tryAnyway) {
+  if (!isOnline() && !tryAnyway) throw new Error(OFFLINE_MSG);
   const ctl = timeoutMs ? new AbortController() : null, timer = ctl && setTimeout(() => ctl.abort(), timeoutMs);
   let r;
   try { r = await fetch(BACKEND_URL, { method: 'POST', body: JSON.stringify(payload), signal: ctl ? ctl.signal : undefined }); }
-  catch (e) { throw new Error(e && e.name === 'AbortError' ? 'The server did not answer in time' : 'Network error: ' + e.message); }
+  catch (e) { netSeen = 0; throw new Error(e && e.name === 'AbortError' ? 'The server did not answer in time' : 'Network error: ' + e.message); }
   finally { if (timer) clearTimeout(timer); }
+  if (navigator.onLine === false) netSeen = Date.now();
   if (!r.ok) throw new Error('Server error (HTTP ' + r.status + ')');
   const data = await r.json();
   if (!data.ok) throw new Error(data.error || 'Unknown error');
@@ -689,6 +693,14 @@ $('tabTrans').onclick = () => switchTab('trans');
 $('tabAdmin').onclick = () => switchTab('admin');
 $('tabAudio').onclick = () => switchTab('audio');
 $('tabLib').onclick = () => switchTab('lib');
+$('libRefresh').onclick = async () => {
+  const b = $('libRefresh'); b.disabled = true;
+  await offLoadIndex();                                  // what is saved on this device, read again
+  if (token) await loadLibrary(true);                    // asks the server even if the device reports offline
+  else renderOfflineEverywhere();
+  renderNet(); renderStorage();
+  b.disabled = false;
+};
 /** The library is loaded and kept fresh while My library or PDF to audio is open. */
 function libShown() { return !$('libView').classList.contains('hidden') || !$('audioView').classList.contains('hidden'); }
 // Phones: a tab with a short label (data-short) shows it, so all tab names fit on one line; the title keeps the full name.
@@ -1589,16 +1601,16 @@ function fmtDay(ms) { const d = new Date(ms); return d.getDate() + ' ' + d.toLoc
 function strHash(t) { let h = 0; for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) >>> 0; return h.toString(36) + '_' + t.length; }
 function libSnapshot(user) { try { return JSON.parse(lsGet('mp_lib_' + user) || 'null'); } catch (e) { return null; } }
 let libFetchedAt = 0, libFirst = true;
-async function loadLibrary() {
+async function loadLibrary(tryAnyway) {
   renderStorage();
   let d = null;
-  if (token && isOnline()) {
+  if (token && (isOnline() || tryAnyway)) {
     // The copy saved on this device is shown at once; the fresh list replaces it when it arrives.
     const snap = !libItems.length ? libSnapshot(username) : null;
     if (snap) applyLibrary(snap, true);
     loadShared();                                     // at the same time as the library
     try {
-      d = await api({ action: 'audio_library', token });
+      d = await api({ action: 'audio_library', token }, tryAnyway ? 20000 : undefined, tryAnyway);
       libFetchedAt = Date.now();
       lsSet('mp_lib_' + username, JSON.stringify(Object.assign({}, d, { ok: undefined, at: Date.now() })));
       setStatus($('libNote'), '');
@@ -1762,8 +1774,9 @@ function renderLibrary() {
     if (it.chars) meta.push(fmtDur(itemMinutes(it)));
     if (it.shared) meta.push('shared');
     if (it.pos && it.chapters && it.chapters[it.pos.c]) meta.push('resume at ' + (it.chapters.length > 1 ? it.chapters[it.pos.c].title + ' ' : '') + fmtTime(it.pos.t));
-    const nOff = offCount(it);
-    if (nOff && nOff < savableChapters(it).length) meta.push('✓ ' + nOff + '/' + savableChapters(it).length + ' offline');
+    const nOff = offCount(it), nSav = savableChapters(it).length;
+    if (nOff) meta.push(nOff >= nSav ? '✓ offline' : '✓ ' + nOff + '/' + nSav + ' offline');
+    else if (!isOnline()) { meta.push('not on this device'); row.classList.add('notoff'); }
     g.appendChild(el('div', 'm', meta.join(' · ')));
     if (it.state === 'processing') {
       const ready = (it._ready || []).reduce((a, b) => a + b, 0), total = (it.chapters || []).reduce((a, c) => a + c.n, 0);
@@ -1998,7 +2011,10 @@ let RECENT_LIMIT = 200e6;
 const recentIndex = new Map();        // key -> meta of this user's recent copies (not in offIndex)
 let offDbP = null;
 
-function isOnline() { return navigator.onLine !== false; }
+// Some devices (e-readers among them) report "offline" while the network works: a request that got an
+// answer counts as being online for two minutes, whatever navigator.onLine says.
+let netSeen = 0;
+function isOnline() { return navigator.onLine !== false || Date.now() - netSeen < 120000; }
 function isNetError(e) { return /failed to fetch|load failed|networkerror|network request failed|offline/i.test(e && e.message || ''); }
 function offUser() { return username || lsGet('mp_last_user') || ''; }
 /** Key of a saved chapter: this user, the owner of a shared item (empty for an own item), the item and the chapter. */
@@ -2311,7 +2327,7 @@ function renderNet() {
   document.querySelectorAll('[data-net]').forEach((b) => { if (on) b.removeAttribute('aria-disabled'); else b.setAttribute('aria-disabled', 'true'); });
   const ban = $('netBanner');
   ban.textContent = '';
-  if (!on) ban.appendChild(document.createTextNode('You are offline. Chapters saved for offline listening can be played; everything else needs a connection. Positions and bookmarks are sent when the connection returns.'));
+  if (!on) ban.appendChild(document.createTextNode('You are offline. Items marked ✓ offline can be played; everything else needs a connection. Positions and bookmarks are sent when the connection returns. Tap Refresh when you are back online.'));
   else if (offlineMode) {
     ban.appendChild(document.createTextNode('The connection is back. Log in to send the positions saved while offline and to use the other functions. '));
     const b = el('button', 'small', 'Log in'); b.onclick = () => { $('appView').classList.add('hidden'); $('who').classList.add('hidden'); $('loginView').classList.remove('hidden'); if (P) closePlayer(); };
@@ -4306,7 +4322,9 @@ offLoadIndex().then(renderNet);
     'Reply hit the length limit; ask to continue.': '回复达到长度上限，可以让它继续。',
     // Network and errors
     'You are offline. This needs a connection.': '当前离线，此操作需要网络。', 'The server did not answer in time': '服务器未及时响应', 'Unknown error': '未知错误',
-    'You are offline. Chapters saved for offline listening can be played; everything else needs a connection. Positions and bookmarks are sent when the connection returns.': '当前离线。已离线保存的章节可以播放，其他功能需要网络。播放位置和书签会在恢复连接后上传。',
+    'You are offline. Items marked ✓ offline can be played; everything else needs a connection. Positions and bookmarks are sent when the connection returns. Tap Refresh when you are back online.': '当前离线。标有「✓ 离线」的书可以播放，其他功能需要网络。播放位置和书签会在恢复连接后上传。恢复网络后请点「刷新」。',
+    'Refresh': '刷新', 'Load the library again; offline, check the connection and what is saved on this device': '重新加载书库；离线时检查网络和本设备上保存的内容',
+    'not on this device': '未保存在本设备', '✓ offline': '✓ 离线',
     'Add to Home Screen': '添加到主屏幕',
   };
   // Strings that begin with a fixed English part followed by numbers or names.

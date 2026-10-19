@@ -119,7 +119,7 @@ test('a whole book is saved from the library, with sizes, marks and removal', as
   await expect(panel.locator('.offrow').first().getByRole('button', { name: /^Save chapter for offline \(about/ })).toBeVisible();
   await panel.getByRole('button', { name: /^Save all for offline \(about/ }).click();
   await expect(panel.locator('.offctl').first()).toContainText('✓ 2 of 2 saved offline');
-  await expect(book(page).locator('.grow .m').first()).not.toContainText('✓');      // the button already says so
+  await expect(book(page).locator('.grow .m').first()).toContainText('✓ offline');   // visible in the row too, also when offline
   await expect(book(page).getByRole('button', { name: 'Offline ✓' })).toBeVisible();
   expect((await stored(page)).meta).toEqual(['tester||book1|0', 'tester||book1|1']);
   expect(backend.callsOf('audio_part').length).toBe(4);
@@ -333,4 +333,23 @@ test('offline, the next chapter that plays is the next saved one', async ({ page
   await expect.poll(() => page.evaluate(() => !player.paused)).toBe(true);
   await page.evaluate(() => player.pause());
   expect(backend.calls.length).toBe(before);
+});
+
+test('library rows say what is saved on this device; Refresh asks the server even when the device reports offline', async ({ page, context, site, backend }) => {
+  await login(page, site);
+  await openAudio(page);
+  await book(page).getByRole('button', { name: 'Offline' }).click();
+  await page.locator('.offpanel').getByRole('button', { name: /^Save all for offline/ }).click();
+  await expect(book(page).locator('.grow .m').first()).toContainText('✓ offline');
+  await context.setOffline(true);
+  await expect(paper(page).locator('.grow .m').first()).toContainText('not on this device');
+  await expect(paper(page)).toHaveClass(/notoff/);
+  await expect(book(page)).not.toHaveClass(/notoff/);
+  // The device says offline, but the network works: Refresh loads the library anyway.
+  await context.setOffline(false);
+  await page.evaluate(() => Object.defineProperty(navigator, 'onLine', { get: () => false, configurable: true }));
+  const n = backend.callsOf('audio_library').length;
+  await page.click('#libRefresh');
+  await expect.poll(() => backend.callsOf('audio_library').length).toBe(n + 1);
+  await expect(paper(page).locator('.grow .m').first()).not.toContainText('not on this device');
 });
