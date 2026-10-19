@@ -1628,7 +1628,7 @@ async function loadLibrary(tryAnyway) {
     loadShared();
   }
   applyLibrary(d, false);
-  if (libFirst) { libFirst = false; setTimeout(musicSync, 0); }   // the music loads after the library, not alongside it
+  if (libFirst) { libFirst = false; setTimeout(musicSync, 0); setTimeout(lofiKeepFirst, 8000); }   // the music loads after the library, not alongside it
 }
 
 /** Shows a library reply (or the copy saved on this device, cached = true: no polling, no player refresh). */
@@ -3356,7 +3356,11 @@ async function makeTrack(gen) {
   }
   if (mPrefs.source === 'lofi') {
     // "All lofi": shuffled. A chosen song: it plays first, then the list continues in order and starts over at the end.
-    const list = await lofiList();
+    let list = await lofiList();
+    if (!isOnline()) {                                  // offline: only the songs kept on this device
+      const kept = await lofiKept();
+      list = list.filter((t) => kept.has(t.file));
+    }
     if (!list.length) throw new Error('The lofi library could not be loaded.');
     const start = list.findIndex((t) => t.file === mPrefs.lofi);
     if (mFresh) {                                       // a new visit: a random song, not the one the last visit began with
@@ -3369,7 +3373,7 @@ async function makeTrack(gen) {
       saveMusicPrefs(); renderMini();
     } else if (start < 0) mIndex = pickIndex(list.length);
     else mIndex = mIndex < 0 ? start : (mIndex + 1) % list.length;
-    const t = list[mIndex], r = await fetch(LOFI_DIR + encodeURIComponent(t.file));
+    const t = list[mIndex], r = await lofiFetch(encodeURIComponent(t.file));
     if (!r.ok) throw new Error('Could not load "' + t.title + '".');
     const y = await renderFileSamples(await r.arrayBuffer());
     return Object.assign(track(gen, y, t.title, setLevel(y, musicTarget())), { file: t.file });
@@ -3390,9 +3394,47 @@ function pickIndex(n) {
 // Built-in lofi library: MP3 files in music/lofi/ of this site, listed in music/lofi/tracks.json.
 const LOFI_DIR = location.protocol === 'file:' ? 'https://wako205.github.io/Wako/music/lofi/' : 'music/lofi/';   // tests open the page as a file
 let lofiP = null;
+// The first LOFI_OFFLINE songs of the list are kept on the device (Cache Storage, about 5 MB), so music plays offline too.
+const LOFI_CACHE = 'wako-lofi-v1', LOFI_OFFLINE = 3;
+async function lofiCache() { try { return window.caches ? await caches.open(LOFI_CACHE) : null; } catch (e) { return null; } }
+/** A lofi file: from the device when kept there (the files never change), otherwise from the site. */
+async function lofiFetch(name) {
+  const url = new URL(LOFI_DIR + name, location.href).href, c = await lofiCache();
+  const hit = c && name !== 'tracks.json' ? await c.match(url) : null;
+  if (hit) return hit;
+  try {
+    const r = await fetch(url);
+    if (r.ok && c && name === 'tracks.json') c.put(url, r.clone()).catch(() => {});
+    return r;
+  } catch (e) {
+    const old = c ? await c.match(url) : null;          // offline: the list as last received
+    if (old) return old;
+    throw e;
+  }
+}
+/** Songs kept on this device (file names). */
+async function lofiKept() {
+  const c = await lofiCache();
+  if (!c) return new Set();
+  return new Set((await c.keys()).map((r) => decodeURIComponent(r.url.split('/').pop())));
+}
+/** After login, while online: keeps the first songs of the list on the device (once; nothing is fetched again later). */
+async function lofiKeepFirst() {
+  if (!isOnline()) return;
+  try {
+    const c = await lofiCache(), list = await lofiList();
+    if (!c) return;
+    const kept = await lofiKept();
+    for (const t of list.slice(0, LOFI_OFFLINE)) {
+      if (kept.has(t.file)) continue;
+      const url = new URL(LOFI_DIR + encodeURIComponent(t.file), location.href).href, r = await fetch(url);
+      if (r.ok) await c.put(url, r);
+    }
+  } catch (e) {}
+}
 function lofiList() {
   if (!lofiP) {
-    lofiP = fetch(LOFI_DIR + 'tracks.json').then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))).then((d) => d.tracks || []);
+    lofiP = lofiFetch('tracks.json').then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))).then((d) => d.tracks || []);
     lofiP.catch(() => { lofiP = null; });
   }
   return lofiP;

@@ -29,7 +29,8 @@ self.addEventListener('install', (e) => {
 
 self.addEventListener('activate', (e) => {
   e.waitUntil((async () => {
-    for (const k of await caches.keys()) if (k !== SHELL) await caches.delete(k);
+    // Old versions of the page cache go; the lofi songs kept by the page for offline music stay.
+    for (const k of await caches.keys()) if (k !== SHELL && !k.startsWith('wako-lofi-')) await caches.delete(k);
     await self.clients.claim();
   })());
 });

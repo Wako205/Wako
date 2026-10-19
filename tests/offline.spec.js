@@ -14,8 +14,9 @@ const test = base.test.extend({
     const srv = http.createServer((req, res) => {
       const rel = decodeURIComponent(req.url.split('?')[0]).replace(/^\/Wako\//, '') || 'index.html';
       const file = path.join(ROOT, rel);
-      if (!file.startsWith(ROOT) || !/^(index\.html|sw\.js)$/.test(rel) || !fs.existsSync(file)) { res.writeHead(404); return res.end(); }
-      res.writeHead(200, { 'content-type': rel.endsWith('.js') ? 'text/javascript' : 'text/html; charset=utf-8', 'cache-control': 'no-cache' });
+      if (!file.startsWith(ROOT) || !/^(index\.html|sw\.js|music\/lofi\/[\w.-]+)$/.test(rel) || !fs.existsSync(file)) { res.writeHead(404); return res.end(); }
+      const type = rel.endsWith('.js') ? 'text/javascript' : rel.endsWith('.mp3') ? 'audio/mpeg' : rel.endsWith('.json') ? 'application/json' : 'text/html; charset=utf-8';
+      res.writeHead(200, { 'content-type': type, 'cache-control': 'no-cache' });
       res.end(fs.readFileSync(file));
     });
     await new Promise((r) => srv.listen(0, '127.0.0.1', r));
@@ -352,4 +353,20 @@ test('library rows say what is saved on this device; Refresh asks the server eve
   await page.click('#libRefresh');
   await expect.poll(() => backend.callsOf('audio_library').length).toBe(n + 1);
   await expect(paper(page).locator('.grow .m').first()).not.toContainText('not on this device');
+});
+
+test('the first three lofi songs are kept on the device after login, and the music plays offline from them', async ({ page, context, site, backend }) => {
+  test.setTimeout(90000);
+  await login(page, site);
+  await openAudio(page);
+  const first3 = JSON.parse(fs.readFileSync(path.join(ROOT, 'music/lofi/tracks.json'), 'utf8')).tracks.slice(0, 3).map((t) => t.file);
+  const kept = () => page.evaluate(async () => (await (await caches.open('wako-lofi-v1')).keys()).map((r) => decodeURIComponent(r.url.split('/').pop())).sort());
+  await expect.poll(kept, { timeout: 40000 }).toEqual(['tracks.json', ...first3].sort());
+  // Offline: a new song is chosen among the kept ones only.
+  await context.setOffline(true);
+  const titles = JSON.parse(fs.readFileSync(path.join(ROOT, 'music/lofi/tracks.json'), 'utf8')).tracks.slice(0, 3).map((t) => t.title);
+  await page.evaluate(() => { mFresh = true; resetMusic(); });
+  await expect(page.locator('#mStatus')).toHaveText(/^(Playing|Ready): /, { timeout: 30000 });
+  const label = (await page.locator('#mStatus').textContent()).replace(/^(Playing|Ready): /, '').replace(/\.$/, '');
+  expect(titles).toContain(label);
 });
