@@ -370,3 +370,26 @@ test('the first three lofi songs are kept on the device after login, and the mus
   const label = (await page.locator('#mStatus').textContent()).replace(/^(Playing|Ready): /, '').replace(/\.$/, '');
   expect(titles).toContain(label);
 });
+
+test('saving for offline: a hung request is tried again, a chapter that keeps failing is skipped and reported, Save again finishes it', async ({ page, site, backend }) => {
+  test.setTimeout(60000);
+  let hung = false, failing = true;
+  const mp3 = backend.mp3.toString('base64');
+  backend.on('audio_part', (b) => {
+    if (b.chapter === 0 && b.index === 0 && !hung) { hung = true; return new Promise(() => {}); }   // never answers
+    if (b.chapter === 1 && failing) return { ok: false, error: 'Server error' };
+    return { data: mp3 };
+  });
+  await login(page, site);
+  await page.evaluate(() => { PART_TIMEOUT_MS = 1500; });
+  await openAudio(page);
+  await book(page).getByRole('button', { name: 'Offline' }).click();
+  const panel = page.locator('.offpanel');
+  await expect(panel).toContainText('Keep this page open while it saves.');
+  await panel.getByRole('button', { name: /^Save all for offline/ }).click();
+  await expect(panel.locator('.offctl .status').first()).toHaveText('"Chapter 2" could not be saved; the others are saved. Tap Save again to retry.', { timeout: 40000 });
+  expect((await stored(page)).meta).toEqual(['tester||book1|0']);          // chapter 1 saved despite the hung request
+  failing = false;
+  await panel.getByRole('button', { name: /^Save the other chapters for offline/ }).click();
+  await expect(panel.locator('.offctl').first()).toContainText('✓ 2 of 2 saved offline', { timeout: 20000 });
+});

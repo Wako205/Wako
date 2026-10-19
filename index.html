@@ -2152,6 +2152,10 @@ async function saveOffline(it, chapters, say) {
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   const user = offUser(), db = await offDb();
   offBusy.add(it.id);
+  // The screen is kept on while saving where the browser allows it: a locked phone suspends the page and the downloads stop.
+  let lock = null;
+  try { if (navigator.wakeLock && document.visibilityState === 'visible') lock = await navigator.wakeLock.request('screen'); } catch (e) {}
+  const failed = [];
   try {
     for (let j = 0; j < chapters.length; j++) {
       const c = chapters[j], ch = it.chapters[c];
@@ -2165,17 +2169,26 @@ async function saveOffline(it, chapters, say) {
       }
       const pre = chapters.length > 1 ? 'Saving chapter ' + (j + 1) + ' of ' + chapters.length + ': ' : 'Saving: ';
       say(pre + 'text');
-      const texts = (await api({ action: 'audio_text', token, id: it.id, chapter: c, ...ownerOf(it) })).texts;
-      const bufs = new Array(ch.n);
-      let next = 0, got = 0;
-      const worker = async () => {
-        while (next < ch.n) {
-          const k = next++;
-          bufs[k] = unb64((await api({ action: 'audio_part', token, id: it.id, chapter: c, index: k, ...ownerOf(it) })).data).buffer;
-          say(pre + 'part ' + (++got) + ' of ' + ch.n);
-        }
-      };
-      await Promise.all([worker(), worker()]);
+      // Every request has a time limit and is tried again (partWithRetry): one slow or failed answer
+      // neither hangs the saving nor stops it; a chapter that still fails is skipped and reported.
+      let texts, bufs;
+      try {
+        texts = (await partWithRetry({ action: 'audio_text', token, id: it.id, chapter: c, ...ownerOf(it) })).texts;
+        bufs = new Array(ch.n);
+        let next = 0, got = 0;
+        const worker = async () => {
+          while (next < ch.n) {
+            const k = next++;
+            bufs[k] = unb64((await partWithRetry({ action: 'audio_part', token, id: it.id, chapter: c, index: k, ...ownerOf(it) })).data).buffer;
+            say(pre + 'part ' + (++got) + ' of ' + ch.n);
+          }
+        };
+        await Promise.all([worker(), worker()]);
+      } catch (e) {
+        if (/log in again/i.test(e.message) || !isOnline()) throw e;
+        failed.push(ch.title);
+        continue;
+      }
       const key = offKey(it, c, user), bytes = bufs.reduce((n, b) => n + b.byteLength, 0);
       const meta = { key, user, owner: ownerOf(it).owner || '', id: it.id, c, bytes, at: Date.now() };
       const tx = db.transaction(['meta', 'audio'], 'readwrite');
@@ -2184,21 +2197,29 @@ async function saveOffline(it, chapters, say) {
       await idbDone(tx);
       offIndex.set(key, meta);
     }
-  } finally { offBusy.delete(it.id); }
+  } finally { offBusy.delete(it.id); offProg.delete((ownerOf(it).owner || '') + '|' + it.id); if (lock) lock.release().catch(() => {}); }
+  if (failed.length) throw new Error((failed.length === 1 ? '"' + failed[0] + '" could not be saved' : failed.length + ' chapters could not be saved') + '; the others are saved. Tap Save again to retry.');
 }
 
+const offProg = new Map();                      // the latest progress line of a saving in progress
+const offMsg = new Map();                       // the last error of a saving, per item (and chapter), shown until the next try
 /** Controls for saving an item's chapters, used in the library panel and the player. */
 function offlineControls(it, onlyChapter, inPlayer) {
   const box = el('div', 'offctl');
   const chs = onlyChapter != null ? [onlyChapter] : savableChapters(it);
   const st = el('span', 'status');
+  const mk = (ownerOf(it).owner || '') + '|' + it.id + '|' + (onlyChapter != null ? onlyChapter : 'all');
   const run = async (fn) => {
     box.querySelectorAll('button').forEach((b) => { b.disabled = true; });
+    offMsg.delete(mk);
     try { await fn(); setStatus(st, ''); }
-    catch (e) { setStatus(st, e.message, true); if (/log in again/i.test(e.message)) logout(); }
-    renderOfflineEverywhere();
+    catch (e) { offMsg.set(mk, e.message); if (/log in again/i.test(e.message)) logout(); }
+    renderOfflineEverywhere();                           // the panel is drawn again; the message is kept in offMsg
   };
-  const say = (m) => setStatus(st, m);
+  // Progress goes to every copy of these controls on the page (the library is redrawn while saving).
+  const pid = (ownerOf(it).owner || '') + '|' + it.id;
+  st.dataset.prog = pid;
+  const say = (m) => { offProg.set(pid, m); document.querySelectorAll('[data-prog="' + CSS.escape(pid) + '"]').forEach((x) => setStatus(x, m)); };
   const missing = chs.filter((c) => !offHas(it, c)), saved = chs.filter((c) => offHas(it, c));
   const sum = (list) => list.reduce((n, c) => n + chapterBytes(it, c), 0);
   if (missing.length) {
@@ -2215,7 +2236,8 @@ function offlineControls(it, onlyChapter, inPlayer) {
     r.onclick = () => run(() => offRemove(saved.map((c) => offKey(it, c))));
     box.appendChild(r);
   }
-  if (offBusy.has(it.id)) { box.querySelectorAll('button').forEach((b) => { b.disabled = true; }); setStatus(st, 'Saving...'); }
+  if (offBusy.has(it.id)) { box.querySelectorAll('button').forEach((b) => { b.disabled = true; }); setStatus(st, offProg.get(pid) || 'Saving...'); }
+  else if (offMsg.has(mk)) setStatus(st, offMsg.get(mk), true);
   box.appendChild(st);
   return box;
 }
@@ -2231,7 +2253,7 @@ function toggleOfflinePanel(it, row) {
 }
 function fillOfflinePanel(box, it) {
   box.textContent = '';
-  box.appendChild(el('div', 'm', 'Keep "' + it.title + '" on this device to listen without a connection.'));
+  box.appendChild(el('div', 'm', 'Keep "' + it.title + '" on this device to listen without a connection. Keep this page open while it saves.'));
   box.appendChild(offlineControls(it));
   const chs = savableChapters(it);
   if (chs.length > 1) {
@@ -4391,7 +4413,9 @@ offLoadIndex().then(renderNet);
     [/^(\d+)\/(\d+) chapters$/, '$1/$2 章'], [/^(\d+) min$/, '$1 分钟'], [/^(\d+) h (\d+) min$/, '$1 小时 $2 分钟'],
     [/^resume at (.*)$/, '续播于 $1'], [/^(\d+) min ago$/, '$1 分钟前'], [/^(\d+) h ago$/, '$1 小时前'], [/^(\d+) d ago$/, '$1 天前'],
     [/^(\d+) books$/, '$1 本书'], [/^(\d+) papers$/, '$1 篇论文'], [/^(\d+) shared$/, '$1 个已分享'], [/^of \$(.*)$/, '上限 $$$1'],
-    [/^(\d+) accounts$/, '$1 个账号'], [/^updated (.*)$/, '更新于 $1'], [/^(\d+) failed logins? today$/, '今天登录失败 $1 次'], [/^Chapter (\d+) (\d+:\d+)$/, '第 $1 章 $2'], [/^Chapter (\d+)$/, '第 $1 章'], [/^Pages (\d+)–(\d+)$/, '第 $1–$2 页'], [/^✓ (\d+)\/(\d+) offline$/, '✓ $1/$2 已离线'], [/^shared$/, '已分享'],
+    [/^(\d+) accounts$/, '$1 个账号'], [/^Keep "(.*)" on this device to listen without a connection\. Keep this page open while it saves\.$/, '把「$1」保存到本设备，无网络也能听。保存时请保持本页打开。'],
+    [/^"(.*)" could not be saved; the others are saved\. Tap Save again to retry\.$/, '「$1」未能保存，其他章节已保存。请再点一次保存重试。'],
+    [/^(\d+) chapters could not be saved; the others are saved\. Tap Save again to retry\.$/, '$1 章未能保存，其他章节已保存。请再点一次保存重试。'], [/^updated (.*)$/, '更新于 $1'], [/^(\d+) failed logins? today$/, '今天登录失败 $1 次'], [/^Chapter (\d+) (\d+:\d+)$/, '第 $1 章 $2'], [/^Chapter (\d+)$/, '第 $1 章'], [/^Pages (\d+)–(\d+)$/, '第 $1–$2 页'], [/^✓ (\d+)\/(\d+) offline$/, '✓ $1/$2 已离线'], [/^shared$/, '已分享'],
     [/^(\d+(?:\.\d+)?k) characters · (.*)$/, '$1 字符 · $2'], [/^Playing: (.*)$/, '正在播放：$1'], [/^♪ All lofi \((\d+)\)$/, '♪ 全部 lofi（$1）'],
     [/^Claude: (\d+) of (\d+) paragraphs\.\.\.$/, 'Claude：$1 / $2 段...'], [/^Synthesizing speech: (\d+) of (\d+) segments(.*)$/, '正在合成语音：$1 / $2 段$3'],
     [/^ · finished chapters can be played$/, ' · 已完成的章节可以播放'], [/^ · this page can be closed$/, ' · 可以关闭本页'],
