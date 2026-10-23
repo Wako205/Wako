@@ -548,7 +548,19 @@ function b64(bytes) {
   for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
   return btoa(s);
 }
-function unb64(str) { const bin = atob(str); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
+/**
+ * Base64 to bytes. Tolerates line breaks, the URL-safe alphabet and missing padding; text that is still not
+ * base64 (a damaged or cut-off answer) gives a clear error instead of the browser's "invalid characters".
+ */
+function unb64(str) {
+  let t = String(str == null ? '' : str).replace(/[\s"]/g, '').replace(/-/g, '+').replace(/_/g, '/');
+  t = t.replace(/=+$/, '');
+  if (!t || /[^A-Za-z0-9+/]/.test(t) || t.length % 4 === 1) throw new Error('Damaged audio data');
+  t += '==='.slice(0, (4 - t.length % 4) % 4);
+  const bin = atob(t), u = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  return u;
+}
 /** Adds a script of LIB to the page; the browser refuses it if it does not match its integrity hash. */
 function loadScript(lib) {
   return new Promise((res, rej) => {
@@ -2179,7 +2191,7 @@ async function saveOffline(it, chapters, say) {
         const worker = async () => {
           while (next < ch.n) {
             const k = next++;
-            bufs[k] = unb64((await partWithRetry({ action: 'audio_part', token, id: it.id, chapter: c, index: k, ...ownerOf(it) })).data).buffer;
+            bufs[k] = (await partWithRetry({ action: 'audio_part', token, id: it.id, chapter: c, index: k, ...ownerOf(it) })).bytes.buffer;
             say(pre + 'part ' + (++got) + ' of ' + ch.n);
           }
         };
@@ -2481,7 +2493,11 @@ let PART_TIMEOUT_MS = 60000;
 const PART_TRIES = 4;
 async function partWithRetry(req) {
   for (let i = 1; ; i++) {
-    try { return await api(req, PART_TIMEOUT_MS); }
+    try {
+      const d = await api(req, PART_TIMEOUT_MS);
+      if (req.action === 'audio_part') d.bytes = unb64(d.data);    // a damaged answer is fetched again like a failed one
+      return d;
+    }
     catch (e) {
       if (i >= PART_TRIES || /not ready|log in again|No such segment|no longer shared/i.test(e.message) || !isOnline()) throw e;
       await sleep(1500 * i);
@@ -2540,7 +2556,7 @@ function fetchChapter(c, onStatus, onEarly) {
     const worker = async () => {
       while (next < stop) {
         const k = next++;
-        try { bufs[k] = unb64((await partWithRetry({ action: 'audio_part', token, id, chapter: c, index: k, ...from })).data); }
+        try { bufs[k] = (await partWithRetry({ action: 'audio_part', token, id, chapter: c, index: k, ...from })).bytes; }
         catch (e) { if (/not ready/i.test(e.message)) { stop = Math.min(stop, k); continue; } throw e; }
         say('Loading audio: ' + bufs.filter(Boolean).length + ' of ' + ch.n + ' parts' + (total ? ' (the chapter is about ' + total + ' long; the player shows the loaded part)' : ''));
         const cb = job.early;
@@ -4334,7 +4350,7 @@ offLoadIndex().then(renderNet);
     // Library
     'Your audio library': '我的音频书库', 'Shared library': '共享书库', 'Nothing yet. Converted PDFs will be listed here.': '还没有内容。转换后的 PDF 会列在这里。',
     'Listen': '收听', 'Resume': '继续', 'Offline': '离线', 'Offline ✓': '离线 ✓', 'Chapters': '章节', 'Add chapters': '添加章节', 'Share': '分享', 'Unshare': '取消分享',
-    'Delete': '删除', 'More actions': '更多操作', 'Convert': '转换', 'Download .md': '下载 .md', 'Copy': '复制',
+    'Damaged audio data': '音频数据损坏', 'Delete': '删除', 'More actions': '更多操作', 'Convert': '转换', 'Download .md': '下载 .md', 'Copy': '复制',
     'No progress for 10 min; the server keeps trying.': '10 分钟没有进展；服务器会继续尝试。', 'Confirm delete': '确认删除', 'Cancel': '取消', 'Rename': '重命名', 'New title': '新标题', 'Book': '书', 'Paper': '论文',
     'Convert selected': '转换所选', 'Delete audio': '删除音频', 'Save for offline': '离线保存', 'Saved offline': '已离线保存',
     'Save for offline listening, or remove the offline copy': '保存以便离线收听，或删除离线副本',
