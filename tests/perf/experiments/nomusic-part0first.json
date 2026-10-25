@@ -1,0 +1,150 @@
+{
+ "profile": {
+  "name": "Regular 4G (4 Mbit/s down, 20 ms RTT)",
+  "bps": 4000000,
+  "rtt": 20
+ },
+ "experiments": [
+  "nomusic",
+  "part0first"
+ ],
+ "backendMs": 800,
+ "partSeconds": 120,
+ "parts": 8,
+ "windowS": 30,
+ "date": "2026-10-25T08:52:56.126Z",
+ "results": [
+  {
+   "kind": "listen",
+   "firstForm": 236.29999999981374,
+   "firstLibAfterLogin": 1740,
+   "firstStartupBeforeListen": {
+    "requests": 14,
+    "bytes": 969685,
+    "by": {
+     "site": {
+      "requests": 3,
+      "bytes": 175960
+     },
+     "cdn": {
+      "requests": 6,
+      "bytes": 791159
+     },
+     "backend": {
+      "requests": 3,
+      "bytes": 1376
+     },
+     "music": {
+      "requests": 2,
+      "bytes": 1190
+     }
+    },
+    "actions": [
+     "login",
+     "audio_public",
+     "audio_library"
+    ]
+   },
+   "firstAudio": 2059.8000000002794,
+   "firstAudioRequests": [
+    "backend:audio_text 1579",
+    "backend:audio_part 556634"
+   ],
+   "firstChapterComplete": 16392,
+   "secondLib": 89.10000000009313,
+   "secondLibFresh": 914,
+   "secondAudioRecent": 83.3000000002794,
+   "secondAudioRecentRequests": [],
+   "secondAudioNew": 3047.7000000001863,
+   "run": 1
+  },
+  {
+   "kind": "listen",
+   "firstForm": 217.5,
+   "firstLibAfterLogin": 1724.5,
+   "firstStartupBeforeListen": {
+    "requests": 14,
+    "bytes": 969685,
+    "by": {
+     "site": {
+      "requests": 3,
+      "bytes": 175960
+     },
+     "cdn": {
+      "requests": 6,
+      "bytes": 791159
+     },
+     "backend": {
+      "requests": 3,
+      "bytes": 1376
+     },
+     "music": {
+      "requests": 2,
+      "bytes": 1190
+     }
+    },
+    "actions": [
+     "login",
+     "audio_public",
+     "audio_library"
+    ]
+   },
+   "firstAudio": 2052.600000000093,
+   "firstAudioRequests": [
+    "backend:audio_text 1579",
+    "backend:audio_part 556634"
+   ],
+   "firstChapterComplete": 16292,
+   "secondLib": 99.1999999997206,
+   "secondLibFresh": 924,
+   "secondAudioRecent": 91.29999999981374,
+   "secondAudioRecentRequests": [],
+   "secondAudioNew": 3197.6999999997206,
+   "run": 2
+  },
+  {
+   "kind": "listen",
+   "firstForm": 215.10000000009313,
+   "firstLibAfterLogin": 1725.3999999999069,
+   "firstStartupBeforeListen": {
+    "requests": 14,
+    "bytes": 969685,
+    "by": {
+     "site": {
+      "requests": 3,
+      "bytes": 175960
+     },
+     "cdn": {
+      "requests": 6,
+      "bytes": 791159
+     },
+     "backend": {
+      "requests": 3,
+      "bytes": 1376
+     },
+     "music": {
+      "requests": 2,
+      "bytes": 1190
+     }
+    },
+    "actions": [
+     "login",
+     "audio_public",
+     "audio_library"
+    ]
+   },
+   "firstAudio": 2041.1000000000931,
+   "firstAudioRequests": [
+    "backend:audio_text 1579",
+    "backend:audio_part 556634"
+   ],
+   "firstChapterComplete": 16312,
+   "secondLib": 114,
+   "secondLibFresh": 939,
+   "secondAudioRecent": 89,
+   "secondAudioRecentRequests": [],
+   "secondAudioNew": 3126.600000000093,
+   "run": 3
+  }
+ ]
+}

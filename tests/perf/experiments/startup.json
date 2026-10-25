@@ -1,0 +1,71 @@
+{
+ "profile": {
+  "name": "Regular 4G (4 Mbit/s down, 20 ms RTT)",
+  "bps": 4000000,
+  "rtt": 20
+ },
+ "experiments": [
+  "noprecache",
+  "nomusic"
+ ],
+ "backendMs": 800,
+ "partSeconds": 120,
+ "parts": 8,
+ "windowS": 30,
+ "date": "2026-10-25T08:41:50.176Z",
+ "results": [
+  {
+   "kind": "startup",
+   "firstForm": 234.0999999998603,
+   "firstLibAfterLogin": 1693.1999999999534,
+   "first": {
+    "requests": 11,
+    "bytes": 179235,
+    "by": {
+     "site": {
+      "requests": 3,
+      "bytes": 175769
+     },
+     "backend": {
+      "requests": 3,
+      "bytes": 1376
+     },
+     "music": {
+      "requests": 5,
+      "bytes": 2090
+     }
+    },
+    "actions": [
+     "login",
+     "audio_public",
+     "audio_library"
+    ]
+   },
+   "secondLib": 93.69999999995343,
+   "secondLibFresh": 918,
+   "second": {
+    "requests": 8,
+    "bytes": 2811,
+    "by": {
+     "site": {
+      "requests": 2,
+      "bytes": 600
+     },
+     "backend": {
+      "requests": 2,
+      "bytes": 1011
+     },
+     "music": {
+      "requests": 4,
+      "bytes": 1200
+     }
+    },
+    "actions": [
+     "audio_public",
+     "audio_library"
+    ]
+   },
+   "run": 1
+  }
+ ]
+}
