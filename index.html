@@ -313,9 +313,8 @@
         <div class="row" style="margin-bottom:8px;font-size:13px;color:var(--muted)">
           <label for="preset" style="margin:0">Model</label>
           <select id="preset" style="width:auto;max-width:100%;padding:5px 8px;font-size:13px">
-            <option value="opus-low">Opus 5.5, light reasoning (default)</option>
-            <option value="opus-medium">Opus 5.5, deeper reasoning (slower, may return no text on very long tasks)</option>
-            <option value="sonnet-fast">Sonnet 5.5, no reasoning (fastest, cheapest)</option>
+            <option value="opus-medium">Opus 5.5, medium reasoning (default)</option>
+            <option value="fable-medium">Fable 5.2, medium reasoning (strongest, about twice the cost)</option>
           </select>
         </div>
         <div class="attach">
@@ -4106,7 +4105,7 @@ document.querySelectorAll('button.chip[data-prompt]').forEach((b) => {
   b.onclick = () => { const t = $('prompt'); t.value = b.dataset.prompt; t.focus(); };
 });
 $('preset').onchange = () => store('mp_preset', $('preset').value);
-try { const p = load('mp_preset'); if (p) $('preset').value = p; } catch (e) {}
+try { const p = load('mp_preset'); if (p && [...$('preset').options].some((o) => o.value === p)) $('preset').value = p; } catch (e) {}   // a removed model falls back to the default
 $('newChatBtn').onclick = () => { chat = { convId: null, messages: [] }; pendingDoc = null; currentFile = null; $('file').value = ''; saveChat(); renderAttach(); renderChat(); };
 
 // Builds the API-facing message list; the attached document is embedded in the user turn.
@@ -4395,8 +4394,8 @@ offLoadIndex().then(renderNet);
     'Download Word (clean)': '下载 Word（清洁版）', 'Download Word (tracked changes)': '下载 Word（修订模式）', 
     
     
-    'Sonnet 5.5, no reasoning (fastest, cheapest)': 'Sonnet 5.5，不推理（最快、最便宜）', 'Opus 5.5, light reasoning (default)': 'Opus 5.5，轻度推理（默认）',
-    'Opus 5.5, deeper reasoning (slower, may return no text on very long tasks)': 'Opus 5.5，深度推理（较慢，超长任务可能无输出）',
+    'Opus 5.5, medium reasoning (default)': 'Opus 5.5，中等推理（默认）',
+    'Fable 5.2, medium reasoning (strongest, about twice the cost)': 'Fable 5.2，中等推理（最强，费用约两倍）',
     'Ask anything about your manuscript, or attach a file and choose a task above. Enter to send, Shift+Enter for a new line.': '可以就稿件提任何问题，或附加文件后在上方选择任务。Enter 发送，Shift+Enter 换行。',
     'Attached text and the conversation are stored in the administrator\'s Google Drive and sent to the Anthropic API. Replies take 20 s to 3 min. Keep this page open.': '附加的文字和对话保存在管理员的 Google Drive 中，并发送给 Anthropic API。回复需要 20 秒到 3 分钟，请保持本页打开。',
     'Start by attaching a manuscript (.tex, .txt, .md or .docx) and choosing a task, or just ask a question. The file stays in the conversation, so follow-up questions do not need re-uploading.': '先附加稿件（.tex、.txt、.md 或 .docx）并选择任务，或直接提问。文件会保留在对话中，追问不需要重新上传。',
