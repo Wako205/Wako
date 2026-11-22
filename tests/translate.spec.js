@@ -145,3 +145,16 @@ test('without the revision, only paragraphs Azure left untranslated go to Claude
   expect(backend.callsOf('translate_revise')[0].revise).toBe(false);
   await expect(page.locator('#trOut .dst')).toHaveText(['[claude] 被大火烧了万寿宫而迁居到玉熙宫的嘉靖帝。', '[az] Second paragraph.']);
 });
+
+test('a short text comes back revised in the same request, without waiting for a job', async ({ page, backend }) => {
+  backend.on('translate', (body) => ({ translations: body.paras.map((p) => '[az] ' + p), detected: [], used: 0, cap: 2000000 }));
+  backend.on('translate_revise', (body) => ({ result: { mode: 'trrevise', cost: 0.002, out: body.items.map((x) => '[claude] ' + x.src) } }));
+  await login(page);
+  await page.click('#tabTrans');
+  await page.selectOption('#trTo', 'en');
+  await page.fill('#trText', 'Short text.');
+  await page.click('#trBtn');
+  await expect(page.locator('#trStatus')).toContainText('Revised by Claude (Claude cost $0.002)', { timeout: 20000 });
+  await expect(page.locator('#trOut .dst')).toHaveText(['[claude] Short text.']);
+  expect(backend.callsOf('status')).toHaveLength(0);
+});

@@ -3837,8 +3837,9 @@ $('trBtn').onclick = async () => {
     if (revise || missing) {
       setStatus(st, (revise ? 'Claude is revising the translation' : 'Claude is translating ' + missing + ' paragraph' + (missing > 1 ? 's' : '') + ' Azure left out') + '...');
       try {
-        const started = await api({ action: 'translate_revise', token, to, revise, items: items.map(({ src, mt, missing: m }) => ({ src, mt, missing: m })) });
-        const d = await waitForJob(started.jobId, (state, x) => { if (x && x.progress) setStatus(st, x.progress + '...'); });
+        // A short text is revised in the request itself (the answer is in 'result'); a long one becomes a job.
+        const started = await api({ action: 'translate_revise', token, to, revise, items: items.map(({ src, mt, missing: m }) => ({ src, mt, missing: m })) }, 180000);
+        const d = started.result || await waitForJob(started.jobId, (state, x) => { if (x && x.progress) setStatus(st, x.progress + '...'); });
         items.forEach((x, k) => { if (d.out && d.out[k]) out[x.i] = d.out[k]; });
         trResult = { to, doc, out };
         renderTrResult();
